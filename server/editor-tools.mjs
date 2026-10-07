@@ -6,6 +6,30 @@ const rev = {
 };
 export const definitions = [
   [
+    "create_track",
+    "Create an empty timeline layer (track). Elements refer to it using trackId.",
+    { track: z.object({ id: z.string(), name: z.string() }), ...rev },
+    false,
+  ],
+  [
+    "update_track",
+    "Rename a timeline layer, preserving its elements.",
+    { track: z.object({ id: z.string(), name: z.string() }), ...rev },
+    false,
+  ],
+  [
+    "delete_track",
+    "Delete a timeline layer and all its elements. Review affected elements before deletion.",
+    { trackId: z.string(), ...rev },
+    false,
+  ],
+  [
+    "reorder_tracks",
+    "Set timeline layer stack order, bottom to top. Include every track ID exactly once, including empty tracks.",
+    { trackIds: z.array(z.string()), ...rev },
+    false,
+  ],
+  [
     "get_project",
     "Read live project, selected layer IDs, playhead, revision, editing state, and whether it is saved.",
     {},
@@ -25,9 +49,10 @@ export const definitions = [
   ],
   [
     "add_text",
-    "Add a title layer to the composition.",
+    "Add a text element. Supply trackId for an existing layer; omit to create a new layer.",
     {
       text: z.string().max(2000),
+      trackId: z.string().optional(),
       name: z.string().max(100).optional(),
       start: z.number().optional(),
       duration: z.number().optional(),
@@ -43,7 +68,7 @@ export const definitions = [
   ],
   [
     "reorder_layers",
-    "Set the stack order. Include every layer ID exactly once, bottom to top.",
+    "Legacy element ordering. Prefer reorder_tracks for layer stack order. Include every element ID exactly once.",
     { layerIds: z.array(z.string()), ...rev },
     false,
   ],
@@ -100,9 +125,10 @@ definitions.push(
   ],
   [
     "add_media",
-    "Add an imported library asset as a timeline layer. Duration defaults to source or five seconds; start defaults to zero.",
+    "Add an imported asset as a timeline element. Supply trackId to use an existing layer; omit to create a new layer. Duration defaults to source or five seconds; start defaults to zero.",
     {
       src: z.string(),
+      trackId: z.string().optional(),
       start: z.number().optional(),
       duration: z.number().optional(),
       ...rev,
@@ -129,20 +155,25 @@ definitions.push(
   ],
   [
     "delete_layers",
-    "Delete specified layers in one Undo step.",
+    "Delete specified elements in one Undo step, retaining their tracks. layerIds are element IDs.",
     { layerIds: z.array(z.string()), ...rev },
     false,
   ],
   [
     "duplicate_layers",
-    "Duplicate specified layers with new IDs and preserve settings.",
+    "Duplicate specified elements onto new tracks, preserving settings. layerIds are element IDs.",
     { layerIds: z.array(z.string()), ...rev },
     false,
   ],
   [
     "move_clips",
     "Move clips together by delta seconds, frame-aligned and clamped to the composition.",
-    { layerIds: z.array(z.string()), delta: z.number(), ...rev },
+    {
+      layerIds: z.array(z.string()),
+      delta: z.number(),
+      trackId: z.string().optional(),
+      ...rev,
+    },
     false,
   ],
   [

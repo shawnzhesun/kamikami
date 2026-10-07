@@ -1,3 +1,4 @@
+import { orderedElements } from "../model";
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AlignCenter, AlignCenterVertical, Magnet } from "lucide-react";
 import type { Layer, Project } from "../model";
@@ -71,7 +72,7 @@ export function CanvasEditor({
     }
     setSizes(next);
   }, [project, frame, assets]);
-  const visible = project.layers.filter((l) =>
+  const visible = orderedElements(project).filter((l) =>
     visibleAt(l, frame, project.fps),
   );
   const box = (l: Layer): Bounds =>
@@ -219,7 +220,7 @@ export function CanvasEditor({
     <>
       <div className="canvas-tools" aria-label="Canvas tools">
         <button
-          title="Snap to canvas and layer centers (Alt bypasses)"
+          title="Snap to canvas and element centers (Alt bypasses)"
           aria-label="Canvas snapping"
           aria-pressed={snap}
           onClick={() => setSnap(!snap)}
@@ -227,7 +228,7 @@ export function CanvasEditor({
           <Magnet size={14} />
         </button>
         <button
-          title="Center selected layers horizontally"
+          title="Center selected elements horizontally"
           aria-label="Center horizontally"
           disabled={!selected.length}
           onClick={() => align("x")}
@@ -235,7 +236,7 @@ export function CanvasEditor({
           <AlignCenter size={14} />
         </button>
         <button
-          title="Center selected layers vertically"
+          title="Center selected elements vertically"
           aria-label="Center vertically"
           disabled={!selected.length}
           onClick={() => align("y")}
@@ -247,8 +248,9 @@ export function CanvasEditor({
         className="canvas-editor"
         ref={root}
         tabIndex={0}
-        aria-label="Canvas editor. Select and drag layers. Arrow keys move the selection."
+        aria-label="Canvas editor. Select and drag elements. Arrow keys move the selection."
         onPointerDown={(e) => {
+          if (e.button !== 0 || editing) return;
           if (playing) onPause();
           const l = hit(e);
           if (l) gesture(e, l, "move");

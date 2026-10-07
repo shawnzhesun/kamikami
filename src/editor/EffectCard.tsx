@@ -49,7 +49,7 @@ export function EffectCard({
       className={`effect-card ${dragging ? "effect-dragging" : ""}`}
       tabIndex={0}
       role="group"
-      aria-label={`${effect.name}. Drag onto a clip; Enter applies to selected layers.`}
+      aria-label={`${effect.name}. Drag onto a clip; Enter applies to selected elements.`}
       title={effect.description + " · Drag to apply. Double-click to inspect."}
       onPointerDown={(e) => {
         if (e.button !== 0 || (e.target as HTMLElement).closest("button"))
@@ -89,15 +89,15 @@ export function EffectCard({
             target =
               document
                 .elementFromPoint(event.clientX, event.clientY)
-                ?.closest<HTMLElement>("[data-track-id]") ?? null;
+                ?.closest<HTMLElement>("[data-element-id]:not(.audio)") ?? null;
             target?.classList.add("effect-drop-target");
           },
           (cancelled) => {
             target?.classList.remove("effect-drop-target");
             setDragging(false);
             cleanup.current = null;
-            if (!cancelled && moved && target?.dataset.trackId)
-              onDrop(target.dataset.trackId);
+            if (!cancelled && moved && target?.dataset.elementId)
+              onDrop(target.dataset.elementId);
           },
         );
       }}

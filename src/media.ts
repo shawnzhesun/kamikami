@@ -140,3 +140,5 @@ export async function inspectMedia(
   }
   return metadata;
 }
+
+export const MEDIA_DRAG_TYPE = "application/x-kamikami-media";

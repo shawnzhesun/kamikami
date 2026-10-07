@@ -1,3 +1,11 @@
+import {
+  addTrack,
+  updateTrack,
+  deleteTrack,
+  reorderTracks,
+  moveElementsToTrack,
+} from "./editor/tracks";
+import { elementTrackId, projectTracks, TimelineLayerSchema } from "./model";
 import { z } from "zod";
 import {
   LayerSchema,
@@ -13,6 +21,26 @@ import { durationChange } from "./editor-utils";
 import type { MediaAsset } from "./media";
 const revision = { expectedRevision: z.string().min(1) };
 export const AgentCommandSchema = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("create_track"),
+    track: TimelineLayerSchema,
+    ...revision,
+  }),
+  z.object({
+    action: z.literal("update_track"),
+    track: TimelineLayerSchema,
+    ...revision,
+  }),
+  z.object({
+    action: z.literal("delete_track"),
+    trackId: z.string(),
+    ...revision,
+  }),
+  z.object({
+    action: z.literal("reorder_tracks"),
+    trackIds: z.array(z.string()).max(40),
+    ...revision,
+  }),
   z.object({ action: z.literal("get_project") }),
   z.object({
     action: z.literal("get_media_library"),
@@ -36,6 +64,7 @@ export const AgentCommandSchema = z.discriminatedUnion("action", [
   }),
   z.object({
     action: z.literal("add_media"),
+    trackId: z.string().optional(),
     src: z.string(),
     start: z.number().min(0).optional(),
     duration: z.number().min(0.1).optional(),
@@ -53,6 +82,7 @@ export const AgentCommandSchema = z.discriminatedUnion("action", [
   }),
   z.object({
     action: z.literal("move_clips"),
+    trackId: z.string().optional(),
     layerIds: z.array(z.string()).min(1),
     delta: z.number(),
     ...revision,
@@ -133,6 +163,7 @@ export const AgentCommandSchema = z.discriminatedUnion("action", [
   }),
   z.object({
     action: z.literal("add_text"),
+    trackId: z.string().optional(),
     text: z.string().max(2000),
     name: z.string().min(1).max(100).default("Agent text"),
     start: z.number().min(0).optional(),
@@ -180,6 +211,14 @@ export function reorderLayers(project: Project, ids: string[]): Project {
   return {
     ...project,
     layers: ids.map((id) => project.layers.find((l) => l.id === id)!),
+    tracks: [
+      ...new Set([
+        ...ids.map((id) =>
+          elementTrackId(project.layers.find((l) => l.id === id)!),
+        ),
+        ...projectTracks(project).map((t) => t.id),
+      ]),
+    ].map((id) => projectTracks(project).find((t) => t.id === id)!),
   };
 }
 export function applyAgentEdit(
@@ -189,6 +228,14 @@ export function applyAgentEdit(
   assets: MediaAsset[] = [],
 ): Project {
   let next = project;
+  if (command.action === "create_track")
+    next = addTrack(project, command.track);
+  if (command.action === "update_track")
+    next = updateTrack(project, command.track);
+  if (command.action === "delete_track")
+    next = deleteTrack(project, command.trackId);
+  if (command.action === "reorder_tracks")
+    next = reorderTracks(project, command.trackIds);
   if (
     "layerIds" in command &&
     command.layerIds.some((id) => !project.layers.some((l) => l.id === id))
@@ -208,6 +255,7 @@ export function applyAgentEdit(
               l,
               {
                 ...structuredClone(l),
+                trackId: undefined,
                 id: crypto.randomUUID(),
                 name: l.name.slice(0, 93) + " (copy)",
               },
@@ -215,8 +263,16 @@ export function applyAgentEdit(
           : [l],
       ),
     };
-  if (command.action === "move_clips")
+  if (command.action === "move_clips") {
     next = moveClips(project, command.layerIds, command.delta, false, 0, 0);
+    if (command.trackId)
+      next = moveElementsToTrack(
+        next,
+        command.layerIds,
+        command.layerIds[0],
+        command.trackId,
+      );
+  }
   if (command.action === "trim_clip") {
     const layer = project.layers.find((l) => l.id === command.layerId);
     if (!layer) throw new Error("Layer not found.");
@@ -284,6 +340,7 @@ export function applyAgentEdit(
         ...project.layers,
         {
           ...makeLayer(a.type, a.name.slice(0, 100)),
+          trackId: command.trackId,
           src: a.src,
           start,
           duration,
@@ -308,6 +365,7 @@ export function applyAgentEdit(
         ...project.layers,
         {
           ...makeLayer("title", command.name),
+          trackId: command.trackId,
           text: command.text,
           start,
           duration: command.duration ?? project.duration - start,

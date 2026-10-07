@@ -1,24 +1,27 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
-  Film,
   Layers,
   Magnet,
-  Music2,
   Scissors,
-  Type,
-  Volume2,
-  VolumeX,
-  Headphones,
   GripVertical,
   Plus,
+  Settings2,
 } from "lucide-react";
-import type { Layer, Project } from "../model";
+import {
+  projectTracks,
+  elementTrackId,
+  validateProject,
+  type TimelineLayer,
+  type Layer,
+  type Project,
+} from "../model";
+import { MEDIA_DRAG_TYPE } from "../media";
+import { moveElementsToTrack, reorderTracks } from "./tracks";
 import type { MediaAsset } from "../media";
 import { clamp, moveClips, snapValue, splitClips, trimClip } from "./editing";
 import { startGesture } from "./gesture";
 import { Waveform } from "./Waveform";
 import { EFFECT_DRAG_TYPE } from "../effect-bundle";
-import { reorderLayers } from "../agent-protocol";
 
 type Props = {
   project: Project;
@@ -31,6 +34,11 @@ type Props = {
   onCommit: (p: Project, base?: Project) => void;
   onStatus: (message: string) => void;
   onPause: () => void;
+  selectedTrack: string | null;
+  onSelectTrack: (id: string) => void;
+  onAddLayer: () => void;
+  onEditLayer: (track: TimelineLayer) => void;
+  onDropMedia: (src: string, trackId: string | undefined, time: number) => void;
   onAddText: () => void;
   onApplyEffect: (effectId: string, layerId: string) => void;
 };
@@ -45,12 +53,22 @@ export function Timeline({
   onCommit,
   onStatus,
   onPause,
+  selectedTrack,
+  onSelectTrack,
+  onAddLayer,
+  onEditLayer,
+  onDropMedia,
   onAddText,
   onApplyEffect,
 }: Props) {
   const [zoom, setZoom] = useState(1),
     [snapping, setSnapping] = useState(true),
     [drag, setDrag] = useState<{ id: string; label: string } | null>(null);
+  const [mediaTarget, setMediaTarget] = useState<{
+    id: string;
+    time: number;
+  } | null>(null);
+  const tracks = projectTracks(project);
   const [effectTarget, setEffectTarget] = useState<string | null>(null);
   const cleanup = useRef<(() => void) | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
@@ -79,7 +97,10 @@ export function Timeline({
       onStatus((e as Error).message);
     }
   };
-  function beginReorder(e: React.PointerEvent<HTMLElement>, layer: Layer) {
+  function beginReorder(
+    e: React.PointerEvent<HTMLElement>,
+    layer: TimelineLayer,
+  ) {
     if (e.button !== 0) return;
     e.preventDefault();
     e.stopPropagation();
@@ -126,29 +147,29 @@ export function Timeline({
         setRowDragging(null);
         if (moved) ignoreClickUntil.current = Date.now() + 200;
         if (!cancelled && moved && target && target.id !== layer.id) {
-          const order = [...base.layers]
+          const order = [...projectTracks(base)]
             .reverse()
             .map((l) => l.id)
             .filter((id) => id !== layer.id);
           const at =
             order.indexOf(target.id) + (target.edge === "below" ? 1 : 0);
           order.splice(at, 0, layer.id);
-          onCommit(reorderLayers(base, order.reverse()), base);
+          onCommit(reorderTracks(base, order.reverse()), base);
         }
         cleanup.current = null;
       },
     );
   }
-  function reorderKey(e: React.KeyboardEvent, layer: Layer) {
+  function reorderKey(e: React.KeyboardEvent, layer: TimelineLayer) {
     if (!["ArrowUp", "ArrowDown"].includes(e.key)) return;
     e.preventDefault();
     e.stopPropagation();
-    const ids = project.layers.map((l) => l.id),
+    const ids = tracks.map((l) => l.id),
       index = ids.indexOf(layer.id),
       next = index + (e.key === "ArrowUp" ? 1 : -1);
     if (next < 0 || next >= ids.length) return;
     [ids[index], ids[next]] = [ids[next], ids[index]];
-    onCommit(reorderLayers(project, ids));
+    onCommit(reorderTracks(project, ids));
   }
   function begin(
     e: React.PointerEvent<HTMLElement>,
@@ -172,12 +193,14 @@ export function Timeline({
         : [layer.id];
     onSelect(ids);
     const base = project,
-      origin = e.clientX;
+      origin = e.clientX,
+      originY = e.clientY;
     const lane = e.currentTarget.closest<HTMLElement>(".track-lane")!;
     const width = lane.getBoundingClientRect().width;
     const initialScroll = scroller.current?.scrollLeft ?? 0;
     let latest = base,
-      moved = false;
+      moved = false,
+      invalid = "";
     const start = edge === "right" ? layer.start + layer.duration : layer.start;
     const threshold = (8 / width) * project.duration;
     cleanup.current = startGesture(
@@ -191,7 +214,7 @@ export function Timeline({
         }
         const dx =
           event.clientX - origin + (parent?.scrollLeft ?? 0) - initialScroll;
-        if (!moved && Math.abs(dx) < 3) return;
+        if (!moved && Math.hypot(dx, event.clientY - originY) < 3) return;
         moved = true;
         const delta = (dx / width) * base.duration;
         if (edge) {
@@ -225,18 +248,40 @@ export function Timeline({
             threshold,
             frame / base.fps,
           );
-        const changed = latest.layers.find((l) => l.id === layer.id)!;
-        setDrag({
-          id: layer.id,
-          label: `${changed.start.toFixed(2)}s – ${(changed.start + changed.duration).toFixed(2)}s`,
-        });
-        onPreview(latest);
+        const target = document
+          .elementFromPoint(event.clientX, event.clientY)
+          ?.closest<HTMLElement>("[data-track-id]");
+        try {
+          latest =
+            !edge && target?.dataset.trackId
+              ? moveElementsToTrack(
+                  latest,
+                  ids,
+                  layer.id,
+                  target.dataset.trackId,
+                )
+              : validateProject(latest);
+          invalid = "";
+          const changed = latest.layers.find((l) => l.id === layer.id)!;
+          setDrag({
+            id: layer.id,
+            label: `${changed.start.toFixed(2)}s – ${(changed.start + changed.duration).toFixed(2)}s`,
+          });
+          onPreview(latest);
+        } catch (error) {
+          invalid = (error as Error).message;
+          setDrag({ id: layer.id, label: invalid });
+          onPreview(null);
+        }
       },
       (cancelled) => {
         if (moved) ignoreClickUntil.current = Date.now() + 200;
         onPreview(null);
         setDrag(null);
-        if (!cancelled && moved) onCommit(latest, base);
+        if (!cancelled && moved) {
+          if (invalid) onStatus(invalid);
+          else onCommit(latest, base);
+        }
         cleanup.current = null;
       },
     );
@@ -274,13 +319,6 @@ export function Timeline({
       ),
     );
   };
-  const sound = (layer: Layer, property: "muted" | "solo") =>
-    onCommit({
-      ...project,
-      layers: project.layers.map((l) =>
-        l.id === layer.id ? { ...l, [property]: !l[property] } : l,
-      ),
-    });
   return (
     <section
       className="timeline"
@@ -299,7 +337,7 @@ export function Timeline({
           <span className="small-label">{selected.length} selected</span>
         </span>
         <div className="timeline-tools">
-          <button onClick={onAddText} title="Add a text layer">
+          <button onClick={onAddText} title="Add text to the selected layer">
             <Plus size={13} />
             Text
           </button>
@@ -339,7 +377,17 @@ export function Timeline({
       <div className="timeline-scroll" ref={scroller}>
         <div className="timeline-content" style={{ width: `${zoom * 100}%` }}>
           <div className="ruler">
-            <span className="track-label">LAYERS</span>
+            <span className="track-label layers-heading">
+              LAYERS{" "}
+              <button
+                onClick={onAddLayer}
+                aria-label="New layer"
+                title="New layer"
+                disabled={tracks.length >= 40}
+              >
+                <Plus size={14} />
+              </button>
+            </span>
             <div
               role="slider"
               tabIndex={0}
@@ -392,159 +440,212 @@ export function Timeline({
               })}
             </div>
           </div>
-          {[...project.layers].reverse().map((layer) => {
-            const asset = assets.find((a) => a.src === layer.src),
-              audio = ["audio", "video"].includes(layer.type);
+          {[...tracks].reverse().map((track) => {
+            const elements = project.layers.filter(
+              (e) => elementTrackId(e) === track.id,
+            );
             return (
               <div
-                key={layer.id}
-                data-track-id={layer.id}
-                onDragOver={(e) => {
-                  if (e.dataTransfer.types.includes(EFFECT_DRAG_TYPE)) {
-                    e.preventDefault();
-                    e.dataTransfer.dropEffect =
-                      layer.type === "audio" ? "none" : "copy";
-                    setEffectTarget(layer.type === "audio" ? null : layer.id);
-                  }
-                }}
-                onDragLeave={(e) => {
-                  if (!e.currentTarget.contains(e.relatedTarget as Node))
-                    setEffectTarget(null);
-                }}
-                onDrop={(e) => {
-                  const id = e.dataTransfer.getData(EFFECT_DRAG_TYPE);
-                  if (id) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setEffectTarget(null);
-                    onApplyEffect(id, layer.id);
-                  }
-                }}
-                className={`track ${effectTarget === layer.id ? "effect-drop-target" : ""} ${selected.includes(layer.id) ? "selected-track" : ""} ${rowDragging === layer.id ? "reordering" : ""} ${rowDrop?.id === layer.id ? "drop-" + rowDrop.edge : ""}`}
+                key={track.id}
+                data-track-id={track.id}
+                className={`track ${selectedTrack === track.id ? "selected-track" : ""} ${rowDragging === track.id ? "reordering" : ""} ${rowDrop?.id === track.id ? "drop-" + rowDrop.edge : ""}`}
               >
                 <div className="track-label">
                   <button
                     className="reorder-grip"
-                    aria-label={`Reorder ${layer.name}`}
-                    title="Drag up or down to reorder. Arrow keys also move this layer."
-                    onPointerDown={(e) => beginReorder(e, layer)}
-                    onKeyDown={(e) => reorderKey(e, layer)}
+                    aria-label={`Reorder ${track.name}`}
+                    title="Drag to reorder layers"
+                    onPointerDown={(e) => beginReorder(e, track)}
+                    onKeyDown={(e) => reorderKey(e, track)}
                   >
                     <GripVertical size={13} />
                   </button>
                   <button
-                    title={layer.name}
-                    aria-pressed={selected.includes(layer.id)}
-                    onClick={(e) =>
-                      select(layer.id, e.shiftKey || e.metaKey || e.ctrlKey)
-                    }
+                    title={track.name}
+                    aria-pressed={selectedTrack === track.id}
+                    onClick={() => onSelectTrack(track.id)}
+                    onDoubleClick={() => onEditLayer(track)}
                   >
-                    {layer.type === "title" ? (
-                      <Type size={12} />
-                    ) : layer.type === "audio" ? (
-                      <Music2 size={12} />
-                    ) : (
-                      <Film size={12} />
-                    )}
-                    <span>{layer.name}</span>
+                    <Layers size={12} />
+                    <span>{track.name}</span>
                   </button>
-                  {audio && (
-                    <div className="track-audio-controls">
-                      <button
-                        aria-label={`${layer.muted ? "Unmute" : "Mute"} ${layer.name}`}
-                        aria-pressed={layer.muted}
-                        onClick={() => sound(layer, "muted")}
-                      >
-                        {layer.muted ? (
-                          <VolumeX size={12} />
-                        ) : (
-                          <Volume2 size={12} />
-                        )}
-                      </button>
-                      <button
-                        aria-label={`Solo ${layer.name}`}
-                        aria-pressed={layer.solo}
-                        onClick={() => sound(layer, "solo")}
-                      >
-                        <Headphones size={12} />
-                      </button>
-                    </div>
-                  )}
+                  <button
+                    className="layer-settings-button"
+                    aria-label={`Settings for ${track.name}`}
+                    title="Layer settings"
+                    onClick={() => onEditLayer(track)}
+                  >
+                    <Settings2 size={12} />
+                  </button>
                 </div>
                 <div
-                  className="track-lane"
+                  className={`track-lane ${mediaTarget?.id === track.id ? "media-drop-target" : ""}`}
+                  onDragOver={(e) => {
+                    if (!e.dataTransfer.types.includes(MEDIA_DRAG_TYPE)) return;
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = "copy";
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    let time = clamp(
+                      ((e.clientX - rect.left) / rect.width) * project.duration,
+                      0,
+                      project.duration,
+                    );
+                    if (snapping && !e.altKey)
+                      time = snapValue(
+                        time,
+                        [
+                          frame / project.fps,
+                          ...elements.flatMap((c) => [
+                            c.start,
+                            c.start + c.duration,
+                          ]),
+                        ],
+                        (8 / rect.width) * project.duration,
+                      );
+                    setMediaTarget({
+                      id: track.id,
+                      time: Math.round(time * project.fps) / project.fps,
+                    });
+                  }}
+                  onDragLeave={(e) => {
+                    if (!e.currentTarget.contains(e.relatedTarget as Node))
+                      setMediaTarget(null);
+                  }}
+                  onDrop={(e) => {
+                    const src = e.dataTransfer.getData(MEDIA_DRAG_TYPE);
+                    if (!src) return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    const time =
+                      mediaTarget?.id === track.id
+                        ? mediaTarget.time
+                        : ((e.clientX - rect.left) / rect.width) *
+                          project.duration;
+                    setMediaTarget(null);
+                    onDropMedia(src, track.id, time);
+                  }}
                   onClick={(e) => {
-                    if (e.target === e.currentTarget) seek(e, e.currentTarget);
+                    if (e.target === e.currentTarget) {
+                      onSelectTrack(track.id);
+                      seek(e, e.currentTarget);
+                    }
                   }}
                 >
-                  <div
-                    className={`clip ${layer.type} ${drag?.id === layer.id ? "dragging" : ""}`}
-                    role="button"
-                    tabIndex={0}
-                    aria-pressed={selected.includes(layer.id)}
-                    aria-label={`${layer.name}, start ${layer.start.toFixed(2)} seconds, length ${layer.duration.toFixed(2)} seconds`}
-                    style={{
-                      left: `${(layer.start / project.duration) * 100}%`,
-                      width: `${(layer.duration / project.duration) * 100}%`,
-                      opacity: layer.visible ? 1 : 0.35,
-                    }}
-                    onPointerDown={(e) => begin(e, layer)}
-                    onKeyDown={(e) => {
-                      if (e.target !== e.currentTarget) return;
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.preventDefault();
-                        select(layer.id, e.shiftKey);
-                      }
-                      if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        onCommit(
-                          moveClips(
-                            project,
-                            selected.includes(layer.id) ? selected : [layer.id],
-                            (e.key === "ArrowLeft" ? -1 : 1) *
-                              (e.shiftKey ? 1 : 1 / project.fps),
-                            false,
-                            0,
-                            0,
-                          ),
-                        );
-                      }
-                    }}
-                  >
-                    {asset?.peaks.length ? (
-                      <Waveform
-                        peaks={asset.peaks}
-                        offset={layer.offset}
-                        duration={layer.duration}
-                        sourceDuration={asset.duration ?? layer.duration}
-                      />
-                    ) : null}
-                    <span className="clip-name">{layer.name}</span>
-                    <button
-                      className="trim-handle left"
-                      aria-label={`Trim start of ${layer.name}`}
-                      onPointerDown={(e) => begin(e, layer, "left")}
-                      onClick={(e) => e.stopPropagation()}
-                      onKeyDown={(e) => trimKey(e, layer, "left")}
-                    />
-                    <button
-                      className="trim-handle right"
-                      aria-label={`Trim end of ${layer.name}`}
-                      onPointerDown={(e) => begin(e, layer, "right")}
-                      onClick={(e) => e.stopPropagation()}
-                      onKeyDown={(e) => trimKey(e, layer, "right")}
-                    />
-                  </div>
-                  {drag?.id === layer.id && (
-                    <span
-                      className="drag-time"
+                  {!elements.length && (
+                    <span className="empty-track">Drop media here</span>
+                  )}
+                  {elements.map((layer) => {
+                    const asset = assets.find((a) => a.src === layer.src);
+                    return (
+                      <React.Fragment key={layer.id}>
+                        <div
+                          data-element-id={layer.id}
+                          className={`clip ${layer.type} ${effectTarget === layer.id ? "effect-drop-target" : ""} ${drag?.id === layer.id ? "dragging" : ""}`}
+                          onDragOver={(e) => {
+                            if (
+                              e.dataTransfer.types.includes(EFFECT_DRAG_TYPE) &&
+                              layer.type !== "audio"
+                            ) {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setEffectTarget(layer.id);
+                            }
+                          }}
+                          onDragLeave={() => setEffectTarget(null)}
+                          onDrop={(e) => {
+                            const id = e.dataTransfer.getData(EFFECT_DRAG_TYPE);
+                            if (id) {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              setEffectTarget(null);
+                              onApplyEffect(id, layer.id);
+                            }
+                          }}
+                          role="button"
+                          tabIndex={0}
+                          aria-pressed={selected.includes(layer.id)}
+                          aria-label={`${layer.name}, start ${layer.start.toFixed(2)} seconds, length ${layer.duration.toFixed(2)} seconds`}
+                          style={{
+                            left: `${(layer.start / project.duration) * 100}%`,
+                            width: `${(layer.duration / project.duration) * 100}%`,
+                            opacity: layer.visible ? 1 : 0.35,
+                          }}
+                          onPointerDown={(e) => begin(e, layer)}
+                          onKeyDown={(e) => {
+                            if (e.target !== e.currentTarget) return;
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              select(layer.id, e.shiftKey);
+                            }
+                            if (
+                              e.key === "ArrowLeft" ||
+                              e.key === "ArrowRight"
+                            ) {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              onCommit(
+                                moveClips(
+                                  project,
+                                  selected.includes(layer.id)
+                                    ? selected
+                                    : [layer.id],
+                                  (e.key === "ArrowLeft" ? -1 : 1) *
+                                    (e.shiftKey ? 1 : 1 / project.fps),
+                                  false,
+                                  0,
+                                  0,
+                                ),
+                              );
+                            }
+                          }}
+                        >
+                          {asset?.peaks.length ? (
+                            <Waveform
+                              peaks={asset.peaks}
+                              offset={layer.offset}
+                              duration={layer.duration}
+                              sourceDuration={asset.duration ?? layer.duration}
+                            />
+                          ) : null}
+                          <span className="clip-name">{layer.name}</span>
+                          <button
+                            className="trim-handle left"
+                            aria-label={`Trim start of ${layer.name}`}
+                            onPointerDown={(e) => begin(e, layer, "left")}
+                            onClick={(e) => e.stopPropagation()}
+                            onKeyDown={(e) => trimKey(e, layer, "left")}
+                          />
+                          <button
+                            className="trim-handle right"
+                            aria-label={`Trim end of ${layer.name}`}
+                            onPointerDown={(e) => begin(e, layer, "right")}
+                            onClick={(e) => e.stopPropagation()}
+                            onKeyDown={(e) => trimKey(e, layer, "right")}
+                          />
+                        </div>
+                        {drag?.id === layer.id && (
+                          <span
+                            className="drag-time"
+                            style={{
+                              left: `${(layer.start / project.duration) * 100}%`,
+                            }}
+                          >
+                            {drag.label}
+                          </span>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                  {mediaTarget?.id === track.id && (
+                    <div
+                      className="media-drop-indicator"
                       style={{
-                        left: `${(layer.start / project.duration) * 100}%`,
+                        left: `${(mediaTarget.time / project.duration) * 100}%`,
                       }}
                     >
-                      {drag.label}
-                    </span>
+                      <span>{mediaTarget.time.toFixed(2)}s</span>
+                    </div>
                   )}
                   <div
                     className="playhead"

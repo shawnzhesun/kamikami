@@ -43,3 +43,10 @@ Official references:
 - Codex skills: https://developers.openai.com/codex/skills
 - Claude Code MCP: https://code.claude.com/docs/en/mcp
 - Claude Code skills: https://code.claude.com/docs/en/skills
+
+
+## Layer and element separation
+
+There are now 41 tools. `project.tracks` contains named timeline layers, ordered bottom to top. The version-1 `project.layers` field contains individual elements (clips, audio and text), each referencing its containing layer through `trackId`. Existing `layerId` / `layerIds` tool arguments continue to mean element IDs.
+
+Use `create_track`, `update_track`, `delete_track`, and `reorder_tracks` for timeline layers. `add_text` and `add_media` accept `trackId`; omitting it creates a new layer for compatibility. `move_clips` optionally accepts a destination `trackId`, preserving relative layer positions for multi-element selections. Same-layer overlaps are rejected. Deleting a track removes its elements in one Undo step; native assistant requests confirm affected elements first. See [model details](timeline-layers.md).

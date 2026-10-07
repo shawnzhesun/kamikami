@@ -1,3 +1,4 @@
+import { orderedElements } from "./model";
 import React from "react";
 import {
   AbsoluteFill,
@@ -250,7 +251,7 @@ export function Composition({
 }) {
   return (
     <AbsoluteFill style={{ background: "#070b12", overflow: "hidden" }}>
-      {project.layers
+      {orderedElements(project)
         .filter((l) => l.visible)
         .map((layer) => (
           <Sequence

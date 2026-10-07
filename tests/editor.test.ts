@@ -66,7 +66,11 @@ test("shortening handles clips entirely beyond the new end and leaves fitting cl
   original.layers[1].duration = 5;
   const proposal = durationChange(original, 10);
   assert.equal(proposal.affected.length, 2);
-  assert.equal(proposal.next.layers[1], original.layers[1]);
+  assert.equal(
+    proposal.next.layers.find((l) => l.id === original.layers[1].id),
+    original.layers[1],
+  );
+  assert.ok(!proposal.next.layers.some((l) => l.id === original.layers[0].id));
   validateProject(proposal.next);
   assert.ok(proposal.next.layers.every((l) => l.start + l.duration <= 10.001));
 });

@@ -44,11 +44,13 @@ export function durationChange(project: Project, duration: number) {
   const next: Project = {
     ...project,
     duration,
-    layers: project.layers.map((l) => {
-      if (l.start + l.duration <= duration) return l;
-      const start = Math.min(l.start, duration - 0.1);
-      return { ...l, start, duration: Math.max(0.1, duration - start) };
-    }),
+    layers: project.layers
+      .filter((l) => !project.tracks || l.start <= duration - 0.1 + 1e-8)
+      .map((l) => {
+        if (l.start + l.duration <= duration) return l;
+        const start = Math.min(l.start, duration - 0.1);
+        return { ...l, start, duration: Math.max(0.1, duration - start) };
+      }),
   };
   return { affected, next };
 }

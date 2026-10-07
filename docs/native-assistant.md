@@ -15,7 +15,7 @@ The conversation stays mounted while Inspector is open. Selecting timeline or ca
 ## Integration
 
 - Responses and OpenAI-compatible Chat Completions streaming (including LiteLLM), explicit serial tool execution, validated tool arguments and bounded runs (30 model rounds, 60 tools, ten minutes).
-- 36 native model tools from the same catalog as the 37 MCP tools. The remaining MCP tool, absolute-path `import_media`, is replaced by the native file attachment chooser. The native model has no arbitrary filesystem or shell access.
+- 40 native model tools from the same catalog as the 41 MCP tools. The remaining MCP tool, absolute-path `import_media`, is replaced by the native file attachment chooser. The native model has no arbitrary filesystem or shell access.
 - All live editor commands pass through `EditorBridge` and the same validated editor handler used by external agents. Content mutations require the current revision. No silent project-file replacement.
 - Native requests carry a private history group and a native-origin flag. Chat/composer focus does not block native edits; active canvas gestures, dialogs and Inspector fields still do. External MCP requests do not receive that focus exception.
 - Consecutive project mutations in a request share an Undo entry. A manual content edit breaks that group; the panel's Undo button is available only when the assistant owns the latest entry. Project Undo does not remove exported files, imported assets, or saved user-effect library entries.
@@ -52,3 +52,5 @@ Persistent instructional copy was removed from the library footer, effects galle
 Assistant-created effects automatically save to **My effects**. Refinements update the same saved entry, including edits made in the Inspector. Existing custom project definitions migrate there without changing their IDs or clip instances. Applying an effect keeps its rendering definition in the project without adding a duplicate gallery card. Saved effects remain available after project Undo or removal from clips.
 
 Export a My effects entry from its Inspector as a `.kamikami-effect.json` bundle. Importing a bundle adds an independent copy to the **Local effect library**, preserving author and sharing terms and assigning a new effect ID. The bundle format remains version 1; collection membership belongs to this workspace, not to the portable file.
+
+Independent timeline layers use `create_track`, `update_track`, `delete_track` and `reorder_tracks`. Element tools retain their legacy names. See [layer and element conventions](timeline-layers.md).

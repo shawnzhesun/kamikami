@@ -61,6 +61,17 @@ try {
   await writeFile(path.join(folder, "before.json"), JSON.stringify(before));
   const capabilities = await call("get_capabilities");
   assert.ok(capabilities.effect.properties.channels);
+  const qaTrackId = crypto.randomUUID();
+  await edit("create_track", {
+    track: { id: qaTrackId, name: "QA empty layer" },
+  });
+  await edit("update_track", {
+    track: { id: qaTrackId, name: "QA renamed layer" },
+  });
+  await edit("reorder_tracks", {
+    trackIds: last!.project.tracks!.map((t) => t.id).reverse(),
+  });
+  await edit("delete_track", { trackId: qaTrackId });
   await call("get_effect_library");
   await call("get_media_library");
   const png = Buffer.from(

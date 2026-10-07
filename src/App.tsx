@@ -1,3 +1,17 @@
+import { ThemePicker } from "./editor/ThemePicker";
+import {
+  ProjectSettings,
+  LayerSettings,
+  SettingsDialog,
+} from "./editor/SettingsDialogs";
+import {
+  addTrack,
+  updateTrack,
+  deleteTrack,
+  insertElement,
+  moveElementsToTrack,
+} from "./editor/tracks";
+import { projectTracks, elementTrackId, type TimelineLayer } from "./model";
 import React, { useEffect, useId, useRef, useState } from "react";
 import { Player, type PlayerRef } from "@remotion/player";
 import {
@@ -33,7 +47,7 @@ import {
   type Effect,
 } from "./model";
 
-import { validateNumericDraft, durationChange } from "./editor-utils";
+import { validateNumericDraft } from "./editor-utils";
 import {
   applyEffectToLayers,
   effectCollections,
@@ -70,7 +84,16 @@ const timecode = (f: number) =>
     .toString()
     .padStart(2, "0")}:${(f % 24).toString().padStart(2, "0")}`;
 export function App() {
-  const [project, setProject] = useState<Project>(initialProject),
+  const [projectSettings, setProjectSettings] = useState(false);
+  const [effectModal, setEffectModal] = useState(false);
+  const [layerSettings, setLayerSettings] = useState<{
+    track: TimelineLayer;
+    isNew: boolean;
+  } | null>(null);
+  const [selectedTrack, setSelectedTrack] = useState<string | null>(null);
+  const [project, setProject] = useState<Project>(() =>
+      validateProject(initialProject),
+    ),
     [selectedIds, setSelectedIds] = useState<string[]>(["scene"]),
     [frame, setFrame] = useState(0),
     [playing, setPlaying] = useState(false);
@@ -111,10 +134,6 @@ export function App() {
       progress: number;
       error?: string;
     } | null>(null);
-  const [durationProposal, setDurationProposal] = useState<{
-    duration: number;
-    base: Project;
-  } | null>(null);
   const [frameRender, setFrameRender] = useState<{
     id: string;
     frame: number;
@@ -210,7 +229,6 @@ export function App() {
   const [effectNavigation, setEffectNavigation] = useState(0);
   const effectEditor = useRef<HTMLDivElement>(null);
   const inspector = useRef<HTMLDivElement>(null);
-  const durationDialog = useRef<HTMLDialogElement>(null);
   const player = useRef<PlayerRef>(null),
     file = useRef<HTMLInputElement>(null),
     projectFile = useRef<HTMLInputElement>(null),
@@ -266,8 +284,11 @@ export function App() {
     const editing = () =>
       isGestureActive() ||
       !!previewProject ||
-      !!durationProposal ||
       !!deleteProposal ||
+      projectSettings ||
+      effectModal ||
+      !!layerSettings ||
+      !!document.querySelector("dialog[open]") ||
       (!(
         request.nativeAssistant &&
         document.activeElement?.closest(".assistant-panel")
@@ -567,8 +588,16 @@ export function App() {
       clearTimeout(timer);
     };
   }, [ready]);
+  useEffect(() => {
+    const element = project.layers.find((e) => e.id === selectedId);
+    if (element) setSelectedTrack(elementTrackId(element));
+    else
+      setSelectedTrack((id) =>
+        projectTracks(project).some((t) => t.id === id) ? id : null,
+      );
+  }, [project, selectedId]);
   function updateLayer(patch: Partial<Layer>, group?: string) {
-    commit(
+    return commit(
       {
         ...current.current,
         layers: current.current.layers.map((l) =>
@@ -628,6 +657,10 @@ export function App() {
   function selectLayers(ids: string[]) {
     history.current.endGroup();
     setSelectedIds(ids);
+    if (ids.length) {
+      const element = current.current.layers.find((e) => e.id === ids.at(-1));
+      if (element) setSelectedTrack(elementTrackId(element));
+    }
     setEffectId(null);
     if (rightTab !== "agent") setRightTab("inspector");
   }
@@ -756,7 +789,12 @@ export function App() {
     a.click();
     URL.revokeObjectURL(url);
   }
+  function inspectLibraryEffect(id: string) {
+    editEffect(id);
+    setEffectModal(true);
+  }
   function editEffect(id: string) {
+    setEffectModal(false);
     const bundle = userEffects.find((e) => e.bundle.effect.id === id)?.bundle;
     setEffectAuthor(bundle?.author ?? "");
     setEffectLicense(
@@ -767,24 +805,12 @@ export function App() {
     setRightTab("inspector");
     setEffectNavigation((n) => n + 1);
   }
-  function changeDuration(duration: number) {
-    const change = durationChange(current.current, duration);
-    if (change.affected.length) {
-      setDurationProposal({ duration, base: current.current });
-      return false;
-    }
-    return commit(change.next);
-  }
   useEffect(() => {
     if (rightTab === "inspector" && effectId) {
       effectEditor.current?.scrollIntoView({ block: "start" });
       effectEditor.current?.focus({ preventScroll: true });
     }
   }, [effectId, rightTab, effectNavigation]);
-  useEffect(() => {
-    if (durationProposal) durationDialog.current?.showModal();
-    else durationDialog.current?.close();
-  }, [durationProposal]);
   function save() {
     const snapshot = current.current,
       r = revision.current;
@@ -842,6 +868,32 @@ export function App() {
       ) {
         event.preventDefault();
         void save();
+      } else if (
+        event.key === "Backspace" &&
+        !event.metaKey &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        !event.isComposing &&
+        !event.defaultPrevented &&
+        !isGestureActive() &&
+        !document.querySelector("dialog[open]") &&
+        selectedIds.length > 0
+      ) {
+        event.preventDefault();
+        if (event.repeat) return;
+        player.current?.pause();
+        const base = current.current;
+        if (
+          commit({
+            ...base,
+            layers: base.layers.filter(
+              (element) => !selectedIds.includes(element.id),
+            ),
+          })
+        ) {
+          selectLayers([]);
+          setStatus("Selected elements deleted · Undo available");
+        }
       } else if (event.code === "Space" && !target.closest("button,a")) {
         event.preventDefault();
         player.current?.toggle();
@@ -849,7 +901,7 @@ export function App() {
     };
     window.addEventListener("keydown", handle);
     return () => window.removeEventListener("keydown", handle);
-  }, [project, ready]);
+  }, [project, ready, selectedIds]);
   useEffect(() => {
     if (!ready || revision.current === saved.current) return;
     const t = setTimeout(() => void save(), 1000);
@@ -900,7 +952,11 @@ export function App() {
     );
     return () => clearInterval(timer);
   }, [exportJob?.id, exportJob?.status]);
-  async function addAsset(asset: MediaAsset) {
+  async function addAsset(
+    asset: MediaAsset,
+    trackId?: string,
+    requestedTime = frame / current.current.fps,
+  ) {
     if (
       !asset.missing &&
       (asset.type === "audio" || asset.type === "video") &&
@@ -935,7 +991,13 @@ export function App() {
       return;
     }
     const base = current.current;
-    const start = Math.min(frame / base.fps, base.duration - 0.125);
+    const start = Math.max(
+      0,
+      Math.min(
+        Math.round(requestedTime * base.fps) / base.fps,
+        base.duration - 0.125,
+      ),
+    );
     const duration = Math.min(
       base.duration - start,
       asset.duration ?? base.duration,
@@ -952,8 +1014,17 @@ export function App() {
       start,
       duration,
     };
-    if (commit({ ...base, layers: [...base.layers, layer] }))
-      selectLayer(layer.id);
+    try {
+      const next = trackId
+        ? insertElement(base, layer, trackId, requestedTime)
+        : { ...base, layers: [...base.layers, layer] };
+      if (commit(next)) {
+        selectLayer(layer.id);
+        setRightTab("inspector");
+      }
+    } catch (e) {
+      setStatus((e as Error).message);
+    }
   }
   function chooseImport(
     mode: "add" | "library" | "relink",
@@ -964,28 +1035,6 @@ export function App() {
     if (file.current) {
       file.current.multiple = mode !== "relink";
       file.current.click();
-    }
-  }
-  async function analyzeAsset(asset: MediaAsset) {
-    setMediaBusy(true);
-    try {
-      const response = await fetch(asset.src);
-      if (!response.ok)
-        throw new Error(
-          "Source file is missing. Refresh the library to relink it.",
-        );
-      const blob = await response.blob();
-      const metadata = await inspectMedia(
-        new File([blob], asset.src.split("/").pop()!),
-        asset.src,
-      );
-      await api("/api/media/" + asset.src.split("/").pop(), "PUT", metadata);
-      await refreshMedia();
-      setStatus("Source details updated");
-    } catch (e) {
-      setStatus((e as Error).message);
-    } finally {
-      setMediaBusy(false);
     }
   }
   async function importMedia(files: FileList | null) {
@@ -1055,13 +1104,48 @@ export function App() {
     if (file.current) file.current.value = "";
   }
   function addTitle() {
+    const base = current.current;
     const l = {
-      ...makeLayer("title", "Text layer"),
-      duration: project.duration,
+      ...makeLayer("title", "Text"),
+      duration: Math.min(5, base.duration),
     };
-    commit({ ...project, layers: [...project.layers, l] });
-    selectLayer(l.id);
-    setRightTab("inspector");
+    try {
+      const trackId =
+        selectedTrack && projectTracks(base).some((t) => t.id === selectedTrack)
+          ? selectedTrack
+          : undefined;
+      const next = trackId
+        ? insertElement(base, l, trackId, frame / base.fps)
+        : {
+            ...base,
+            layers: [
+              ...base.layers,
+              {
+                ...l,
+                start: Math.min(frame / base.fps, base.duration - 0.125),
+                duration: Math.min(
+                  l.duration,
+                  base.duration - frame / base.fps,
+                ),
+              },
+            ],
+          };
+      if (commit(next)) {
+        selectLayer(l.id);
+        setRightTab("inspector");
+      }
+    } catch (e) {
+      setStatus((e as Error).message);
+    }
+  }
+  function openNewLayer() {
+    setLayerSettings({
+      track: {
+        id: crypto.randomUUID(),
+        name: `Layer ${projectTracks(current.current).length + 1}`,
+      },
+      isNew: true,
+    });
   }
   function applyEffect(id: string, layerId?: string) {
     try {
@@ -1099,17 +1183,208 @@ export function App() {
     a.click();
     URL.revokeObjectURL(url);
   }
-  function reorder(direction: number) {
-    if (!selected) return;
-    const layers = [...project.layers],
-      i = layers.findIndex((l) => l.id === selected.id),
-      j = i + direction;
-    if (j < 0 || j >= layers.length) return;
-    [layers[i], layers[j]] = [layers[j], layers[i]];
-    commit({ ...project, layers });
-  }
+  const effectControls = editingEffect && (
+    <div
+      className="effect-editor"
+      ref={effectEditor}
+      tabIndex={-1}
+      role="region"
+      aria-label={`${editingEffect.name} effect controls`}
+    >
+      <div className="section-line">
+        <span>EFFECT DEFINITION</span>
+        <button
+          aria-label="Close effect controls"
+          title="Close effect controls"
+          onClick={() => {
+            setEffectId(null);
+            setEffectModal(false);
+          }}
+        >
+          <X size={14} />
+        </button>
+      </div>
+      <p className="muted">
+        Editing {editingEffect.name}. Changes affect all{" "}
+        {
+          project.layers.filter((l) =>
+            l.effects.some((i) => i.effectId === editingEffect.id),
+          ).length
+        }{" "}
+        elements using this effect.
+      </p>
+      <div className="effect-sharing">
+        <label>
+          Author
+          <input
+            value={effectAuthor}
+            maxLength={100}
+            onChange={(e) => setEffectAuthor(e.target.value)}
+          />
+        </label>
+        <label>
+          License / sharing terms
+          <input
+            value={effectLicense}
+            maxLength={200}
+            onChange={(e) => setEffectLicense(e.target.value)}
+          />
+        </label>
+        <button
+          onClick={() =>
+            void persistEffect(editingEffect).catch((e) => setStatus(e.message))
+          }
+        >
+          Save to My effects
+        </button>
+        <button onClick={() => downloadEffect(editingEffect)}>
+          Export effect bundle
+        </button>
+      </div>
+      <TextField
+        label="Effect name"
+        value={editingEffect.name}
+        maxLength={80}
+        onChange={(name) =>
+          updateEffect({ name }, `effect:${editingEffect.id}:name`)
+        }
+        onEndEdit={() => history.current.endGroup()}
+      />
+      {editingEffect.channels.map((c, i) => (
+        <div className="channel" key={i}>
+          <div className="section-line">
+            <span>{c.property.toUpperCase()}</span>
+            <select
+              aria-label="Curve"
+              value={c.curve}
+              onChange={(e) =>
+                updateEffect({
+                  channels: editingEffect.channels.map((v, j) =>
+                    j === i
+                      ? {
+                          ...v,
+                          curve: e.target.value as typeof c.curve,
+                        }
+                      : v,
+                  ),
+                })
+              }
+            >
+              {["linear", "ease", "sine", "pulse"].map((c) => (
+                <option key={c}>{c}</option>
+              ))}
+            </select>
+          </div>
+          <div className="field-row">
+            {(["from", "to"] as const).map((key) => (
+              <NumberField
+                key={key}
+                label={key}
+                value={c[key]}
+                min={-2000}
+                max={2000}
+                step={0.1}
+                onChange={(n) =>
+                  updateEffect({
+                    channels: editingEffect.channels.map((v, j) =>
+                      j === i ? { ...v, [key]: n } : v,
+                    ),
+                  })
+                }
+              />
+            ))}
+          </div>
+          {["sine", "pulse"].includes(c.curve) && (
+            <NumberField
+              label="Frequency (Hz)"
+              value={c.frequency}
+              min={0}
+              max={20}
+              step={0.1}
+              onChange={(n) =>
+                updateEffect({
+                  channels: editingEffect.channels.map((v, j) =>
+                    j === i ? { ...v, frequency: n } : v,
+                  ),
+                })
+              }
+            />
+          )}
+        </div>
+      ))}
+      <div className="field-row">
+        <label>
+          Tint color
+          <input
+            type="color"
+            value={editingEffect.color}
+            onChange={(e) => updateEffect({ color: e.target.value })}
+          />
+        </label>
+        <NumberField
+          label="Tint amount"
+          value={editingEffect.tint}
+          min={0}
+          max={1}
+          step={0.01}
+          onChange={(n) => updateEffect({ tint: n })}
+        />
+      </div>
+    </div>
+  );
   return (
     <div className="app">
+      {effectModal && editingEffect && (
+        <SettingsDialog
+          title={`${editingEffect.name} effect`}
+          onClose={() => {
+            setEffectModal(false);
+            setEffectId(null);
+          }}
+        >
+          {effectControls}
+        </SettingsDialog>
+      )}
+      {projectSettings && (
+        <ProjectSettings
+          project={project}
+          onClose={() => setProjectSettings(false)}
+          onSave={(next, base) => base === current.current && commit(next)}
+        />
+      )}
+      {layerSettings && (
+        <LayerSettings
+          project={project}
+          track={layerSettings.track}
+          isNew={layerSettings.isNew}
+          onClose={() => setLayerSettings(null)}
+          onSave={(track, base) => {
+            if (base !== current.current) return false;
+            try {
+              const next = layerSettings.isNew
+                ? addTrack(base, track)
+                : updateTrack(base, track);
+              if (!commit(next)) return false;
+              if (layerSettings.isNew) selectLayers([]);
+              setSelectedTrack(track.id);
+              return true;
+            } catch (e) {
+              setStatus((e as Error).message);
+              return false;
+            }
+          }}
+          onDelete={(id, base) => {
+            if (base !== current.current) return false;
+            try {
+              return commit(deleteTrack(base, id));
+            } catch (e) {
+              setStatus((e as Error).message);
+              return false;
+            }
+          }}
+        />
+      )}
+
       <dialog
         ref={deleteDialog}
         className="duration-dialog"
@@ -1159,22 +1434,14 @@ export function App() {
           className="project-name"
           title="Edit project settings"
           disabled={!ready}
-          onClick={() => {
-            setEffectId(null);
-            setRightTab("inspector");
-            requestAnimationFrame(() => {
-              inspector.current?.scrollTo({ top: 0 });
-              inspector.current
-                ?.querySelector<HTMLInputElement>("input")
-                ?.focus();
-            });
-          }}
+          onClick={() => setProjectSettings(true)}
         >
           <span className="status-dot" />
           <span>{project.name}</span>
           <Settings2 size={14} />
         </button>
         <div className="header-actions">
+          <ThemePicker />
           <button
             title="Undo (⌘/Ctrl Z)"
             aria-label="Undo"
@@ -1284,9 +1551,7 @@ export function App() {
                 busy={mediaBusy}
                 onImport={() => chooseImport("library")}
                 onRefresh={() => void refreshMedia()}
-                onAdd={addAsset}
                 onRelink={(a) => chooseImport("relink", a)}
-                onAnalyze={(a) => void analyzeAsset(a)}
                 onDelete={(a) => void requestMediaDelete(a)}
                 trash={mediaTrash}
                 onRestore={async (a) => {
@@ -1342,7 +1607,7 @@ export function App() {
                     key={e.id}
                     effect={e}
                     onApply={() => applyEffect(e.id)}
-                    onInspect={() => editEffect(e.id)}
+                    onInspect={() => inspectLibraryEffect(e.id)}
                     onDrop={(layerId) => applyEffect(e.id, layerId)}
                   />
                 ))}
@@ -1364,7 +1629,7 @@ export function App() {
                       ) ?? e.bundle.effect
                     }
                     onApply={() => applyEffect(e.bundle.effect.id)}
-                    onInspect={() => editEffect(e.bundle.effect.id)}
+                    onInspect={() => inspectLibraryEffect(e.bundle.effect.id)}
                     onDrop={(layerId) =>
                       applyEffect(e.bundle.effect.id, layerId)
                     }
@@ -1385,7 +1650,19 @@ export function App() {
               1920 × 1080 <span className="divider" /> 24 FPS
             </span>
           </div>
-          <div className="preview-area">
+          <div
+            className="preview-area"
+            onPointerDown={(event) => {
+              if (event.button !== 0 || event.target !== event.currentTarget)
+                return;
+              if (
+                isGestureActive() ||
+                event.currentTarget.querySelector(".canvas-text-editor")
+              )
+                return;
+              selectLayers([]);
+            }}
+          >
             <div className="preview-wrap">
               <Player
                 ref={player}
@@ -1417,10 +1694,6 @@ export function App() {
                 }}
                 onPause={() => player.current?.pause()}
               />
-            </div>
-            <div className="preview-caption">
-              <span>{project.name}</span>
-              <span>FRAME-ACCURATE PREVIEW</span>
             </div>
           </div>
           <div className="transport">
@@ -1484,6 +1757,20 @@ export function App() {
             }}
             onStatus={setStatus}
             onPause={() => player.current?.pause()}
+            selectedTrack={selectedTrack}
+            onSelectTrack={(id) => {
+              setSelectedTrack(id);
+              selectLayers([]);
+            }}
+            onAddLayer={openNewLayer}
+            onEditLayer={(track) => setLayerSettings({ track, isNew: false })}
+            onDropMedia={(src, trackId, time) => {
+              const asset = assets.find(
+                (a) => a.src === src && !a.deleted && !a.missing,
+              );
+              if (asset) void addAsset(asset, trackId, time);
+              else setStatus("This media is unavailable. Refresh the library.");
+            }}
             onAddText={addTitle}
             onApplyEffect={applyEffect}
           />
@@ -1526,50 +1813,38 @@ export function App() {
               ref={inspector}
               key={`${selectedId}:${effectId ?? ""}`}
             >
-              <div className="section-line">
-                <span>PROJECT</span>
-              </div>
-              <TextField
-                label="Project name"
-                value={project.name}
-                maxLength={100}
-                required
-                onChange={(name) =>
-                  commit({ ...current.current, name }, "project:name")
-                }
-                onEndEdit={() => history.current.endGroup()}
-              />
-              <NumberField
-                label="Duration (seconds)"
-                value={project.duration}
-                min={1}
-                max={600}
-                step={1}
-                onChange={changeDuration}
-              />
+              {!selected && (
+                <div className="inspector-empty">
+                  <Settings2 size={22} />
+                  <p>
+                    Select a clip, audio item, or text element to edit its
+                    properties and effects.
+                  </p>
+                </div>
+              )}
               {selected && (
                 <>
                   <div className="section-line">
-                    <span>SELECTED LAYER</span>
+                    <span>SELECTED ELEMENT</span>
                     <div>
                       <button
                         aria-label={
                           selected.type === "audio"
                             ? selected.visible
-                              ? "Disable audio layer"
-                              : "Enable audio layer"
+                              ? "Disable audio element"
+                              : "Enable audio element"
                             : selected.visible
-                              ? "Hide layer"
-                              : "Show layer"
+                              ? "Hide element"
+                              : "Show element"
                         }
                         title={
                           selected.type === "audio"
                             ? selected.visible
-                              ? "Disable audio layer"
-                              : "Enable audio layer"
+                              ? "Disable audio element"
+                              : "Enable audio element"
                             : selected.visible
-                              ? "Hide layer"
-                              : "Show layer"
+                              ? "Hide element"
+                              : "Show element"
                         }
                         aria-pressed={!selected.visible}
                         onClick={() =>
@@ -1583,12 +1858,13 @@ export function App() {
                         )}
                       </button>
                       <button
-                        aria-label="Duplicate layer"
-                        title="Duplicate layer"
+                        aria-label="Duplicate element"
+                        title="Duplicate element"
                         disabled={project.layers.length >= 40}
                         onClick={() => {
                           const l = {
                             ...selected,
+                            trackId: undefined,
                             id: crypto.randomUUID(),
                             name: selected.name.slice(0, 95) + " copy",
                           };
@@ -1602,8 +1878,8 @@ export function App() {
                         <Copy size={14} />
                       </button>
                       <button
-                        aria-label="Delete layer"
-                        title="Delete layer (Undo to restore)"
+                        aria-label="Delete element"
+                        title="Delete element (Undo to restore)"
                         onClick={() => {
                           commit({
                             ...project,
@@ -1636,7 +1912,7 @@ export function App() {
                     </div>
                   )}
                   <TextField
-                    label="Layer name"
+                    label="Element name"
                     value={selected.name}
                     maxLength={100}
                     onChange={(name) =>
@@ -1792,20 +2068,35 @@ export function App() {
                       />
                     </>
                   )}
-                  <div className="field-row">
-                    <button
-                      disabled={project.layers.at(-1)?.id === selected.id}
-                      onClick={() => reorder(1)}
+                  <label>
+                    Layer
+                    <select
+                      value={elementTrackId(selected)}
+                      onChange={(e) => {
+                        try {
+                          if (
+                            commit(
+                              moveElementsToTrack(
+                                current.current,
+                                [selected.id],
+                                selected.id,
+                                e.target.value,
+                              ),
+                            )
+                          )
+                            setSelectedTrack(e.target.value);
+                        } catch (error) {
+                          setStatus((error as Error).message);
+                        }
+                      }}
                     >
-                      Bring forward
-                    </button>
-                    <button
-                      disabled={project.layers[0]?.id === selected.id}
-                      onClick={() => reorder(-1)}
-                    >
-                      Send backward
-                    </button>
-                  </div>
+                      {projectTracks(project).map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                   {selected.type !== "audio" && (
                     <>
                       <div className="section-line">
@@ -1870,156 +2161,9 @@ export function App() {
                   )}
                 </>
               )}
-              {editingEffect && (
-                <div
-                  className="effect-editor"
-                  ref={effectEditor}
-                  tabIndex={-1}
-                  role="region"
-                  aria-label={`${editingEffect.name} effect controls`}
-                >
-                  <div className="section-line">
-                    <span>EFFECT DEFINITION</span>
-                    <button
-                      aria-label="Close effect controls"
-                      title="Close effect controls"
-                      onClick={() => setEffectId(null)}
-                    >
-                      <X size={14} />
-                    </button>
-                  </div>
-                  <p className="muted">
-                    Editing {editingEffect.name}. Changes affect all{" "}
-                    {
-                      project.layers.filter((l) =>
-                        l.effects.some((i) => i.effectId === editingEffect.id),
-                      ).length
-                    }{" "}
-                    layers using this effect.
-                  </p>
-                  <div className="effect-sharing">
-                    <label>
-                      Author
-                      <input
-                        value={effectAuthor}
-                        maxLength={100}
-                        onChange={(e) => setEffectAuthor(e.target.value)}
-                      />
-                    </label>
-                    <label>
-                      License / sharing terms
-                      <input
-                        value={effectLicense}
-                        maxLength={200}
-                        onChange={(e) => setEffectLicense(e.target.value)}
-                      />
-                    </label>
-                    <button
-                      onClick={() =>
-                        void persistEffect(editingEffect).catch((e) =>
-                          setStatus(e.message),
-                        )
-                      }
-                    >
-                      Save to My effects
-                    </button>
-                    <button onClick={() => downloadEffect(editingEffect)}>
-                      Export effect bundle
-                    </button>
-                  </div>
-                  <TextField
-                    label="Effect name"
-                    value={editingEffect.name}
-                    maxLength={80}
-                    onChange={(name) =>
-                      updateEffect({ name }, `effect:${editingEffect.id}:name`)
-                    }
-                    onEndEdit={() => history.current.endGroup()}
-                  />
-                  {editingEffect.channels.map((c, i) => (
-                    <div className="channel" key={i}>
-                      <div className="section-line">
-                        <span>{c.property.toUpperCase()}</span>
-                        <select
-                          aria-label="Curve"
-                          value={c.curve}
-                          onChange={(e) =>
-                            updateEffect({
-                              channels: editingEffect.channels.map((v, j) =>
-                                j === i
-                                  ? {
-                                      ...v,
-                                      curve: e.target.value as typeof c.curve,
-                                    }
-                                  : v,
-                              ),
-                            })
-                          }
-                        >
-                          {["linear", "ease", "sine", "pulse"].map((c) => (
-                            <option key={c}>{c}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="field-row">
-                        {(["from", "to"] as const).map((key) => (
-                          <NumberField
-                            key={key}
-                            label={key}
-                            value={c[key]}
-                            min={-2000}
-                            max={2000}
-                            step={0.1}
-                            onChange={(n) =>
-                              updateEffect({
-                                channels: editingEffect.channels.map((v, j) =>
-                                  j === i ? { ...v, [key]: n } : v,
-                                ),
-                              })
-                            }
-                          />
-                        ))}
-                      </div>
-                      {["sine", "pulse"].includes(c.curve) && (
-                        <NumberField
-                          label="Frequency (Hz)"
-                          value={c.frequency}
-                          min={0}
-                          max={20}
-                          step={0.1}
-                          onChange={(n) =>
-                            updateEffect({
-                              channels: editingEffect.channels.map((v, j) =>
-                                j === i ? { ...v, frequency: n } : v,
-                              ),
-                            })
-                          }
-                        />
-                      )}
-                    </div>
-                  ))}
-                  <div className="field-row">
-                    <label>
-                      Tint color
-                      <input
-                        type="color"
-                        value={editingEffect.color}
-                        onChange={(e) =>
-                          updateEffect({ color: e.target.value })
-                        }
-                      />
-                    </label>
-                    <NumberField
-                      label="Tint amount"
-                      value={editingEffect.tint}
-                      min={0}
-                      max={1}
-                      step={0.01}
-                      onChange={(n) => updateEffect({ tint: n })}
-                    />
-                  </div>
-                </div>
-              )}
+              {!effectModal &&
+                selected?.effects.some((e) => e.effectId === effectId) &&
+                effectControls}
             </div>
           )}
         </aside>
@@ -2033,88 +2177,6 @@ export function App() {
           KAMIKAMI LAB <span className="divider" /> LOCAL PROTOTYPE
         </span>
       </footer>
-      <dialog
-        ref={durationDialog}
-        className="duration-dialog"
-        aria-labelledby="duration-title"
-        aria-describedby="duration-description"
-        onCancel={() => setDurationProposal(null)}
-      >
-        {durationProposal && (
-          <>
-            <h2 id="duration-title">
-              Shorten to {durationProposal.duration} seconds?
-            </h2>
-            <p id="duration-description">
-              The following clips extend past the new end. Their timing will
-              change as shown. Increasing the duration later will not restore
-              these clips; Undo will.
-            </p>
-            <div className="duration-changes">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Layer</th>
-                    <th>Start</th>
-                    <th>Length</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {durationChange(
-                    durationProposal.base,
-                    durationProposal.duration,
-                  ).affected.map((layer) => {
-                    const next = durationChange(
-                      durationProposal.base,
-                      durationProposal.duration,
-                    ).next.layers.find((l) => l.id === layer.id)!;
-                    return (
-                      <tr key={layer.id}>
-                        <th>{layer.name || "Untitled layer"}</th>
-                        <td>
-                          {layer.start.toFixed(2)} → {next.start.toFixed(2)}s
-                        </td>
-                        <td>
-                          {layer.duration.toFixed(2)} →{" "}
-                          {next.duration.toFixed(2)}s
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            <div className="dialog-actions">
-              <button autoFocus onClick={() => setDurationProposal(null)}>
-                Keep current duration
-              </button>
-              <button
-                className="primary"
-                onClick={() => {
-                  if (current.current !== durationProposal.base) {
-                    setStatus(
-                      "The project changed. Please set the duration again.",
-                    );
-                  } else {
-                    commit(
-                      durationChange(
-                        durationProposal.base,
-                        durationProposal.duration,
-                      ).next,
-                    );
-                    setStatus(
-                      "Clips trimmed and project shortened. Undo restores their original timing.",
-                    );
-                  }
-                  setDurationProposal(null);
-                }}
-              >
-                Trim clips and shorten
-              </button>
-            </div>
-          </>
-        )}
-      </dialog>
       {exportJob && (
         <div className="export-toast">
           <div>

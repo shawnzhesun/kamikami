@@ -126,7 +126,7 @@ test("native tools share the MCP catalog; file access is supplied by the attachm
     assistantTools.map((t) => t.name),
     definitions.filter((d) => d[0] !== "import_media").map((d) => d[0]),
   );
-  assert.equal(assistantTools.length, 36);
+  assert.equal(assistantTools.length, 40);
 });
 
 test("multi-step native edits use live revisions and one undo group, and history excludes credentials", async () => {
@@ -557,5 +557,33 @@ test("explicit key reuse preserves credentials for a user-chosen endpoint and mo
     assert.equal(fetched, "https://proxy.example/v1/models");
   } finally {
     await h.cleanup();
+  }
+});
+
+test("native layer deletion confirms affected elements and preserves complete Undo", async () => {
+  for (const accepted of [false, true]) {
+    let round = 0;
+    const trackId = initialProject.layers[0].trackId!;
+    const h = await harness(async (r) =>
+      round++ === 0
+        ? call("delete_track", { trackId, expectedRevision: "editor:0" })
+        : done(r, accepted ? "Deleted the layer." : "Kept the layer."),
+    );
+    try {
+      h.start();
+      await until(() => !!h.service.state().confirmation);
+      assert.deepEqual(h.snapshot().project, initialProject);
+      h.service.approve(h.service.state().confirmation!.id, accepted);
+      await until(() => !h.service.state().active);
+      if (accepted) {
+        assert.ok(!h.snapshot().project.tracks?.some((t) => t.id === trackId));
+        assert.ok(
+          !h.snapshot().project.layers.some((e) => e.trackId === trackId),
+        );
+        assert.deepEqual(h.history.undo(h.snapshot().project), initialProject);
+      } else assert.deepEqual(h.snapshot().project, initialProject);
+    } finally {
+      await h.cleanup();
+    }
   }
 });

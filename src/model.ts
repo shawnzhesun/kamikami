@@ -29,7 +29,9 @@ export const InstanceSchema = z.object({
   amount: z.number().min(0).max(2),
   enabled: z.boolean(),
 });
+// `layers` and Layer remain wire/API aliases for timeline elements in version 1.
 export const LayerSchema = z.object({
+  trackId: z.string().min(1).max(100).optional(),
   id: z.string().max(100),
   name: z.string().max(100),
   type: z.enum(["scene", "title", "image", "video", "audio"]),
@@ -53,7 +55,13 @@ export const LayerSchema = z.object({
   visible: z.boolean(),
   effects: z.array(InstanceSchema).max(8),
 });
+export const TimelineLayerSchema = z.object({
+  id: z.string().min(1).max(100),
+  name: z.string().trim().min(1).max(100),
+});
+export type TimelineLayer = z.infer<typeof TimelineLayerSchema>;
 export const ProjectSchema = z.object({
+  tracks: z.array(TimelineLayerSchema).max(40).optional(),
   version: z.literal(1),
   name: z.string().min(1).max(100),
   width: z.literal(1920),
@@ -65,6 +73,7 @@ export const ProjectSchema = z.object({
 });
 export type Project = z.infer<typeof ProjectSchema>;
 export type Layer = z.infer<typeof LayerSchema>;
+export type TimelineElement = Layer;
 export type Effect = z.infer<typeof EffectSchema>;
 export type Channel = z.infer<typeof ChannelSchema>;
 export function validateProject(input: unknown): Project {
@@ -111,7 +120,58 @@ export function validateProject(input: unknown): Project {
     if (l.effects.some((e) => !p.effects.some((def) => def.id === e.effectId)))
       throw new Error("Unknown effect reference");
   }
+  const tracks = p.tracks ? [...p.tracks] : [];
+  if (new Set(tracks.map((t) => t.id)).size !== tracks.length)
+    throw new Error("Layer IDs must be unique");
+  p.layers = p.layers.map((element) => {
+    if (element.trackId) {
+      if (!tracks.some((t) => t.id === element.trackId))
+        throw new Error("Element references an unknown layer");
+      return element;
+    }
+    // Legacy projects and legacy element-creation commands receive their own layer.
+    let id = `track-${element.id}`.slice(0, 100);
+    while (tracks.some((t) => t.id === id)) id = crypto.randomUUID();
+    tracks.push({ id, name: element.name.trim() || "Untitled layer" });
+    return { ...element, trackId: id };
+  });
+  if (tracks.length > 40)
+    throw new Error("The project supports up to 40 layers");
+  p.tracks = tracks;
+  for (const track of tracks) {
+    const elements = p.layers
+      .filter((e) => e.trackId === track.id)
+      .sort((a, b) => a.start - b.start);
+    for (let i = 1; i < elements.length; i++)
+      if (
+        elements[i].start <
+        elements[i - 1].start + elements[i - 1].duration - 0.001
+      )
+        throw new Error(
+          `Elements overlap on “${track.name}”. Choose an empty time or another layer.`,
+        );
+  }
   return p;
+}
+export function projectTracks(project: Project): TimelineLayer[] {
+  return (
+    project.tracks ??
+    project.layers.map((e) => ({
+      id: `track-${e.id}`.slice(0, 100),
+      name: e.name,
+    }))
+  );
+}
+export function elementTrackId(element: Layer) {
+  return element.trackId ?? `track-${element.id}`.slice(0, 100);
+}
+/** Render and hit-test in layer stack order, regardless of element insertion order. */
+export function orderedElements(project: Project): Layer[] {
+  const order = new Map(projectTracks(project).map((t, i) => [t.id, i]));
+  return [...project.layers].sort(
+    (a, b) =>
+      (order.get(elementTrackId(a)) ?? 0) - (order.get(elementTrackId(b)) ?? 0),
+  );
 }
 export function channelValue(c: Channel, t: number, duration: number) {
   const u = Math.max(0, Math.min(1, t / Math.max(duration, 0.001)));
@@ -191,7 +251,7 @@ export function layerVolume(layer: Layer, layers: Layer[]) {
   );
   return layer.muted || (soloing && !layer.solo) ? 0 : layer.volume;
 }
-export const initialProject: Project = {
+export const initialProject: Project = validateProject({
   version: 1,
   name: "After the last train",
   width: 1920,
@@ -286,4 +346,4 @@ export const initialProject: Project = {
       effects: [],
     },
   ],
-};
+});

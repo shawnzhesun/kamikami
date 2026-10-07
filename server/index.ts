@@ -235,7 +235,7 @@ app.get("/api/capabilities", (_req, res) =>
       importBytes: 500 * 1024 * 1024,
     },
     conventions:
-      "Layers bottom to top; seconds for clip times; x/y from canvas center; source offsets and effect offsets preserve trim continuity. Frequency is cycles per second and phase is cycles. Channels add x/y/rotation/blur and multiply scale/opacity/brightness. Tint is a rectangular screen blend on non-text layers. Curves are declarative, no executable code.",
+      "tracks are independent timeline layers ordered bottom to top; layers is the legacy JSON array of elements, each referencing a trackId. Same-track elements cannot overlap; seconds for clip times; x/y from canvas center; source offsets and effect offsets preserve trim continuity. Frequency is cycles per second and phase is cycles. Channels add x/y/rotation/blur and multiply scale/opacity/brightness. Tint is a rectangular screen blend on non-text layers. Curves are declarative, no executable code.",
   }),
 );
 app.post("/api/media/relink", async (req, res) => {

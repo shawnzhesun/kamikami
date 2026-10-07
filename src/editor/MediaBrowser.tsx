@@ -1,3 +1,4 @@
+import { MEDIA_DRAG_TYPE } from "../media";
 import React, { useState } from "react";
 import {
   Film,
@@ -15,9 +16,7 @@ type Props = {
   busy: boolean;
   onImport: () => void;
   onRefresh: () => void;
-  onAdd: (a: MediaAsset) => void;
   onRelink: (a: MediaAsset) => void;
-  onAnalyze: (a: MediaAsset) => void;
   onDelete: (a: MediaAsset) => void;
   trash: MediaAsset[];
   onRestore: (a: MediaAsset) => void;
@@ -27,9 +26,7 @@ export function MediaBrowser({
   busy,
   onImport,
   onRefresh,
-  onAdd,
   onRelink,
-  onAnalyze,
   onDelete,
   trash,
   onRestore,
@@ -111,6 +108,16 @@ export function MediaBrowser({
       {filtered.map((a) => (
         <article
           key={a.src}
+          draggable={!a.missing && !busy}
+          onDragStart={(e) => {
+            e.dataTransfer.setData(MEDIA_DRAG_TYPE, a.src);
+            e.dataTransfer.effectAllowed = "copy";
+          }}
+          title={
+            a.missing
+              ? "Relink this file before using it"
+              : "Drag onto a timeline layer"
+          }
           className={`media-card ${a.missing ? "missing" : ""}`}
         >
           <button
@@ -123,7 +130,7 @@ export function MediaBrowser({
             {a.missing ? (
               <span>Missing file</span>
             ) : a.type === "image" ? (
-              <img src={a.src} alt="" />
+              <img src={a.src} alt="" draggable={false} />
             ) : a.type === "video" ? (
               <>
                 <video src={a.src + "#t=0.1"} muted preload="metadata" />
@@ -162,25 +169,10 @@ export function MediaBrowser({
             >
               <Trash2 size={13} />
             </button>
-            {a.missing ? (
+            {a.missing && (
               <button onClick={() => onRelink(a)} disabled={busy}>
                 Relink file…
               </button>
-            ) : (
-              <>
-                <button onClick={() => onAdd(a)} disabled={busy}>
-                  Add at playhead
-                </button>
-                {!a.width && !a.duration && (
-                  <button
-                    onClick={() => onAnalyze(a)}
-                    disabled={busy}
-                    title="Read source details and waveform"
-                  >
-                    Analyze
-                  </button>
-                )}
-              </>
             )}
           </div>
         </article>
