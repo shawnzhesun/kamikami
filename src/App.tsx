@@ -1,3 +1,9 @@
+import {
+  DEFAULT_FONT,
+  fontFamilies,
+  fontStack,
+  type FontFamily,
+} from "./fonts";
 import { ThemePicker } from "./editor/ThemePicker";
 import {
   ProjectSettings,
@@ -18,7 +24,6 @@ import {
   ArrowDownToLine,
   ArrowUpFromLine,
   ChevronRight,
-  Clapperboard,
   Copy,
   Eye,
   EyeOff,
@@ -1425,9 +1430,14 @@ export function App() {
       </dialog>
       <header>
         <div className="brand">
-          <span className="brand-symbol">
-            <Clapperboard size={20} />
-          </span>
+          <img
+            className="brand-symbol"
+            src="/kamikami-icon-64.png"
+            alt=""
+            width={32}
+            height={32}
+            draggable={false}
+          />
           KamiKami<span className="version">LOCAL / 0.1</span>
         </div>
         <button
@@ -1999,6 +2009,29 @@ export function App() {
                         }
                         onEndEdit={() => history.current.endGroup()}
                       />
+                      <label>
+                        Font
+                        <select
+                          aria-label="Font family"
+                          value={selected.fontFamily ?? DEFAULT_FONT}
+                          style={{ fontFamily: fontStack(selected.fontFamily) }}
+                          onChange={(event) =>
+                            updateLayer({
+                              fontFamily: event.target.value as FontFamily,
+                            })
+                          }
+                        >
+                          {fontFamilies.map((family) => (
+                            <option
+                              key={family}
+                              value={family}
+                              style={{ fontFamily: fontStack(family) }}
+                            >
+                              {family}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
                       <div className="field-row">
                         <NumberField
                           label="Font size"

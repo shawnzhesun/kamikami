@@ -134,12 +134,11 @@ header button:focus-visible {
   font-weight: 650;
 }
 .brand-symbol {
-  background: var(--coral);
-  color: var(--on-secondary);
   width: 32px;
   height: 32px;
-  display: grid;
-  place-items: center;
+  display: block;
+  flex: none;
+  object-fit: contain;
   border-radius: 7px;
 }
 .version {

@@ -146,6 +146,58 @@ try {
     ),
     "true",
   );
+  const beforeFont = structuredClone(project);
+  assert.equal(await exists('select[aria-label="Font family"]'), true);
+  await page.evaluate(() => {
+    const select = document.querySelector('select[aria-label="Font family"]');
+    select.value = "Georgia";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await save();
+  assert.equal(
+    project.layers.find((e) => e.id === "title").fontFamily,
+    "Georgia",
+  );
+  assert.match(
+    await page.evaluate(
+      () =>
+        getComputedStyle(document.querySelector('[data-layer-content="title"]'))
+          .fontFamily,
+    ),
+    /Georgia/,
+  );
+  await click('header button[aria-label="Undo"]');
+  await save();
+  assert.deepEqual(project, beforeFont);
+  await click('header button[aria-label="Redo"]');
+  await save();
+  assert.equal(
+    project.layers.find((e) => e.id === "title").fontFamily,
+    "Georgia",
+  );
+  await page.goto({ url: "http://127.0.0.1:5174", timeout: 30000 });
+  await wait(() => exists(".media-card"));
+  assert.match(
+    await page.evaluate(
+      () =>
+        getComputedStyle(document.querySelector('[data-layer-content="title"]'))
+          .fontFamily,
+    ),
+    /Georgia/,
+  );
+  await page.evaluate(() =>
+    document
+      .querySelector('[data-element-id="title"]')
+      .dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+      ),
+  );
+  await page.evaluate(() => {
+    const select = document.querySelector('select[aria-label="Font family"]');
+    select.value = "Arial";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await save();
   await page.evaluate(() =>
     document
       .querySelector(".preview-area")

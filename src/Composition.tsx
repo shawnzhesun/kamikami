@@ -1,3 +1,4 @@
+import { fontStack } from "./fonts";
 import { orderedElements } from "./model";
 import React from "react";
 import {
@@ -193,7 +194,7 @@ function VisualLayer({
           data-layer-content={layer.id}
           style={{
             color: layer.color,
-            fontFamily: "Arial, sans-serif",
+            fontFamily: fontStack(layer.fontFamily),
             fontSize: layer.fontSize,
             fontWeight: 800,
             letterSpacing: layer.fontSize > 50 ? "-4px" : "4px",

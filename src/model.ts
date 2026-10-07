@@ -1,3 +1,4 @@
+import { DEFAULT_FONT, fontFamilies } from "./fonts";
 import { z } from "zod";
 
 export const ChannelSchema = z.object({
@@ -52,6 +53,7 @@ export const LayerSchema = z.object({
   volume: z.number().min(0).max(1),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
   fontSize: z.number().min(12).max(240),
+  fontFamily: z.enum(fontFamilies).optional(),
   visible: z.boolean(),
   effects: z.array(InstanceSchema).max(8),
 });
@@ -89,6 +91,7 @@ export function validateProject(input: unknown): Project {
       layers: input.layers.map((l) =>
         l && typeof l === "object"
           ? {
+              fontFamily: DEFAULT_FONT,
               effectOffset: 0,
               effectDuration: 0,
               muted: false,
@@ -241,6 +244,7 @@ export function makeLayer(type: Layer["type"], name: string): Layer {
     volume: 1,
     color: "#f1eee7",
     fontSize: 86,
+    fontFamily: DEFAULT_FONT,
     visible: true,
     effects: [],
   };

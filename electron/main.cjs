@@ -1,4 +1,4 @@
-const { app, BrowserWindow, session } = require("electron");
+const { app, BrowserWindow, session, nativeImage } = require("electron");
 const path = require("node:path");
 const { existsSync } = require("node:fs");
 // Keep existing installations' encrypted credentials and local preferences.
@@ -12,6 +12,10 @@ app.setName(useLegacyProfile ? "frameforge" : "KamiKami");
 app.setPath("userData", useLegacyProfile ? legacyProfile : currentProfile);
 app.whenReady().then(async () => {
   app.setName("KamiKami");
+  const icon = nativeImage.createFromPath(
+    path.join(__dirname, "../public/kamikami-icon-macos.png"),
+  );
+  if (process.platform === "darwin") app.dock.setIcon(icon);
   await require("./assistant-credentials.cjs")();
   session.defaultSession.setPermissionRequestHandler(
     (_webContents, _permission, callback) => callback(false),
@@ -23,6 +27,7 @@ app.whenReady().then(async () => {
     minHeight: 760,
     backgroundColor: "#F5EBDD",
     title: "KamiKami",
+    icon,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
