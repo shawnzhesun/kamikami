@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.kamikami/
+.env
+*.log
+.frameforge/
+.DS_Store
+.env.*
+!.env.example

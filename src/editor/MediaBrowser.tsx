@@ -1,0 +1,190 @@
+import React, { useState } from "react";
+import {
+  Film,
+  Trash2,
+  Music2,
+  RefreshCw,
+  Upload,
+  Image as ImageIcon,
+} from "lucide-react";
+import type { MediaAsset } from "../media";
+import { Waveform } from "./Waveform";
+
+type Props = {
+  assets: MediaAsset[];
+  busy: boolean;
+  onImport: () => void;
+  onRefresh: () => void;
+  onAdd: (a: MediaAsset) => void;
+  onRelink: (a: MediaAsset) => void;
+  onAnalyze: (a: MediaAsset) => void;
+  onDelete: (a: MediaAsset) => void;
+  trash: MediaAsset[];
+  onRestore: (a: MediaAsset) => void;
+};
+export function MediaBrowser({
+  assets,
+  busy,
+  onImport,
+  onRefresh,
+  onAdd,
+  onRelink,
+  onAnalyze,
+  onDelete,
+  trash,
+  onRestore,
+}: Props) {
+  const [query, setQuery] = useState(""),
+    [filter, setFilter] = useState("all"),
+    [preview, setPreview] = useState<string | null>(null);
+  const filtered = assets.filter(
+    (a) =>
+      (filter === "all" || a.type === filter) &&
+      a.name.toLowerCase().includes(query.toLowerCase()),
+  );
+  return (
+    <div className="media-browser">
+      <div className="media-actions">
+        <button onClick={onImport} disabled={busy}>
+          <Upload size={14} />
+          {busy ? "Importing…" : "Import to library"}
+        </button>
+        <button
+          aria-label="Refresh media library"
+          title="Check for missing files"
+          onClick={onRefresh}
+        >
+          <RefreshCw size={14} />
+        </button>
+      </div>
+      <label className="media-search">
+        Find media
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search filenames"
+        />
+      </label>
+      <div className="media-filters" aria-label="Media type">
+        {["all", "image", "video", "audio"].map((type) => (
+          <button
+            key={type}
+            aria-pressed={filter === type}
+            onClick={() => {
+              setFilter(type);
+              setPreview(null);
+            }}
+          >
+            {type === "all"
+              ? "All"
+              : type === "image"
+                ? "Images"
+                : type === "video"
+                  ? "Video"
+                  : "Audio"}
+          </button>
+        ))}
+      </div>
+      {!filtered.length && (
+        <p className="media-empty">
+          {assets.length
+            ? "No files match your search."
+            : "No media in this library."}
+        </p>
+      )}
+      {trash.length > 0 && (
+        <details className="media-trash">
+          <summary>Media trash ({trash.length})</summary>
+          <p>
+            Restoring media does not recreate deleted clips. Use Undo to restore
+            a deletion's clips.
+          </p>
+          {trash.map((a) => (
+            <div key={a.src}>
+              <span>{a.name}</span>
+              <button onClick={() => onRestore(a)}>Restore</button>
+            </div>
+          ))}
+        </details>
+      )}
+      {filtered.map((a) => (
+        <article
+          key={a.src}
+          className={`media-card ${a.missing ? "missing" : ""}`}
+        >
+          <button
+            className="media-thumbnail"
+            disabled={a.missing}
+            aria-label={`Preview ${a.name}`}
+            aria-expanded={preview === a.src}
+            onClick={() => setPreview(preview === a.src ? null : a.src)}
+          >
+            {a.missing ? (
+              <span>Missing file</span>
+            ) : a.type === "image" ? (
+              <img src={a.src} alt="" />
+            ) : a.type === "video" ? (
+              <>
+                <video src={a.src + "#t=0.1"} muted preload="metadata" />
+                <Film size={22} />
+              </>
+            ) : a.peaks.length ? (
+              <Waveform peaks={a.peaks} />
+            ) : (
+              <Music2 size={32} />
+            )}
+          </button>
+          <strong title={a.name}>{a.name}</strong>
+          <small>
+            {a.type} · {a.duration ? `${a.duration.toFixed(2)}s · ` : ""}
+            {a.width && a.height ? `${a.width} × ${a.height} · ` : ""}
+            {(a.size / 1024 / 1024).toFixed(1)} MB
+          </small>
+          {preview === a.src && !a.missing && (
+            <div className="media-player">
+              {a.type === "audio" ? (
+                <audio key={a.src} src={a.src} controls />
+              ) : a.type === "video" ? (
+                <video key={a.src} src={a.src} controls />
+              ) : (
+                <img src={a.src} alt={a.name} />
+              )}
+            </div>
+          )}
+          <div className="media-card-actions">
+            <button
+              className="media-delete"
+              aria-label={`Delete ${a.name}`}
+              title="Delete media"
+              disabled={busy}
+              onClick={() => onDelete(a)}
+            >
+              <Trash2 size={13} />
+            </button>
+            {a.missing ? (
+              <button onClick={() => onRelink(a)} disabled={busy}>
+                Relink file…
+              </button>
+            ) : (
+              <>
+                <button onClick={() => onAdd(a)} disabled={busy}>
+                  Add at playhead
+                </button>
+                {!a.width && !a.duration && (
+                  <button
+                    onClick={() => onAnalyze(a)}
+                    disabled={busy}
+                    title="Read source details and waveform"
+                  >
+                    Analyze
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        </article>
+      ))}
+    </div>
+  );
+}
