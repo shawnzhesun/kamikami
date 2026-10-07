@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useRef } from "react";
 import { Play, Pause } from "lucide-react";
-import { layerAtTime, makeLayer, type Effect } from "../model";
+import { type Effect } from "../model";
+import { EffectSample, effectPosterTime } from "./EffectSample";
 import { startGesture } from "./gesture";
-const sample = { ...makeLayer("scene", "Preview"), duration: 6 };
 export function EffectCard({
   effect,
   onApply,
@@ -39,11 +39,6 @@ export function EffectCard({
     id = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(id);
   }, [playing]);
-  const value = layerAtTime(
-    { ...sample, effects: [{ effectId: effect.id, amount: 1, enabled: true }] },
-    [effect],
-    time,
-  );
   return (
     <div
       className={`effect-card ${dragging ? "effect-dragging" : ""}`}
@@ -122,30 +117,11 @@ export function EffectCard({
         className="effect-sample"
         aria-label={`${effect.name} sample graphic preview`}
       >
-        <div
-          className="effect-sample-art"
-          style={{
-            transform: `translate(${value.x * 0.15}px,${value.y * 0.15}px) rotate(${value.rotation}deg) scale(${value.scale})`,
-            opacity: value.opacity,
-            filter: `brightness(${value.brightness}) blur(${value.blur * 0.15}px)`,
-          }}
-        >
-          <svg viewBox="0 0 180 96" aria-hidden="true">
-            <rect width="180" height="96" rx="7" fill="#315B8C" />
-            <circle cx="137" cy="27" r="16" fill="#F2765E" />
-            <path d="M0 96 54 23 107 96M65 96 118 47 180 96" fill="#F5EBDD" />
-            <path d="m34 51 20-28 21 29-21-8Z" fill="#F2765E" />
-            <path d="M0 83h180v13H0Z" fill="#413333" />
-          </svg>
-          {effect.tint > 0 && (
-            <span
-              style={{
-                background: effect.color,
-                opacity: effect.tint,
-                mixBlendMode: "screen",
-              }}
-            />
-          )}
+        <div className="effect-sample-art">
+          <EffectSample
+            effect={effect}
+            time={playing ? time : effectPosterTime(effect)}
+          />
         </div>
         <button
           className="effect-preview-play"

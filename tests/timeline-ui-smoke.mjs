@@ -120,6 +120,22 @@ try {
   });
   const errors = [];
   page.on("error", (e) => errors.push(String(e)));
+  await page.evaluateOnNewDocument(() => {
+    // Model native file dialogs without touching the user's files.
+    window.kamikamiProjectFiles = {
+      info: async () => ({
+        file: localStorage.getItem("fixture-project-file")
+          ? { name: "fixture.json" }
+          : null,
+      }),
+      open: async () => null,
+      accept: async () => ({ name: "fixture.json" }),
+      save: async (text) => {
+        localStorage.setItem("fixture-project-file", text);
+        return { name: "fixture.json" };
+      },
+    };
+  });
   await page.setViewport({ width: 1440, height: 980, deviceScaleFactor: 1 });
   await page.goto({ url: "http://127.0.0.1:5174", timeout: 30000 });
   const wait = async (fn) => {
@@ -157,10 +173,17 @@ try {
         .find((e) => e.textContent.trim() === "Save")
         .click(),
     );
-    await wait(() => exists("header .project-name"));
-    await new Promise((r) => setTimeout(r, 100));
+    await wait(() =>
+      exists(
+        'header button[title="Save to fixture.json (⌘/Ctrl S)"]:not(:disabled)',
+      ),
+    );
   };
   await wait(() => exists(".media-card"));
+  assert.equal(await exists("header .open-project-button"), true);
+  assert.equal(await exists(".library .library-foot"), false);
+  assert.ok(!(await text()).includes("Download project JSON"));
+  assert.ok((await text()).includes("Add media"));
   assert.equal(await exists(".new-layer-drop"), false);
   assert.equal(await exists(".preview-caption"), false);
   assert.ok(!(await text()).includes("FRAME-ACCURATE PREVIEW"));

@@ -1,8 +1,13 @@
 import { readFile, writeFile, rename } from "node:fs/promises";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import { EffectBundleSchema, type UserEffect } from "../src/effect-bundle";
-import { EffectSchema, initialProject, type Effect } from "../src/model";
+import {
+  EffectBundleSchema,
+  effectEngine,
+  type UserEffect,
+} from "../src/effect-bundle";
+import { EffectSchema, type Effect } from "../src/model";
+import { allBuiltinEffects } from "../src/builtin-effects";
 
 export class EffectLibrary {
   private queue = Promise.resolve();
@@ -73,8 +78,7 @@ export class EffectLibrary {
       }
       const id = randomUUID();
       const copy =
-        !!existing ||
-        initialProject.effects.some((e) => e.id === bundle.effect.id);
+        !!existing || allBuiltinEffects.some((e) => e.id === bundle.effect.id);
       const entry: UserEffect = {
         id,
         collection: "mine",
@@ -103,13 +107,14 @@ export class EffectLibrary {
           ) {
             existing.bundle = {
               ...existing.bundle,
+              engine: effectEngine(effect),
               name: effect.name,
               description: effect.description,
               effect,
             };
             existing.savedAt = new Date().toISOString();
           }
-        } else if (!initialProject.effects.some((e) => e.id === effect.id)) {
+        } else if (!allBuiltinEffects.some((e) => e.id === effect.id)) {
           entries.push({
             id: randomUUID(),
             collection: "mine",
@@ -117,7 +122,7 @@ export class EffectLibrary {
             bundle: EffectBundleSchema.parse({
               format: "frameforge-effect",
               version: 1,
-              engine: "frameforge-curves-v1",
+              engine: effectEngine(effect),
               name: effect.name,
               description: effect.description,
               effect,

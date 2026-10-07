@@ -352,16 +352,6 @@ header .status-dot,
   font-size: 11px;
   color: var(--muted);
 }
-.library-foot {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  padding: 4px 13px;
-  gap: 4px;
-}
-.library-foot button {
-  font-size: 11px;
-}
 .editor {
   display: flex;
   flex-direction: column;
@@ -1228,7 +1218,7 @@ button[aria-pressed="true"] {
   width: 75%;
   line-height: 0;
 }
-.effect-sample-art svg {
+.effect-sample-art > svg {
   width: 100%;
 }
 .effect-sample-art > span {
@@ -1408,22 +1398,6 @@ button[aria-pressed="true"] {
   left: 2px;
   width: 1px;
   background: var(--muted);
-}
-.library .library-foot {
-  margin-top: 0;
-  padding: 10px 12px;
-  display: flex;
-  flex-direction: row;
-  flex-wrap: wrap;
-  gap: 4px;
-  border-bottom: 1px solid var(--line);
-}
-.library .library-foot button {
-  font-size: 11px;
-}
-.library .library-foot button:last-of-type {
-  flex-basis: 100%;
-  justify-content: flex-start;
 }
 .library > .tabs {
   position: sticky;
@@ -2475,4 +2449,27 @@ button[aria-pressed="true"] {
 }
 .font-picker input[hidden] {
   display: none;
+}
+
+.open-project-button {
+  flex: none;
+  white-space: nowrap;
+}
+
+.effect-library-filters {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+}
+.effect-library-filters input {
+  min-width: 0;
+  width: 100%;
+}
+.visual-pass-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.visual-pass-fields label {
+  min-width: 0;
 }

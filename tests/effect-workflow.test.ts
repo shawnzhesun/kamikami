@@ -1,3 +1,4 @@
+import { builtinEffects } from "../src/builtin-effects";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { mkdtemp, writeFile, mkdir, rm } from "node:fs/promises";
@@ -147,7 +148,7 @@ test("agent creations and refinements persist in My effects without gallery dupl
     assert.equal(entries[0].bundle.effect.id, effect.id);
     assert.equal(
       effectCollections(created, entries).library.length,
-      initialProject.effects.length,
+      builtinEffects.length,
     );
     const refined = applyAgentEdit(
       created,
@@ -184,7 +185,7 @@ test("agent creations and refinements persist in My effects without gallery dupl
     entries = await lib.syncProjectEffects(withImport.effects);
     const collections = effectCollections(withImport, entries);
     assert.equal(collections.mine.length, 1);
-    assert.equal(collections.library.length, initialProject.effects.length + 1);
+    assert.equal(collections.library.length, builtinEffects.length + 1);
     assert.deepEqual(
       imported.bundle.effect.channels,
       saved.bundle.effect.channels,
@@ -199,9 +200,7 @@ test("agent creations and refinements persist in My effects without gallery dupl
 });
 
 test("legacy custom definitions migrate once without changing project IDs or old saved entries", async () => {
-  const dir = await mkdtemp(
-    path.join(tmpdir(), "kamikami-effect-migration-"),
-  );
+  const dir = await mkdtemp(path.join(tmpdir(), "kamikami-effect-migration-"));
   try {
     const old = {
       id: "legacy-entry",
@@ -230,7 +229,7 @@ test("legacy custom definitions migrate once without changing project IDs or old
     assert.equal(effectCollections(project, entries).mine.length, 2);
     assert.equal(
       effectCollections(project, entries).library.length,
-      initialProject.effects.length,
+      builtinEffects.length,
     );
   } finally {
     await rm(dir, { recursive: true, force: true });

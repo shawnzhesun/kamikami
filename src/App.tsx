@@ -1,5 +1,15 @@
+import {
+  allBuiltinEffects,
+  builtinEffectCategory,
+  effectSearchText,
+  getEffectFamily,
+  effectVariationId,
+  effectVariationPatch,
+} from "./builtin-effects";
+import { visualNames, type VisualPass } from "./visual-effects";
 import { FontPicker } from "./editor/FontPicker";
 import { Dropdown } from "./editor/Dropdown";
+import { ProjectFileAccess, projectJson } from "./project-files";
 import { ThemePicker } from "./editor/ThemePicker";
 import {
   ProjectSettings,
@@ -53,6 +63,7 @@ import {
   applyEffectToLayers,
   effectCollections,
   EffectBundleSchema,
+  effectEngine,
   type UserEffect,
   type EffectBundle,
 } from "./effect-bundle";
@@ -85,6 +96,26 @@ const timecode = (f: number) =>
     .toString()
     .padStart(2, "0")}:${(f % 24).toString().padStart(2, "0")}`;
 export function App() {
+  const projectFiles = useRef(new ProjectFileAccess());
+  const [projectFilename, setProjectFilename] = useState<string | null>(null);
+  const projectFilenameRef = useRef<string | null>(null);
+  const fileSnapshot = useRef<string | null>(null);
+  const fileOperation = useRef(false);
+  const [fileBusy, setFileBusy] = useState(false);
+  const [fileAccessReady, setFileAccessReady] = useState(false);
+  useEffect(() => {
+    let active = true;
+    void projectFiles.current.restore().then(({ file, warning }) => {
+      if (!active) return;
+      projectFilenameRef.current = file?.name ?? null;
+      setProjectFilename(file?.name ?? null);
+      setFileAccessReady(true);
+      if (warning) setStatus(warning);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
   const [projectSettings, setProjectSettings] = useState(false);
   const [effectModal, setEffectModal] = useState(false);
   const [layerSettings, setLayerSettings] = useState<{
@@ -163,6 +194,8 @@ export function App() {
   const [assets, setAssets] = useState<MediaAsset[]>([]);
   const [mediaBusy, setMediaBusy] = useState(false);
   const [userEffects, setUserEffects] = useState<UserEffect[]>([]);
+  const [effectSearch, setEffectSearch] = useState("");
+  const [effectCategory, setEffectCategory] = useState("all");
   const deletedByTransaction = useRef(new WeakMap<Project, string[]>());
   const [mediaTrash, setMediaTrash] = useState<MediaAsset[]>([]);
   const [deleteProposal, setDeleteProposal] = useState<MediaAsset | null>(null);
@@ -204,6 +237,18 @@ export function App() {
     userEffects,
   );
 
+  const categoryOf = (id: string) =>
+    allBuiltinEffects.some((e) => e.id === id)
+      ? builtinEffectCategory(id)
+      : "Imported";
+  const matchesEffect = (effect: Effect) =>
+    effectSearchText(effect).includes(effectSearch.trim().toLowerCase());
+  const visibleLibraryEffects = libraryEffects.filter(
+    (e) =>
+      matchesEffect(e) &&
+      (effectCategory === "all" || categoryOf(e.id) === effectCategory),
+  );
+
   const importMode = useRef<"add" | "library" | "relink">("add");
   const relinkAsset = useRef<MediaAsset | null>(null);
   const selectedId = selectedIds.at(-1) ?? "";
@@ -232,7 +277,6 @@ export function App() {
   const inspector = useRef<HTMLDivElement>(null);
   const player = useRef<PlayerRef>(null),
     file = useRef<HTMLInputElement>(null),
-    projectFile = useRef<HTMLInputElement>(null),
     history = useRef(new EditHistory<Project>()),
     current = useRef(project),
     revision = useRef(0),
@@ -243,7 +287,7 @@ export function App() {
     editingEffect =
       project.effects.find((e) => e.id === effectId) ??
       userEffects.find((e) => e.bundle.effect.id === effectId)?.bundle.effect ??
-      initialProject.effects.find((e) => e.id === effectId);
+      allBuiltinEffects.find((e) => e.id === effectId);
   function commit(next: Project, group?: string) {
     if (!ready) return false;
     try {
@@ -283,6 +327,7 @@ export function App() {
     const group = request.historyGroup;
     const revisionToken = () => `${editorId.current}:${revision.current}`;
     const editing = () =>
+      fileOperation.current ||
       isGestureActive() ||
       !!previewProject ||
       !!deleteProposal ||
@@ -477,7 +522,7 @@ export function App() {
         (await refreshEffects()).find(
           (e) => e.bundle.effect.id === command.effectId,
         )?.bundle.effect ??
-        initialProject.effects.find((e) => e.id === command.effectId);
+        allBuiltinEffects.find((e) => e.id === command.effectId);
       if (!effect) throw new Error("Effect not found.");
       if (revisionToken() !== command.expectedRevision)
         throw new Error("Project changed. Read it again.");
@@ -514,7 +559,7 @@ export function App() {
       return { ...snapshot(), frame: command.frame };
     }
     if (command.action === "save_project") {
-      await save();
+      await checkpoint();
       if (saved.current !== revision.current)
         throw new Error("Project was not saved. Check the editor status.");
       return snapshot();
@@ -752,7 +797,7 @@ export function App() {
     const bundle: EffectBundle = {
       format: "frameforge-effect",
       version: 1,
-      engine: "frameforge-curves-v1",
+      engine: effectEngine(effect),
       name: effect.name,
       description: effect.description,
       author,
@@ -772,10 +817,10 @@ export function App() {
     const bundle = {
       format: "frameforge-effect",
       version: 1,
-      engine: "frameforge-curves-v1",
       author: effectAuthor,
       license: effectLicense,
       ...existing,
+      engine: effectEngine(effect),
       name: effect.name,
       description: effect.description,
       effect,
@@ -812,7 +857,7 @@ export function App() {
       effectEditor.current?.focus({ preventScroll: true });
     }
   }, [effectId, rightTab, effectNavigation]);
-  function save() {
+  function checkpoint() {
     const snapshot = current.current,
       r = revision.current;
     saveQueue.current = saveQueue.current
@@ -820,10 +865,74 @@ export function App() {
       .then(async () => {
         await api("/api/project", "PUT", snapshot);
         saved.current = r;
-        setStatus(revision.current === r ? "Saved locally" : "Unsaved changes");
+        if (!fileOperation.current)
+          setStatus(
+            revision.current !== r
+              ? "Unsaved changes"
+              : fileSnapshot.current === projectJson(snapshot) &&
+                  projectFilenameRef.current
+                ? `Saved to ${projectFilenameRef.current}`
+                : projectFilenameRef.current
+                  ? `Changes recovered locally · Save to update ${projectFilenameRef.current}`
+                  : "Recovered locally · Save to choose a project file",
+          );
       })
       .catch((e) => setStatus(`Save failed: ${e.message}`));
     return saveQueue.current;
+  }
+  async function save() {
+    if (!ready || !fileAccessReady || fileOperation.current) return;
+    fileOperation.current = true;
+    setFileBusy(true);
+    const snapshot = current.current;
+    try {
+      // Invoke directly from the click/key gesture so browser file pickers are allowed.
+      const result = await projectFiles.current.save(snapshot);
+      if (!result) {
+        setStatus("Save canceled · Your local recovery copy is unchanged");
+        return;
+      }
+      projectFilenameRef.current = result.name;
+      setProjectFilename(result.name);
+      fileSnapshot.current = projectJson(snapshot);
+      await checkpoint();
+      setStatus(
+        result.warning ??
+          (current.current === snapshot
+            ? `Saved to ${result.name}`
+            : `Saved to ${result.name} · New changes remain`),
+      );
+    } catch (e) {
+      setStatus(`Save failed: ${(e as Error).message}`);
+    } finally {
+      fileOperation.current = false;
+      setFileBusy(false);
+    }
+  }
+  async function openProject() {
+    if (!ready || !fileAccessReady || fileOperation.current) return;
+    fileOperation.current = true;
+    setFileBusy(true);
+    player.current?.pause();
+    try {
+      const result = await projectFiles.current.open();
+      if (!result) return;
+      if (!commit(result.project))
+        throw new Error("The project could not be opened.");
+      projectFilenameRef.current = result.file.name;
+      setProjectFilename(result.file.name);
+      fileSnapshot.current = projectJson(result.project);
+      selectLayers([]);
+      await checkpoint();
+      setStatus(
+        result.warning ?? `Opened ${result.file.name} · Save updates this file`,
+      );
+    } catch (e) {
+      setStatus(`Open failed: ${(e as Error).message}`);
+    } finally {
+      fileOperation.current = false;
+      setFileBusy(false);
+    }
   }
   useEffect(() => {
     api("/api/project")
@@ -834,7 +943,7 @@ export function App() {
         setSelectedIds(loaded.layers[0] ? [loaded.layers[0].id] : []);
         void refreshMedia();
         setReady(true);
-        setStatus("Saved locally");
+        setStatus("Recovered locally · Save writes your project JSON");
       })
       .catch((e) => setStatus(e.message));
   }, []);
@@ -851,7 +960,23 @@ export function App() {
       setEffectId(null);
   }, [project, selectedId, effectId]);
   useEffect(() => {
+    const saveShortcut = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
+        event.preventDefault();
+        if (
+          fileOperation.current ||
+          event.repeat ||
+          document.querySelector("dialog[open]")
+        )
+          return;
+        // Commit a focused Inspector field before taking the save snapshot.
+        (document.activeElement as HTMLElement | null)?.blur();
+        void save();
+        return;
+      }
+    };
     const handle = (event: KeyboardEvent) => {
+      if (fileOperation.current) return;
       const target = event.target as HTMLElement;
       if (
         target.closest(
@@ -863,12 +988,6 @@ export function App() {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z") {
         event.preventDefault();
         event.shiftKey ? redo() : undo();
-      } else if (
-        (event.metaKey || event.ctrlKey) &&
-        event.key.toLowerCase() === "s"
-      ) {
-        event.preventDefault();
-        void save();
       } else if (
         event.key === "Backspace" &&
         !event.metaKey &&
@@ -900,17 +1019,21 @@ export function App() {
         player.current?.toggle();
       }
     };
+    window.addEventListener("keydown", saveShortcut, true);
     window.addEventListener("keydown", handle);
-    return () => window.removeEventListener("keydown", handle);
-  }, [project, ready, selectedIds]);
+    return () => {
+      window.removeEventListener("keydown", saveShortcut, true);
+      window.removeEventListener("keydown", handle);
+    };
+  }, [project, ready, selectedIds, fileAccessReady]);
   useEffect(() => {
     if (!ready || revision.current === saved.current) return;
-    const t = setTimeout(() => void save(), 1000);
+    const t = setTimeout(() => void checkpoint(), 1000);
     return () => clearTimeout(t);
   }, [project, ready]);
   useEffect(() => {
     const handler = (event: BeforeUnloadEvent) => {
-      if (revision.current !== saved.current) {
+      if (fileOperation.current || revision.current !== saved.current) {
         event.preventDefault();
         event.returnValue = "";
       }
@@ -1153,7 +1276,7 @@ export function App() {
       const effect =
         project.effects.find((e) => e.id === id) ??
         userEffects.find((e) => e.bundle.effect.id === id)?.bundle.effect ??
-        initialProject.effects.find((e) => e.id === id);
+        allBuiltinEffects.find((e) => e.id === id);
       if (!effect) throw new Error("Effect not found.");
       const ids = layerId ? [layerId] : selectedIds;
       if (commit(applyEffectToLayers(current.current, effect, ids))) {
@@ -1171,18 +1294,6 @@ export function App() {
     } catch (e) {
       setStatus((e as Error).message);
     }
-  }
-  function downloadProject() {
-    const url = URL.createObjectURL(
-      new Blob([JSON.stringify(project, null, 2)], {
-        type: "application/json",
-      }),
-    );
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "kamikami-project.json";
-    a.click();
-    URL.revokeObjectURL(url);
   }
   const effectControls = editingEffect && (
     <div
@@ -1205,6 +1316,7 @@ export function App() {
           <X size={14} />
         </button>
       </div>
+      <p className="muted">{editingEffect.description}</p>
       <p className="muted">
         Editing {editingEffect.name}. Changes affect all{" "}
         {
@@ -1251,6 +1363,29 @@ export function App() {
         }
         onEndEdit={() => history.current.endGroup()}
       />
+      {getEffectFamily(editingEffect.id) && (
+        <label>
+          Variation
+          <Dropdown
+            label={`${getEffectFamily(editingEffect.id)!.name} variation`}
+            value={effectVariationId(editingEffect)}
+            options={[
+              ...getEffectFamily(editingEffect.id)!.variations.map((v) => ({
+                value: v.id,
+                label: v.name,
+              })),
+              { value: "custom", label: "Custom", disabled: true },
+            ]}
+            onChange={(id) => {
+              const patch = effectVariationPatch(editingEffect, id);
+              if (patch) updateEffect(patch);
+            }}
+          />
+          <small className="muted">
+            Choosing a variation resets the parameters below.
+          </small>
+        </label>
+      )}
       {editingEffect.channels.map((c, i) => (
         <div className="channel" key={i}>
           <div className="section-line">
@@ -1270,7 +1405,15 @@ export function App() {
                   ),
                 })
               }
-              options={["linear", "ease", "sine", "pulse"].map((c) => ({
+              options={[
+                "linear",
+                "ease",
+                "ease-out",
+                "sine",
+                "pulse",
+                "shake",
+                "steps",
+              ].map((c) => ({
                 value: c,
                 label: c,
               }))}
@@ -1295,9 +1438,9 @@ export function App() {
               />
             ))}
           </div>
-          {["sine", "pulse"].includes(c.curve) && (
+          {["sine", "pulse", "shake", "steps"].includes(c.curve) && (
             <NumberField
-              label="Frequency (Hz)"
+              label={c.curve === "steps" ? "Steps" : "Frequency (Hz)"}
               value={c.frequency}
               min={0}
               max={20}
@@ -1313,6 +1456,315 @@ export function App() {
           )}
         </div>
       ))}
+      {editingEffect.passes?.map((pass, index) => {
+        const change = (patch: Partial<VisualPass>) =>
+          updateEffect({
+            passes: editingEffect.passes!.map((p, i) =>
+              i === index ? { ...p, ...patch } : p,
+            ),
+          });
+        const hasColor = ![
+          "bloom",
+          "grain",
+          "scanlines",
+          "chromatic",
+          "distortion",
+          "iris",
+          "shatter",
+          "echo",
+          "palette",
+          "smear",
+          "repeat",
+        ].includes(pass.kind);
+        const numeric = [
+          {
+            key: "strength" as const,
+            label: "Strength",
+            min: 0,
+            max: 1,
+            step: 0.01,
+          },
+          ...((!["silhouette", "duotone", "flash", "palette"].includes(
+            pass.kind,
+          ) &&
+            !(pass.kind === "repeat" && pass.repeatMode === "grid")) ||
+          (pass.kind === "silhouette" && pass.silhouetteStyle === "outline")
+            ? [
+                {
+                  key: "size" as const,
+                  label:
+                    pass.kind === "smear"
+                      ? "Spread"
+                      : pass.kind === "rings"
+                        ? "Radius"
+                        : "Size",
+                  min: 0,
+                  max: 1,
+                  step: 0.01,
+                },
+              ]
+            : []),
+          ...([
+            "spotlight",
+            "flare",
+            "grain",
+            "scanlines",
+            "hatch",
+            "chromatic",
+            "distortion",
+            "hexagons",
+            "particles",
+            "echo",
+            "palette",
+            "rings",
+          ].includes(pass.kind) ||
+          (pass.kind === "repeat" && pass.repeatMode === "kaleidoscope") ||
+          pass.timing === "pulse"
+            ? [
+                {
+                  key: "speed" as const,
+                  label: "Speed",
+                  min: 0,
+                  max: 10,
+                  step: 0.1,
+                },
+              ]
+            : []),
+          ...(["hatch", "flare", "echo", "palette", "rings"].includes(
+            pass.kind,
+          ) ||
+          (pass.kind === "smear" && pass.smearMode !== "zoom") ||
+          (pass.kind === "repeat" && pass.repeatMode === "kaleidoscope")
+            ? [
+                {
+                  key: "angle" as const,
+                  label: "Angle",
+                  min: -180,
+                  max: 180,
+                  step: 1,
+                },
+              ]
+            : []),
+          ...([
+            "grain",
+            "distortion",
+            "hexagons",
+            "particles",
+            "shatter",
+          ].includes(pass.kind)
+            ? [
+                {
+                  key: "seed" as const,
+                  label: "Pattern seed",
+                  min: 0,
+                  max: 65535,
+                  step: 1,
+                },
+              ]
+            : []),
+        ];
+        return (
+          <div className="channel" key={index}>
+            <div className="section-line">
+              <span>{visualNames[pass.kind]}</span>
+            </div>
+            <div className="visual-pass-fields">
+              {(
+                [
+                  {
+                    kind: "silhouette",
+                    key: "silhouetteStyle",
+                    label: "Cutout style",
+                    fallback: "fill",
+                    options: [
+                      ["fill", "Filled silhouette"],
+                      ["outline", "Outline only"],
+                    ],
+                  },
+                  {
+                    kind: "palette",
+                    key: "paletteMode",
+                    label: "Color mapping",
+                    fallback: "negative",
+                    options: [
+                      ["negative", "Negative"],
+                      ["solarize", "Solarize"],
+                      ["posterize", "Posterize"],
+                    ],
+                  },
+                  {
+                    kind: "smear",
+                    key: "smearMode",
+                    label: "Smear geometry",
+                    fallback: "zoom",
+                    options: [
+                      ["zoom", "Zoom"],
+                      ["spin", "Spin"],
+                      ["directional", "Directional"],
+                    ],
+                  },
+                  {
+                    kind: "repeat",
+                    key: "repeatMode",
+                    label: "Repetition layout",
+                    fallback: "mirror",
+                    options: [
+                      ["grid", "Grid"],
+                      ["mirror", "Mirror"],
+                      ["kaleidoscope", "Kaleidoscope"],
+                      ["tunnel", "Nested frames"],
+                    ],
+                  },
+                  {
+                    kind: "distortion",
+                    key: "distortionMode",
+                    label: "Distortion pattern",
+                    fallback: "bands",
+                    options: [
+                      ["bands", "Horizontal bands"],
+                      ["blocks", "Digital blocks"],
+                      ["wave", "Wave"],
+                    ],
+                  },
+                  {
+                    kind: "hatch",
+                    key: "screenPattern",
+                    label: "Print pattern",
+                    fallback: "lines",
+                    options: [
+                      ["lines", "Lines"],
+                      ["dots", "Dots"],
+                    ],
+                  },
+                  {
+                    kind: "particles",
+                    key: "particleStyle",
+                    label: "Particle style",
+                    fallback: "paper",
+                    options: [
+                      ["paper", "Drifting paper"],
+                      ["burst", "Radial bursts"],
+                    ],
+                  },
+                ] as const
+              )
+                .filter((control) => control.kind === pass.kind)
+                .map((control) => (
+                  <label key={control.key}>
+                    {control.label}
+                    <Dropdown
+                      label={control.label}
+                      value={pass[control.key] ?? control.fallback}
+                      options={control.options.map(([value, label]) => ({
+                        value,
+                        label,
+                      }))}
+                      onChange={(value) => change({ [control.key]: value })}
+                    />
+                  </label>
+                ))}
+              {(pass.kind === "rings" ||
+                (pass.kind === "repeat" && pass.repeatMode !== "mirror") ||
+                (pass.kind === "particles" &&
+                  pass.particleStyle === "burst")) && (
+                <NumberField
+                  label="Count"
+                  value={
+                    pass.count ??
+                    (pass.kind === "repeat" ? 6 : pass.kind === "rings" ? 4 : 3)
+                  }
+                  min={2}
+                  max={12}
+                  step={1}
+                  onChange={(count) => change({ count: Math.round(count) })}
+                />
+              )}
+              {pass.kind === "repeat" && (
+                <small className="muted">
+                  Mirror uses two panels; size ≥ 0.5 adds vertical mirroring.
+                  Grid uses count for columns. Kaleidoscope uses an even count
+                  of at least four sectors. Size sets nested-frame spacing.
+                </small>
+              )}
+              {pass.kind === "palette" && pass.paletteMode === "posterize" && (
+                <NumberField
+                  label="Color levels"
+                  value={2 + Math.round(pass.size * 10)}
+                  min={2}
+                  max={12}
+                  step={1}
+                  onChange={(levels) =>
+                    change({ size: (Math.round(levels) - 2) / 10 })
+                  }
+                />
+              )}
+              {pass.kind === "palette" && (
+                <small className="muted">
+                  Angle shifts hue; speed cycles hue.
+                </small>
+              )}
+              {numeric.map(({ key, ...field }) => (
+                <NumberField
+                  key={key}
+                  {...field}
+                  value={pass[key]}
+                  onChange={(n) =>
+                    change({ [key]: key === "seed" ? Math.round(n) : n })
+                  }
+                />
+              ))}
+              {hasColor && (
+                <label>
+                  Color
+                  <input
+                    type="color"
+                    value={pass.color}
+                    onChange={(e) => change({ color: e.target.value })}
+                  />
+                </label>
+              )}
+              {(["duotone", "hexagons", "rings"].includes(pass.kind) ||
+                (pass.kind === "particles" &&
+                  pass.particleStyle === "burst")) && (
+                <label>
+                  Secondary color
+                  <input
+                    type="color"
+                    value={pass.secondary}
+                    onChange={(e) => change({ secondary: e.target.value })}
+                  />
+                </label>
+              )}
+              <label>
+                Timing
+                <Dropdown
+                  label={`${visualNames[pass.kind]} timing`}
+                  value={pass.timing}
+                  onChange={(timing) =>
+                    change({ timing: timing as VisualPass["timing"] })
+                  }
+                  options={[
+                    { value: "constant", label: "Throughout clip" },
+                    { value: "in", label: "At clip start" },
+                    { value: "out", label: "At clip end" },
+                    { value: "pulse", label: "Repeating pulse" },
+                  ]}
+                />
+              </label>
+              {["in", "out"].includes(pass.timing) && (
+                <NumberField
+                  label="Transition (seconds)"
+                  value={pass.seconds}
+                  min={0.05}
+                  max={30}
+                  step={0.05}
+                  onChange={(seconds) => change({ seconds })}
+                />
+              )}
+            </div>
+          </div>
+        );
+      })}
       <div className="field-row">
         <label>
           Tint color
@@ -1446,13 +1898,22 @@ export function App() {
           <span>{project.name}</span>
           <Settings2 size={14} />
         </button>
+        <button
+          className="open-project-button"
+          onClick={() => void openProject()}
+          disabled={!ready || !fileAccessReady || fileBusy}
+          title="Open project JSON"
+        >
+          <FolderOpen size={15} />
+          Open project
+        </button>
         <div className="header-actions">
           <ThemePicker />
           <button
             title="Undo (⌘/Ctrl Z)"
             aria-label="Undo"
             onClick={undo}
-            disabled={!history.current.canUndo}
+            disabled={fileBusy || !history.current.canUndo}
           >
             <Undo2 size={17} />
           </button>
@@ -1460,14 +1921,22 @@ export function App() {
             title="Redo (⌘/Ctrl Shift Z)"
             aria-label="Redo"
             onClick={redo}
-            disabled={!history.current.canRedo}
+            disabled={fileBusy || !history.current.canRedo}
           >
             <Redo2 size={17} />
           </button>
           <span className="divider" />
-          <button onClick={() => void save()} disabled={!ready}>
+          <button
+            onClick={() => void save()}
+            disabled={!ready || !fileAccessReady || fileBusy}
+            title={
+              projectFilename
+                ? `Save to ${projectFilename} (⌘/Ctrl S)`
+                : "Save project JSON… (⌘/Ctrl S)"
+            }
+          >
             <Save size={15} />
-            Save
+            {fileBusy ? "Working…" : "Save"}
           </button>
           <button
             className="export-button"
@@ -1484,7 +1953,7 @@ export function App() {
       </header>
       <div
         className="workspace"
-        inert={!ready}
+        inert={!ready || fileBusy}
         style={
           { "--library-width": `${libraryWidth}px` } as React.CSSProperties
         }
@@ -1525,33 +1994,6 @@ export function App() {
           </div>
           {tab === "media" ? (
             <>
-              <div className="library-foot">
-                <button onClick={() => projectFile.current?.click()}>
-                  <FolderOpen size={14} />
-                  Open project
-                </button>
-                <button onClick={downloadProject}>
-                  <ArrowDownToLine size={14} />
-                  Download project JSON
-                </button>
-                <input
-                  ref={projectFile}
-                  type="file"
-                  accept="application/json"
-                  hidden
-                  onChange={async (e) => {
-                    try {
-                      const f = e.target.files?.[0];
-                      if (f)
-                        commit(validateProject(JSON.parse(await f.text())));
-                    } catch (err) {
-                      setStatus((err as Error).message);
-                    }
-                    e.target.value = "";
-                  }}
-                />
-              </div>
-
               <MediaBrowser
                 assets={libraryAssets}
                 busy={mediaBusy}
@@ -1607,8 +2049,33 @@ export function App() {
                   }}
                 />
               </div>
+              <div className="effect-library-filters">
+                <input
+                  type="search"
+                  aria-label="Search effects"
+                  placeholder="Search effects…"
+                  value={effectSearch}
+                  onChange={(e) => setEffectSearch(e.target.value)}
+                />
+                <Dropdown
+                  label="Effect category"
+                  value={effectCategory}
+                  onChange={setEffectCategory}
+                  options={[
+                    { value: "all", label: "All categories" },
+                    ...Array.from(
+                      new Set(libraryEffects.map((e) => categoryOf(e.id))),
+                    ).map((value) => ({ value, label: value })),
+                  ]}
+                />
+              </div>
+              {!visibleLibraryEffects.length && (
+                <p className="effect-library-hint">
+                  No matching library effects.
+                </p>
+              )}
               <div className="effects-grid">
-                {libraryEffects.map((e) => (
+                {visibleLibraryEffects.map((e) => (
                   <EffectCard
                     key={e.id}
                     effect={e}
@@ -1626,21 +2093,23 @@ export function App() {
                 <p className="effect-library-hint">No saved effects.</p>
               )}
               <div className="effects-grid">
-                {myEffects.map((e) => (
-                  <EffectCard
-                    key={e.id}
-                    effect={
-                      project.effects.find(
-                        (effect) => effect.id === e.bundle.effect.id,
-                      ) ?? e.bundle.effect
-                    }
-                    onApply={() => applyEffect(e.bundle.effect.id)}
-                    onInspect={() => inspectLibraryEffect(e.bundle.effect.id)}
-                    onDrop={(layerId) =>
-                      applyEffect(e.bundle.effect.id, layerId)
-                    }
-                  />
-                ))}
+                {myEffects
+                  .filter((e) => matchesEffect(e.bundle.effect))
+                  .map((e) => (
+                    <EffectCard
+                      key={e.id}
+                      effect={
+                        project.effects.find(
+                          (effect) => effect.id === e.bundle.effect.id,
+                        ) ?? e.bundle.effect
+                      }
+                      onApply={() => applyEffect(e.bundle.effect.id)}
+                      onInspect={() => inspectLibraryEffect(e.bundle.effect.id)}
+                      onDrop={(layerId) =>
+                        applyEffect(e.bundle.effect.id, layerId)
+                      }
+                    />
+                  ))}
               </div>
             </>
           )}

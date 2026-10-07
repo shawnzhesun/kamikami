@@ -1,4 +1,5 @@
 import { FontText } from "./FontText";
+import { GraphicEffects } from "./GraphicEffects";
 import { orderedElements } from "./model";
 import React from "react";
 import {
@@ -183,46 +184,53 @@ function VisualLayer({
       style={{
         justifyContent: "center",
         alignItems: "center",
-        transform: `translate(${v.x}px,${v.y}px) scale(${v.scale}) rotate(${v.rotation}deg)`,
+        transform: `translate(${v.x}px,${v.y}px) scale(${v.scale}) rotate(${v.rotation}deg)${v.rotateY ? ` perspective(1800px) rotateY(${v.rotateY}deg)` : ""}`,
         opacity: v.opacity,
-        filter: `blur(${v.blur}px) brightness(${v.brightness})`,
+        filter: `blur(${v.blur}px) brightness(${v.brightness}) contrast(${v.contrast}) saturate(${v.saturation})`,
       }}
     >
-      {layer.type === "scene" && <Station />}
-      {layer.type === "title" && (
-        <FontText layer={layer} project={project} mediaOrigin={mediaOrigin} />
-      )}
-      {layer.type === "image" && src && (
-        <Img
-          src={src}
-          style={{ width: "100%", height: "100%", objectFit: "contain" }}
-        />
-      )}
-      {layer.type === "video" && src && (
-        <Video
-          src={src}
-          startFrom={Math.round(layer.offset * fps)}
-          volume={layerVolume(layer, project.layers)}
-          style={{ width: "100%", height: "100%", objectFit: "contain" }}
-        />
-      )}
-      {layer.type !== "title" &&
-        layer.effects
-          .filter((i) => i.enabled)
-          .map((i) => {
-            const e = project.effects.find((e) => e.id === i.effectId);
-            return e && e.tint > 0 ? (
-              <AbsoluteFill
-                key={i.effectId}
-                style={{
-                  background: e.color,
-                  opacity: Math.min(1, e.tint * i.amount),
-                  mixBlendMode: "screen",
-                  pointerEvents: "none",
-                }}
-              />
-            ) : null;
-          })}
+      <GraphicEffects layer={layer} effects={project.effects} time={t}>
+        {layer.type === "scene" && <Station />}
+        {layer.type === "title" && (
+          <FontText
+            layer={layer}
+            project={project}
+            mediaOrigin={mediaOrigin}
+            letterSpacing={v.letterSpacing}
+          />
+        )}
+        {layer.type === "image" && src && (
+          <Img
+            src={src}
+            style={{ width: "100%", height: "100%", objectFit: "contain" }}
+          />
+        )}
+        {layer.type === "video" && src && (
+          <Video
+            src={src}
+            startFrom={Math.round(layer.offset * fps)}
+            volume={layerVolume(layer, project.layers)}
+            style={{ width: "100%", height: "100%", objectFit: "contain" }}
+          />
+        )}
+        {layer.type !== "title" &&
+          layer.effects
+            .filter((i) => i.enabled)
+            .map((i) => {
+              const e = project.effects.find((e) => e.id === i.effectId);
+              return e && e.tint > 0 ? (
+                <AbsoluteFill
+                  key={i.effectId}
+                  style={{
+                    background: e.color,
+                    opacity: Math.min(1, e.tint * i.amount),
+                    mixBlendMode: "screen",
+                    pointerEvents: "none",
+                  }}
+                />
+              ) : null;
+            })}
+      </GraphicEffects>
     </AbsoluteFill>
   );
 }

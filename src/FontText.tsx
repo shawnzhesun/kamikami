@@ -10,10 +10,12 @@ export function FontText({
   layer,
   project,
   mediaOrigin,
+  letterSpacing = 0,
 }: {
   layer: Layer;
   project: Project;
   mediaOrigin: string;
+  letterSpacing?: number;
 }) {
   const font = resolveFont(layer.fontId, project.fonts);
   const [retry, setRetry] = useState(0);
@@ -91,7 +93,7 @@ export function FontText({
           fontStyle: style,
           fontSynthesis: layer.fontId ? "none" : undefined,
           visibility: pending ? "hidden" : "visible",
-          letterSpacing: layer.fontSize > 50 ? "-4px" : "4px",
+          letterSpacing: (layer.fontSize > 50 ? -4 : 4) + letterSpacing,
           lineHeight: 1.03,
           whiteSpace: "pre-wrap",
           textAlign: "left",

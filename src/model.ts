@@ -6,6 +6,7 @@ import {
   resolveFont,
 } from "./font-assets";
 import { z } from "zod";
+import { VisualPassSchema, effectRandom } from "./visual-effects";
 
 export const ChannelSchema = z.object({
   property: z.enum([
@@ -16,8 +17,20 @@ export const ChannelSchema = z.object({
     "opacity",
     "blur",
     "brightness",
+    "contrast",
+    "saturation",
+    "letterSpacing",
+    "rotateY",
   ]),
-  curve: z.enum(["linear", "ease", "sine", "pulse"]),
+  curve: z.enum([
+    "linear",
+    "ease",
+    "sine",
+    "pulse",
+    "ease-out",
+    "shake",
+    "steps",
+  ]),
   from: z.number().min(-2000).max(2000),
   to: z.number().min(-2000).max(2000),
   frequency: z.number().min(0).max(20),
@@ -30,6 +43,7 @@ export const EffectSchema = z.object({
   channels: z.array(ChannelSchema).max(12),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
   tint: z.number().min(0).max(1),
+  passes: z.array(VisualPassSchema).max(6).optional(),
 });
 export const InstanceSchema = z.object({
   effectId: z.string(),
@@ -206,6 +220,16 @@ export function channelValue(c: Channel, t: number, duration: number) {
   const u = Math.max(0, Math.min(1, t / Math.max(duration, 0.001)));
   let f = u;
   if (c.curve === "ease") f = u * u * (3 - 2 * u);
+  if (c.curve === "ease-out") f = 1 - Math.pow(1 - u, 4);
+  if (c.curve === "steps") {
+    const steps = Math.max(1, Math.round(c.frequency));
+    f = Math.floor(u * steps) / steps;
+  }
+  if (c.curve === "shake")
+    f = effectRandom(
+      Math.round((c.phase + 100) * 100),
+      Math.floor(Math.max(0, t) * c.frequency),
+    );
   if (c.curve === "sine")
     f = (1 - Math.cos(2 * Math.PI * (t * c.frequency + c.phase))) / 2;
   if (c.curve === "pulse")
@@ -224,6 +248,10 @@ export function layerAtTime(layer: Layer, effects: Effect[], t: number) {
     opacity: layer.opacity,
     blur: 0,
     brightness: 1,
+    contrast: 1,
+    saturation: 1,
+    letterSpacing: 0,
+    rotateY: 0,
   };
   for (const instance of layer.effects.filter((e) => e.enabled)) {
     for (const c of effects.find((e) => e.id === instance.effectId)?.channels ??
@@ -236,7 +264,9 @@ export function layerAtTime(layer: Layer, effects: Effect[], t: number) {
       if (
         c.property === "scale" ||
         c.property === "opacity" ||
-        c.property === "brightness"
+        c.property === "brightness" ||
+        c.property === "contrast" ||
+        c.property === "saturation"
       )
         v[c.property] *= 1 + (value - 1) * instance.amount;
       else v[c.property] += value * instance.amount;
@@ -246,6 +276,9 @@ export function layerAtTime(layer: Layer, effects: Effect[], t: number) {
   v.blur = Math.max(0, Math.min(100, v.blur));
   v.scale = Math.max(0.001, v.scale);
   v.brightness = Math.max(0, Math.min(10, v.brightness));
+  v.contrast = Math.max(0, Math.min(10, v.contrast));
+  v.saturation = Math.max(0, Math.min(10, v.saturation));
+  v.rotateY = Math.max(-80, Math.min(80, v.rotateY));
   return v;
 }
 export function makeLayer(type: Layer["type"], name: string): Layer {

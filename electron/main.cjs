@@ -17,6 +17,7 @@ app.whenReady().then(async () => {
   );
   if (process.platform === "darwin") app.dock.setIcon(icon);
   await require("./assistant-credentials.cjs")();
+  require("./project-files.cjs").installProjectFiles();
   session.defaultSession.setPermissionRequestHandler(
     (_webContents, _permission, callback) => callback(false),
   );

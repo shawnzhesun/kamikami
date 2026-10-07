@@ -5,7 +5,7 @@ import {
   Trash2,
   Music2,
   RefreshCw,
-  Upload,
+  Plus,
   Image as ImageIcon,
 } from "lucide-react";
 import type { MediaAsset } from "../media";
@@ -43,8 +43,8 @@ export function MediaBrowser({
     <div className="media-browser">
       <div className="media-actions">
         <button onClick={onImport} disabled={busy}>
-          <Upload size={14} />
-          {busy ? "Importing…" : "Import to library"}
+          <Plus size={14} />
+          {busy ? "Adding…" : "Add media"}
         </button>
         <button
           aria-label="Refresh media library"
