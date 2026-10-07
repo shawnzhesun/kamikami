@@ -8,6 +8,7 @@ export default defineConfig({
     proxy: {
       "/api": "http://127.0.0.1:4318",
       "/media": "http://127.0.0.1:4318",
+      "/fonts/imported": "http://127.0.0.1:4318",
     },
   },
 });

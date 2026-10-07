@@ -1,4 +1,10 @@
 import { DEFAULT_FONT, fontFamilies } from "./fonts";
+import {
+  FontAssetSchema,
+  fontIdSchema,
+  fontVariant,
+  resolveFont,
+} from "./font-assets";
 import { z } from "zod";
 
 export const ChannelSchema = z.object({
@@ -54,6 +60,9 @@ export const LayerSchema = z.object({
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
   fontSize: z.number().min(12).max(240),
   fontFamily: z.enum(fontFamilies).optional(),
+  fontId: fontIdSchema.optional(),
+  fontWeight: z.number().int().min(1).max(1000).optional(),
+  fontStyle: z.enum(["normal", "italic"]).optional(),
   visible: z.boolean(),
   effects: z.array(InstanceSchema).max(8),
 });
@@ -63,6 +72,7 @@ export const TimelineLayerSchema = z.object({
 });
 export type TimelineLayer = z.infer<typeof TimelineLayerSchema>;
 export const ProjectSchema = z.object({
+  fonts: z.array(FontAssetSchema).max(100).optional(),
   tracks: z.array(TimelineLayerSchema).max(40).optional(),
   version: z.literal(1),
   name: z.string().min(1).max(100),
@@ -103,12 +113,28 @@ export function validateProject(input: unknown): Project {
     };
   }
   const p = ProjectSchema.parse(input);
+  const fonts = p.fonts ?? [];
+  if (new Set(fonts.map((font) => font.id)).size !== fonts.length)
+    throw new Error("Font IDs must be unique");
+  for (const font of fonts) {
+    if (
+      !font.id.startsWith("custom-") ||
+      font.variants.some((v) => !v.src.startsWith("/fonts/imported/"))
+    )
+      throw new Error("Project fonts must reference imported font assets");
+  }
   if (
     new Set(p.layers.map((l) => l.id)).size !== p.layers.length ||
     new Set(p.effects.map((e) => e.id)).size !== p.effects.length
   )
     throw new Error("Layer and effect IDs must be unique");
   for (const l of p.layers) {
+    if (l.fontId) {
+      const font = resolveFont(l.fontId, fonts);
+      if (!font) throw new Error(`Unknown font reference on “${l.name}”`);
+      if (!fontVariant(font, l.fontWeight ?? 800, l.fontStyle ?? "normal"))
+        throw new Error(`Unsupported weight or style for “${font.family}”`);
+    }
     if (new Set(l.effects.map((e) => e.effectId)).size !== l.effects.length)
       throw new Error("An effect can only be applied once per layer");
     if (l.start + l.duration > p.duration + 0.001)

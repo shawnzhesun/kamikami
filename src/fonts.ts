@@ -1,4 +1,4 @@
-/** Local font stacks shared by the Inspector and Remotion preview/export. */
+/** Legacy system fonts remain available without changing old projects. */
 export const fontFamilies = [
   "Arial",
   "Helvetica",

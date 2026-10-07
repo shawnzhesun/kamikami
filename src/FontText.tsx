@@ -1,0 +1,121 @@
+import React, { useEffect, useLayoutEffect, useState } from "react";
+import { flushSync } from "react-dom";
+import { getRemotionEnvironment, useDelayRender } from "remotion";
+import { fontCSS, resolveFont } from "./font-assets";
+import { FONT_IMPORT_EVENT, loadFontAsset } from "./font-loading";
+import { fontStack } from "./fonts";
+import type { Layer, Project } from "./model";
+
+export function FontText({
+  layer,
+  project,
+  mediaOrigin,
+}: {
+  layer: Layer;
+  project: Project;
+  mediaOrigin: string;
+}) {
+  const font = resolveFont(layer.fontId, project.fonts);
+  const [retry, setRetry] = useState(0);
+  useEffect(() => {
+    const imported = (event: Event) => {
+      if ((event as CustomEvent<string>).detail === layer.fontId)
+        setRetry((n) => n + 1);
+    };
+    window.addEventListener(FONT_IMPORT_EVENT, imported);
+    return () => window.removeEventListener(FONT_IMPORT_EVENT, imported);
+  }, [layer.fontId]);
+  const weight = layer.fontWeight ?? 800,
+    style = layer.fontStyle ?? "normal";
+  const key = JSON.stringify([
+    layer.fontId,
+    font,
+    weight,
+    style,
+    mediaOrigin,
+    retry,
+  ]);
+  const [loaded, setLoaded] = useState("");
+  const [failure, setFailure] = useState<{
+    key: string;
+    message: string;
+  } | null>(null);
+  const { delayRender, continueRender, cancelRender } = useDelayRender();
+  useLayoutEffect(() => {
+    if (!layer.fontId) return;
+    let active = true;
+    const handle = delayRender(`Loading font ${font?.family ?? layer.fontId}`);
+    const loading = font
+      ? loadFontAsset(font, weight, style, mediaOrigin)
+      : Promise.reject(
+          new Error(
+            "Missing font definition. Choose a replacement in the Text inspector.",
+          ),
+        );
+    loading.then(
+      () => {
+        if (active)
+          flushSync(() => {
+            setLoaded(key);
+            setFailure(null);
+          });
+        continueRender(handle);
+      },
+      (error: Error) => {
+        if (active) {
+          setFailure({ key, message: error.message });
+          if (getRemotionEnvironment().isRendering) cancelRender(error);
+        }
+        continueRender(handle);
+      },
+    );
+    return () => {
+      active = false;
+      continueRender(handle);
+    };
+  }, [key, delayRender, continueRender, cancelRender]);
+  const pending = !!layer.fontId && loaded !== key;
+  const error = failure?.key === key ? failure.message : "";
+  return (
+    <>
+      <div
+        data-layer-content={layer.id}
+        data-font-status={error ? "error" : pending ? "loading" : "ready"}
+        style={{
+          color: layer.color,
+          fontFamily: font
+            ? fontCSS(font, weight, style)
+            : fontStack(layer.fontFamily),
+          fontSize: layer.fontSize,
+          fontWeight: weight,
+          fontStyle: style,
+          fontSynthesis: layer.fontId ? "none" : undefined,
+          visibility: pending ? "hidden" : "visible",
+          letterSpacing: layer.fontSize > 50 ? "-4px" : "4px",
+          lineHeight: 1.03,
+          whiteSpace: "pre-wrap",
+          textAlign: "left",
+          textShadow: "0 4px 40px #0008",
+        }}
+      >
+        {layer.text}
+      </div>
+      {pending && (
+        <div
+          role={error ? "alert" : "status"}
+          style={{
+            position: "absolute",
+            fontFamily: "Arial, sans-serif",
+            fontSize: 26,
+            maxWidth: 800,
+            padding: 20,
+            color: "#fff",
+            background: "#171717e8",
+          }}
+        >
+          {error || `Loading ${font?.family ?? "font"}…`}
+        </div>
+      )}
+    </>
+  );
+}

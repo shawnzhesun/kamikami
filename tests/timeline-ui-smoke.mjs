@@ -1,12 +1,16 @@
 // An isolated browser fixture: no model requests or writes to the user's workspace.
 import assert from "node:assert/strict";
-import { writeFile, mkdtemp } from "node:fs/promises";
+import { writeFile, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createServer } from "vite";
 import react from "@vitejs/plugin-react";
 import { openBrowser } from "@remotion/renderer";
 import { initialProject, validateProject } from "../src/model.ts";
+import { FontLibrary } from "../server/font-library.ts";
+
+const fontData = await mkdtemp(path.join(tmpdir(), "kamikami-font-ui-"));
+const fontLibrary = new FontLibrary(fontData, path.resolve("public"));
 
 let project = structuredClone(initialProject);
 const assets = [
@@ -36,14 +40,43 @@ const fixture = {
         );
         return;
       }
+      if (req.url?.startsWith("/fonts/imported/")) {
+        try {
+          res.setHeader("Content-Type", "font/ttf");
+          res.end(
+            await readFile(
+              path.join(fontData, "fonts", path.basename(req.url)),
+            ),
+          );
+        } catch {
+          res.statusCode = 404;
+          res.end();
+        }
+        return;
+      }
       if (!req.url?.startsWith("/api/")) {
         next();
         return;
       }
-      let body = "";
-      for await (const chunk of req) body += chunk;
+      const chunks = [];
+      for await (const chunk of req) chunks.push(chunk);
+      const bytes = Buffer.concat(chunks);
+      const body = bytes.toString();
       let result = {};
-      if (req.url === "/api/project") {
+      if (req.url === "/api/fonts/import") {
+        const request = new Request("http://localhost/api/fonts/import", {
+          method: "POST",
+          headers: { "Content-Type": req.headers["content-type"] },
+          body: bytes,
+        });
+        const form = await request.formData();
+        const file = form.get("file");
+        result = await fontLibrary.import(
+          Buffer.from(await file.arrayBuffer()),
+          file.name,
+        );
+      } else if (req.url === "/api/fonts") result = await fontLibrary.list();
+      else if (req.url === "/api/project") {
         if (req.method === "PUT") project = validateProject(JSON.parse(body));
         result = project;
       } else if (req.url.startsWith("/api/media")) result = assets;
@@ -147,12 +180,11 @@ try {
     "true",
   );
   const beforeFont = structuredClone(project);
-  assert.equal(await exists('select[aria-label="Font family"]'), true);
-  await page.evaluate(() => {
-    const select = document.querySelector('select[aria-label="Font family"]');
-    select.value = "Georgia";
-    select.dispatchEvent(new Event("change", { bubbles: true }));
-  });
+  assert.equal(await exists("select, datalist"), false);
+  assert.equal(await exists('button[aria-label="Font family"]'), true);
+  await click('button[aria-label="Font family"]');
+  await wait(() => exists('button[aria-label="Use Georgia"]'));
+  await click('button[aria-label="Use Georgia"]');
   await save();
   assert.equal(
     project.layers.find((e) => e.id === "title").fontFamily,
@@ -192,11 +224,118 @@ try {
         new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
       ),
   );
+  await click('button[aria-label="Font family"]');
+  await click('button[aria-label="Use Arial"]');
+  await save();
+
+  // Bundled font previews, favorites, keyboard menus, font import and persistence.
+  await click('button[aria-label="Font family"]');
+  await fill('input[aria-label="Search fonts"]', "Host Grotesk");
+  await wait(() =>
+    exists('button[aria-label="Use Host Grotesk"]:not(:disabled)'),
+  );
+  assert.match(
+    await page.evaluate(
+      () =>
+        getComputedStyle(document.querySelector(".font-option-preview"))
+          .fontFamily,
+    ),
+    /KamiKami-builtin-host-grotesk/,
+  );
+  await click('button[aria-label="Favorite Host Grotesk"]');
+  await click('button[aria-label="Use Host Grotesk"]');
+  await wait(
+    async () =>
+      await page.evaluate(
+        () =>
+          document.querySelector('[data-layer-content="title"]').dataset
+            .fontStatus === "ready",
+      ),
+  );
+  await save();
+  assert.equal(
+    project.layers.find((e) => e.id === "title").fontId,
+    "builtin-host-grotesk",
+  );
+  await click('[role="combobox"][aria-label="Font weight"]');
   await page.evaluate(() => {
-    const select = document.querySelector('select[aria-label="Font family"]');
-    select.value = "Arial";
-    select.dispatchEvent(new Event("change", { bubbles: true }));
+    const control = document.querySelector(
+      '[role="combobox"][aria-label="Font weight"]',
+    );
+    control.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Home", bubbles: true }),
+    );
   });
+  await page.evaluate(() =>
+    document
+      .querySelector('[role="combobox"][aria-label="Font weight"]')
+      .dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+      ),
+  );
+  await save();
+  assert.equal(project.layers.find((e) => e.id === "title").fontWeight, 300);
+  await click('button[aria-label="Font family"]');
+  await click('[role="combobox"][aria-label="Font category"]');
+  await page.evaluate(() =>
+    [...document.querySelectorAll('[role="option"]')]
+      .find((e) => e.textContent.trim() === "Favorites")
+      .click(),
+  );
+  assert.equal(await exists(".font-picker"), true);
+  assert.equal(await exists('button[aria-label="Use Host Grotesk"]'), true);
+  await page.evaluate(async () => {
+    const bytes = await (
+      await fetch("/fonts/builtin/Rubik-Regular.ttf")
+    ).arrayBuffer();
+    const data = new DataTransfer();
+    data.items.add(new File([bytes], "MyRubik.ttf", { type: "font/ttf" }));
+    const input = document.querySelector(
+      'input[aria-label="Import font files"]',
+    );
+    input.files = data.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await wait(async () => !(await exists(".font-picker")));
+  await wait(
+    async () =>
+      await page.evaluate(
+        () =>
+          document.querySelector('[data-layer-content="title"]').dataset
+            .fontStatus === "ready",
+      ),
+  );
+  await save();
+  const customFont = project.layers.find((e) => e.id === "title").fontId;
+  assert.match(customFont, /^custom-/);
+  assert.equal(project.fonts[0].family, "Rubik");
+  await page.goto({ url: "http://127.0.0.1:5174", timeout: 30000 });
+  await wait(() => exists(".media-card"));
+  await wait(
+    async () =>
+      await page.evaluate(
+        () =>
+          document.querySelector('[data-layer-content="title"]').dataset
+            .fontStatus === "ready",
+      ),
+  );
+  assert.match(
+    await page.evaluate(
+      () =>
+        getComputedStyle(document.querySelector('[data-layer-content="title"]'))
+          .fontFamily,
+    ),
+    /KamiKami-custom-/,
+  );
+  await page.evaluate(() =>
+    document
+      .querySelector('[data-element-id="title"]')
+      .dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+      ),
+  );
+  await click('button[aria-label="Font family"]');
+  await click('button[aria-label="Use Arial"]');
   await save();
   await page.evaluate(() =>
     document
@@ -625,4 +764,5 @@ try {
 } finally {
   await browser?.close({ silent: true });
   await server.close();
+  await rm(fontData, { recursive: true, force: true });
 }

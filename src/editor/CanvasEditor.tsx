@@ -48,29 +48,40 @@ export function CanvasEditor({
   );
   useEffect(() => () => cleanup.current?.(), []);
   useLayoutEffect(() => {
-    const next: typeof sizes = {};
-    for (const l of project.layers) {
-      if (l.type === "title") {
-        const element = root.current?.parentElement?.querySelector<HTMLElement>(
-          `[data-layer-content="${CSS.escape(l.id)}"]`,
-        );
-        next[l.id] = {
-          width: Math.max(40, element?.offsetWidth ?? 400),
-          height: Math.max(l.fontSize, element?.offsetHeight ?? l.fontSize),
-        };
-      } else {
-        const asset = assets.find((a) => a.src === l.src);
-        const fit =
-          asset?.width && asset.height
-            ? Math.min(1920 / asset.width, 1080 / asset.height)
-            : 1;
-        next[l.id] = {
-          width: asset?.width ? asset.width * fit : 1920,
-          height: asset?.height ? asset.height * fit : 1080,
-        };
+    const measure = () => {
+      const next: typeof sizes = {};
+      for (const l of project.layers) {
+        if (l.type === "title") {
+          const element =
+            root.current?.parentElement?.querySelector<HTMLElement>(
+              `[data-layer-content="${CSS.escape(l.id)}"]`,
+            );
+          next[l.id] = {
+            width: Math.max(40, element?.offsetWidth ?? 400),
+            height: Math.max(l.fontSize, element?.offsetHeight ?? l.fontSize),
+          };
+        } else {
+          const asset = assets.find((a) => a.src === l.src);
+          const fit =
+            asset?.width && asset.height
+              ? Math.min(1920 / asset.width, 1080 / asset.height)
+              : 1;
+          next[l.id] = {
+            width: asset?.width ? asset.width * fit : 1920,
+            height: asset?.height ? asset.height * fit : 1080,
+          };
+        }
       }
-    }
-    setSizes(next);
+      setSizes((previous) =>
+        JSON.stringify(previous) === JSON.stringify(next) ? previous : next,
+      );
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    root.current?.parentElement
+      ?.querySelectorAll("[data-layer-content]")
+      .forEach((node) => observer.observe(node));
+    return () => observer.disconnect();
   }, [project, frame, assets]);
   const visible = orderedElements(project).filter((l) =>
     visibleAt(l, frame, project.fps),

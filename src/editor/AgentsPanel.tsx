@@ -1,3 +1,4 @@
+import { Dropdown } from "./Dropdown";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ArrowUp,
@@ -330,20 +331,24 @@ export function AgentsPanel({
           </label>
           <label>
             API format
-            <select
+            <Dropdown
+              label="API format"
               value={apiMode}
-              onChange={(e) =>
-                setApiMode(e.target.value as "chat" | "responses")
-              }
+              onChange={(value) => setApiMode(value as "chat" | "responses")}
               disabled={busy || saving}
-            >
-              <option value="chat">
-                Chat Completions · LiteLLM / compatible proxies
-              </option>
-              <option value="responses">
-                Responses · OpenAI / compatible proxies
-              </option>
-            </select>
+              options={[
+                {
+                  value: "chat",
+                  label: "Chat Completions",
+                  description: "LiteLLM / compatible proxies",
+                },
+                {
+                  value: "responses",
+                  label: "Responses",
+                  description: "OpenAI / compatible proxies",
+                },
+              ]}
+            />
           </label>
           <label>
             API key
@@ -376,20 +381,16 @@ export function AgentsPanel({
             )}
           <label>
             Model / deployment
-            <input
+            <Dropdown
+              label="Model / deployment"
+              editable
               value={model}
-              onChange={(e) => setModel(e.target.value)}
+              onChange={setModel}
               placeholder="Model alias configured on your proxy"
-              list="assistant-models"
-              spellCheck={false}
+              options={availableModels.map((id) => ({ value: id, label: id }))}
               disabled={busy || saving}
             />
           </label>
-          <datalist id="assistant-models">
-            {availableModels.map((id) => (
-              <option key={id} value={id} />
-            ))}
-          </datalist>
           <button
             type="button"
             disabled={

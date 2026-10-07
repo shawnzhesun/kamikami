@@ -708,7 +708,7 @@ h2 {
   margin: 0 0 8px;
   min-height: 26px;
 }
-.channel select {
+.channel .dropdown-control {
   width: 95px;
   padding: 5px;
   font-size: 11px;
@@ -2009,11 +2009,10 @@ button[aria-pressed="true"] {
   font-size: 9px;
   color: var(--muted);
 }
-.assistant-settings select {
+.assistant-settings .dropdown-control {
   display: block;
   width: 100%;
   margin-top: 6px;
-  padding: 8px;
   min-width: 0;
 }
 .assistant-settings input[type="url"] {
@@ -2245,4 +2244,235 @@ button[aria-pressed="true"] {
   color: var(--muted);
   font-size: 11px;
   line-height: 1.4;
+}
+
+/* Shared menus use the active theme and the browser top layer for unclipped panels. */
+.dropdown-control {
+  display: block;
+  width: 100%;
+  min-width: 0;
+}
+.dropdown-trigger {
+  width: 100%;
+  justify-content: space-between;
+  text-align: left;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  padding: 9px;
+  min-height: 36px;
+}
+.dropdown-trigger > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dropdown-trigger > svg {
+  flex: none;
+  color: var(--muted);
+}
+.dropdown-trigger[aria-expanded="true"] {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 1px var(--blue);
+}
+.dropdown-panel {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--brown);
+  box-shadow:
+    0 12px 36px #0003,
+    0 2px 7px #0001;
+  overflow: auto;
+  z-index: 100;
+  max-height: min(360px, calc(100vh - 24px));
+}
+.dropdown-panel[role="listbox"] {
+  max-height: min(320px, calc(100vh - 24px)) !important;
+}
+.dropdown-option {
+  display: flex;
+  width: 100%;
+  padding: 9px 10px;
+  text-align: left;
+  justify-content: space-between;
+  gap: 14px;
+  border-radius: 5px;
+}
+.dropdown-option > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.dropdown-option small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.dropdown-option svg {
+  flex: none;
+}
+.dropdown-option[aria-selected="true"] {
+  background: var(--selected);
+}
+.dropdown-option.is-active {
+  background: var(--hover);
+  outline: 1px solid var(--line);
+  outline-offset: -1px;
+}
+.dropdown-option[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.dropdown-empty {
+  padding: 16px 10px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.dropdown-editable {
+  display: block;
+  position: relative;
+}
+.dropdown-editable input {
+  padding-right: 30px;
+}
+.dropdown-editable > svg {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+.font-inspector {
+  margin-bottom: 12px;
+}
+.font-field-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.font-trigger {
+  font-size: 17px;
+  min-height: 44px;
+}
+.font-face-controls {
+  margin-top: 10px;
+}
+.font-picker {
+  padding: 12px;
+  overflow: auto;
+}
+.font-picker-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.font-picker-heading > strong {
+  font-size: 14px;
+}
+.font-search {
+  position: relative;
+  margin-bottom: 10px;
+}
+.font-search svg {
+  position: absolute;
+  left: 10px;
+  top: 11px;
+  color: var(--muted);
+}
+.font-search input {
+  padding-left: 34px;
+}
+.font-picker-filters {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.font-picker-filters .dropdown-control {
+  width: 175px;
+}
+.font-picker-filters > span {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--muted);
+}
+.font-options {
+  max-height: min(390px, 45vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.font-option {
+  display: flex;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  margin-bottom: 4px;
+  align-items: stretch;
+}
+.font-option.is-selected {
+  background: var(--selected);
+  border-color: var(--line);
+}
+.font-option-select {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 10px;
+  text-align: left;
+  overflow: hidden;
+}
+.font-option-meta {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.font-option-meta strong {
+  font-size: 11px;
+  font-weight: 600;
+}
+.font-option-meta small {
+  font-size: 10px;
+  color: var(--muted);
+}
+.font-option-preview {
+  font-size: 26px;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.font-favorite {
+  align-self: flex-start;
+  padding: 8px;
+  margin: 2px;
+  color: var(--muted);
+}
+.font-favorite[aria-pressed="true"] {
+  color: var(--blue);
+}
+.font-picker-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  margin-top: 8px;
+}
+.font-picker-footer button {
+  justify-content: flex-start;
+}
+.font-picker-footer small {
+  color: var(--muted);
+  padding: 0 10px;
+  font-size: 10px;
+}
+.font-picker input[hidden] {
+  display: none;
 }

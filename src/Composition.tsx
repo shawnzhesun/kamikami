@@ -1,4 +1,4 @@
-import { fontStack } from "./fonts";
+import { FontText } from "./FontText";
 import { orderedElements } from "./model";
 import React from "react";
 import {
@@ -190,22 +190,7 @@ function VisualLayer({
     >
       {layer.type === "scene" && <Station />}
       {layer.type === "title" && (
-        <div
-          data-layer-content={layer.id}
-          style={{
-            color: layer.color,
-            fontFamily: fontStack(layer.fontFamily),
-            fontSize: layer.fontSize,
-            fontWeight: 800,
-            letterSpacing: layer.fontSize > 50 ? "-4px" : "4px",
-            lineHeight: 1.03,
-            whiteSpace: "pre-wrap",
-            textAlign: "left",
-            textShadow: "0 4px 40px #0008",
-          }}
-        >
-          {layer.text}
-        </div>
+        <FontText layer={layer} project={project} mediaOrigin={mediaOrigin} />
       )}
       {layer.type === "image" && src && (
         <Img

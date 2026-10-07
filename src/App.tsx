@@ -1,9 +1,5 @@
-import {
-  DEFAULT_FONT,
-  fontFamilies,
-  fontStack,
-  type FontFamily,
-} from "./fonts";
+import { FontPicker } from "./editor/FontPicker";
+import { Dropdown } from "./editor/Dropdown";
 import { ThemePicker } from "./editor/ThemePicker";
 import {
   ProjectSettings,
@@ -293,7 +289,7 @@ export function App() {
       projectSettings ||
       effectModal ||
       !!layerSettings ||
-      !!document.querySelector("dialog[open]") ||
+      !!document.querySelector("dialog[open], [popover]:popover-open") ||
       (!(
         request.nativeAssistant &&
         document.activeElement?.closest(".assistant-panel")
@@ -859,7 +855,7 @@ export function App() {
       const target = event.target as HTMLElement;
       if (
         target.closest(
-          'input,textarea,select,[contenteditable="true"],dialog',
+          'input,textarea,select,[contenteditable="true"],dialog,[data-dropdown],[popover]',
         ) ||
         !ready
       )
@@ -1259,26 +1255,26 @@ export function App() {
         <div className="channel" key={i}>
           <div className="section-line">
             <span>{c.property.toUpperCase()}</span>
-            <select
-              aria-label="Curve"
+            <Dropdown
+              label="Curve"
               value={c.curve}
-              onChange={(e) =>
+              onChange={(value) =>
                 updateEffect({
                   channels: editingEffect.channels.map((v, j) =>
                     j === i
                       ? {
                           ...v,
-                          curve: e.target.value as typeof c.curve,
+                          curve: value as typeof c.curve,
                         }
                       : v,
                   ),
                 })
               }
-            >
-              {["linear", "ease", "sine", "pulse"].map((c) => (
-                <option key={c}>{c}</option>
-              ))}
-            </select>
+              options={["linear", "ease", "sine", "pulse"].map((c) => ({
+                value: c,
+                label: c,
+              }))}
+            />
           </div>
           <div className="field-row">
             {(["from", "to"] as const).map((key) => (
@@ -1432,7 +1428,7 @@ export function App() {
         <div className="brand">
           <img
             className="brand-symbol"
-            src="/kamikami-icon-64.png"
+            src="/kamikami-icon-64.png?v=20261007-1332"
             alt=""
             width={32}
             height={32}
@@ -2009,29 +2005,31 @@ export function App() {
                         }
                         onEndEdit={() => history.current.endGroup()}
                       />
-                      <label>
-                        Font
-                        <select
-                          aria-label="Font family"
-                          value={selected.fontFamily ?? DEFAULT_FONT}
-                          style={{ fontFamily: fontStack(selected.fontFamily) }}
-                          onChange={(event) =>
-                            updateLayer({
-                              fontFamily: event.target.value as FontFamily,
-                            })
-                          }
-                        >
-                          {fontFamilies.map((family) => (
-                            <option
-                              key={family}
-                              value={family}
-                              style={{ fontFamily: fontStack(family) }}
-                            >
-                              {family}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
+                      <FontPicker
+                        layer={selected}
+                        project={project}
+                        onChange={(patch, font) => {
+                          const base = current.current;
+                          if (!base.layers.some((l) => l.id === selected.id))
+                            return false;
+                          return commit({
+                            ...base,
+                            ...(font?.id.startsWith("custom-")
+                              ? {
+                                  fonts: [
+                                    ...(base.fonts ?? []).filter(
+                                      (f) => f.id !== font.id,
+                                    ),
+                                    font,
+                                  ],
+                                }
+                              : {}),
+                            layers: base.layers.map((l) =>
+                              l.id === selected.id ? { ...l, ...patch } : l,
+                            ),
+                          });
+                        }}
+                      />
                       <div className="field-row">
                         <NumberField
                           label="Font size"
@@ -2103,9 +2101,10 @@ export function App() {
                   )}
                   <label>
                     Layer
-                    <select
+                    <Dropdown
+                      label="Element layer"
                       value={elementTrackId(selected)}
-                      onChange={(e) => {
+                      onChange={(value) => {
                         try {
                           if (
                             commit(
@@ -2113,22 +2112,20 @@ export function App() {
                                 current.current,
                                 [selected.id],
                                 selected.id,
-                                e.target.value,
+                                value,
                               ),
                             )
                           )
-                            setSelectedTrack(e.target.value);
+                            setSelectedTrack(value);
                         } catch (error) {
                           setStatus((error as Error).message);
                         }
                       }}
-                    >
-                      {projectTracks(project).map((t) => (
-                        <option key={t.id} value={t.id}>
-                          {t.name}
-                        </option>
-                      ))}
-                    </select>
+                      options={projectTracks(project).map((t) => ({
+                        value: t.id,
+                        label: t.name,
+                      }))}
+                    />
                   </label>
                   {selected.type !== "audio" && (
                     <>

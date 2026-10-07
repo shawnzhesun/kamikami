@@ -1,0 +1,550 @@
+[
+  {
+    "id": "builtin-host-grotesk",
+    "family": "Host Grotesk",
+    "category": "Sans serif",
+    "variants": [
+      {
+        "src": "/fonts/builtin/HostGrotesk-Italic-VariableFont_wght.ttf",
+        "weightMin": 300,
+        "weightMax": 800,
+        "style": "italic"
+      },
+      {
+        "src": "/fonts/builtin/HostGrotesk-VariableFont_wght.ttf",
+        "weightMin": 300,
+        "weightMax": 800,
+        "style": "normal"
+      }
+    ]
+  },
+  {
+    "id": "builtin-rubik",
+    "family": "Rubik",
+    "category": "Sans serif",
+    "variants": [
+      {
+        "src": "/fonts/builtin/Rubik-Bold.ttf",
+        "weightMin": 700,
+        "weightMax": 700,
+        "style": "normal"
+      },
+      {
+        "src": "/fonts/builtin/Rubik-BoldItalic.ttf",
+        "weightMin": 700,
+        "weightMax": 700,
+        "style": "italic"
+      },
+      {
+        "src": "/fonts/builtin/Rubik-Italic.ttf",
+        "weightMin": 400,
+        "weightMax": 400,
+        "style": "italic"
+      },
+      {
+        "src": "/fonts/builtin/Rubik-Regular.ttf",
+        "weightMin": 400,
+        "weightMax": 400,
+        "style": "normal"
+      }
+    ]
+  },
+  {
+    "id": "builtin-reem-kufi",
+    "family": "Reem Kufi",
+    "category": "Display",
+    "variants": [
+      {
+        "src": "/fonts/builtin/ReemKufi.ttf",
+        "weightMin": 400,
+        "weightMax": 700,
+        "style": "normal"
+      }
+    ]
+  },
+  {
+    "id": "builtin-linux-libertine-display-g",
+    "family": "Linux Libertine Display G",
+    "category": "Display",
+    "variants": [
+      {
+        "src": "/fonts/builtin/LinLibertine_DR_G.ttf",
+        "weightMin": 400,
+        "weightMax": 400,
+        "style": "normal"
+      }
+    ]
+  },
+  {
+    "id": "builtin-linux-biolinum-g",
+    "family": "Linux Biolinum G",
+    "category": "Sans serif",
+    "variants": [
+      {
+        "src": "/fonts/builtin/LinBiolinum_RB_G.ttf",
+        "weightMin": 700,
+        "weightMax": 700,
+        "style": "normal"
+      },
+      {
+        "src": "/fonts/builtin/LinBiolinum_RI_G.ttf",
+        "weightMin": 400,
+        "weightMax": 400,
+        "style": "italic"
+      },
+      {
+        "src": "/fonts/builtin/LinBiolinum_R_G.ttf",
+        "weightMin": 400,
+        "weightMax": 400,
+        "style": "normal"
+      }
+    ]
+  },
+  {
+    "id": "builtin-linux-libertine-g",
+    "family": "Linux Libertine G",
+    "category": "Serif",
+    "variants": [
+      {
+        "src": "/fonts/builtin/LinLibertine_RBI_G.ttf",
+        "weightMin": 700,
+        "weightMax": 700,
+        "style": "italic"
+      },
+      {
+        "src": "/fonts/builtin/LinLibertine_RB_G.ttf",
+        "weightMin": 700,
+        "weightMax": 700,
+        "style": "normal"
+      },
+      {
+        "src": "/fonts/builtin/LinLibertine_RI_G.ttf",
+        "weightMin": 400,
+        "weightMax": 400,
+        "style": "italic"
+      },
+      {
+        "src": "/fonts/builtin/LinLibertine_RZI_G.ttf",
+        "weightMin": 600,
+        "weightMax": 600,
+        "style": "italic"
+      },
+      {
+        "src": "/fonts/builtin/LinLibertine_RZ_G.ttf",
+        "weightMin": 600,
+        "weightMax": 600,
+        "style": "normal"
+      },
+      {
+        "src": "/fonts/builtin/LinLibertine_R_G.ttf",
+        "weightMin": 400,
+        "weightMax": 400,
+        "style": "normal"
+      }
+    ]
+  },
+  {
+    "id": "builtin-noto-sans",
+    "family": "Noto Sans",
+    "category": "Sans serif",
+    "variants": [
+      {
+        "src": "/fonts/builtin/NotoSans-Bold.ttf",
+        "weightMin": 700,
+        "weightMax": 700,
+        "style": "normal"
+      },
+      {
+        "src": "/fonts/builtin/NotoSans-BoldItalic.ttf",
+        "weightMin": 700,
+        "weightMax": 700,
+        "style": "italic"
+      },
+      {
+        "src": "/fonts/builtin/NotoSans-Italic.ttf",
+        "weightMin": 400,
+        "weightMax": 400,
+        "style": "italic"
+      },
+      {
+        "src": "/fonts/builtin/NotoSans-Regular.ttf",
+        "weightMin": 400,
+        "weightMax": 400,
+        "style": "normal"
+      }
+    ]
+  },
+  {
+    "id": "builtin-noto-serif",
+    "family": "Noto Serif",
+    "category": "Serif",
+    "variants": [
+      {
+        "src": "/fonts/builtin/NotoSerif-Bold.ttf",
+        "weightMin": 700,
+        "weightMax": 700,
+        "style": "normal"
+      },
+      {
+        "src": "/fonts/builtin/NotoSerif-BoldItalic.ttf",
+        "weightMin": 700,
+        "weightMax": 700,
+        "style": "italic"
+      },
+      {
+        "src": "/fonts/builtin/NotoSerif-Italic.ttf",
+        "weightMin": 400,
+        "weightMax": 400,
+        "style": "italic"
+      },
+      {
+        "src": "/fonts/builtin/NotoSerif-Regular.ttf",
+        "weightMin": 400,
+        "weightMax": 400,
+        "style": "normal"
+      }
+    ]
+  },
+  {
+    "id": "builtin-amiri",
+    "family": "Amiri",
+    "category": "Serif",
+    "variants": [
+      {
+        "src": "/fonts/builtin/Amiri-Bold.ttf",
+        "weightMin": 700,
+        "weightMax": 700,
+        "style": "normal"
+      },
+      {
+        "src": "/fonts/builtin/Amiri-BoldItalic.ttf",
+        "weightMin": 700,
+        "weightMax": 700,
+        "style": "italic"
+      },
+      {
+        "src": "/fonts/builtin/Amiri-Italic.ttf",
+        "weightMin": 400,
+        "weightMax": 400,
+        "style": "italic"
+      },
+      {
+        "src": "/fonts/builtin/Amiri-Regular.ttf",
+        "weightMin": 400,
+        "weightMax": 400,
+        "style": "normal"
+      }
+    ]
+  },
+  {
+    "id": "builtin-carlito",
+    "family": "Carlito",
+    "category": "Sans serif",
+    "variants": [
+      {
+        "src": "/fonts/builtin/Carlito-Bold.ttf",
+        "weightMin": 700,
+        "weightMax": 700,
+        "style": "normal"
+      },
+      {
+        "src": "/fonts/builtin/Carlito-BoldItalic.ttf",
+        "weightMin": 700,
+        "weightMax": 700,
+        "style": "italic"
+      },
+      {
+        "src": "/fonts/builtin/Carlito-Italic.ttf",
+        "weightMin": 400,
+        "weightMax": 400,
+        "style": "italic"
+      },
+      {
+        "src": "/fonts/builtin/Carlito-Regular.ttf",
+        "weightMin": 400,
+        "weightMax": 400,
+        "style": "normal"
+      }
+    ]
+  },
+  {
+    "id": "builtin-caladea",
+    "family": "Caladea",
+    "category": "Serif",
+    "variants": [
+      {
+        "src": "/fonts/builtin/Caladea-Bold.ttf",
+        "weightMin": 700,
+        "weightMax": 700,
+        "style": "normal"
+      },
+      {
+        "src": "/fonts/builtin/Caladea-BoldItalic.ttf",
+        "weightMin": 700,
+        "weightMax": 700,
+        "style": "italic"
+      },
+      {
+        "src": "/fonts/builtin/Caladea-Italic.ttf",
+        "weightMin": 400,
+        "weightMax": 400,
+        "style": "italic"
+      },
+      {
+        "src": "/fonts/builtin/Caladea-Regular.ttf",
+        "weightMin": 400,
+        "weightMax": 400,
+        "style": "normal"
+      }
+    ]
+  },
+  {
+    "id": "builtin-dejavu-sans",
+    "family": "DejaVu Sans",
+    "category": "Sans serif",
+    "variants": [
+      {
+        "src": "/fonts/builtin/DejaVuSans-Bold.ttf",
+        "weightMin": 700,
+        "weightMax": 700,
+        "style": "normal"
+      },
+      {
+        "src": "/fonts/builtin/DejaVuSans-BoldOblique.ttf",
+        "weightMin": 700,
+        "weightMax": 700,
+        "style": "italic"
+      },
+      {
+        "src": "/fonts/builtin/DejaVuSans-ExtraLight.ttf",
+        "weightMin": 200,
+        "weightMax": 200,
+        "style": "normal"
+      },
+      {
+        "src": "/fonts/builtin/DejaVuSans-Oblique.ttf",
+        "weightMin": 400,
+        "weightMax": 400,
+        "style": "italic"
+      },
+      {
+        "src": "/fonts/builtin/DejaVuSans.ttf",
+        "weightMin": 400,
+        "weightMax": 400,
+        "style": "normal"
+      }
+    ]
+  },
+  {
+    "id": "builtin-dejavu-serif",
+    "family": "DejaVu Serif",
+    "category": "Serif",
+    "variants": [
+      {
+        "src": "/fonts/builtin/DejaVuSerif-Bold.ttf",
+        "weightMin": 700,
+        "weightMax": 700,
+        "style": "normal"
+      },
+      {
+        "src": "/fonts/builtin/DejaVuSerif-BoldItalic.ttf",
+        "weightMin": 700,
+        "weightMax": 700,
+        "style": "italic"
+      },
+      {
+        "src": "/fonts/builtin/DejaVuSerif-Italic.ttf",
+        "weightMin": 400,
+        "weightMax": 400,
+        "style": "italic"
+      },
+      {
+        "src": "/fonts/builtin/DejaVuSerif.ttf",
+        "weightMin": 400,
+        "weightMax": 400,
+        "style": "normal"
+      }
+    ]
+  },
+  {
+    "id": "builtin-dejavu-sans-mono",
+    "family": "DejaVu Sans Mono",
+    "category": "Monospace",
+    "variants": [
+      {
+        "src": "/fonts/builtin/DejaVuSansMono-Bold.ttf",
+        "weightMin": 700,
+        "weightMax": 700,
+        "style": "normal"
+      },
+      {
+        "src": "/fonts/builtin/DejaVuSansMono-BoldOblique.ttf",
+        "weightMin": 700,
+        "weightMax": 700,
+        "style": "italic"
+      },
+      {
+        "src": "/fonts/builtin/DejaVuSansMono-Oblique.ttf",
+        "weightMin": 400,
+        "weightMax": 400,
+        "style": "italic"
+      },
+      {
+        "src": "/fonts/builtin/DejaVuSansMono.ttf",
+        "weightMin": 400,
+        "weightMax": 400,
+        "style": "normal"
+      }
+    ]
+  },
+  {
+    "id": "builtin-jetbrains-mono",
+    "family": "JetBrains Mono",
+    "category": "Monospace",
+    "variants": [
+      {
+        "src": "/fonts/builtin/JetBrainsMono-Italic-VariableFont_wght.ttf",
+        "weightMin": 100,
+        "weightMax": 800,
+        "style": "italic"
+      },
+      {
+        "src": "/fonts/builtin/JetBrainsMono-VariableFont_wght.ttf",
+        "weightMin": 100,
+        "weightMax": 800,
+        "style": "normal"
+      }
+    ]
+  },
+  {
+    "id": "builtin-inconsolata",
+    "family": "Inconsolata",
+    "category": "Monospace",
+    "variants": [
+      {
+        "src": "/fonts/builtin/Inconsolata-Bold.ttf",
+        "weightMin": 700,
+        "weightMax": 700,
+        "style": "normal"
+      },
+      {
+        "src": "/fonts/builtin/Inconsolata-Regular.ttf",
+        "weightMin": 400,
+        "weightMax": 400,
+        "style": "normal"
+      }
+    ]
+  },
+  {
+    "id": "builtin-liberation-sans",
+    "family": "Liberation Sans",
+    "category": "Sans serif",
+    "variants": [
+      {
+        "src": "/fonts/builtin/LiberationSans-Bold.ttf",
+        "weightMin": 700,
+        "weightMax": 700,
+        "style": "normal"
+      },
+      {
+        "src": "/fonts/builtin/LiberationSans-BoldItalic.ttf",
+        "weightMin": 700,
+        "weightMax": 700,
+        "style": "italic"
+      },
+      {
+        "src": "/fonts/builtin/LiberationSans-Italic.ttf",
+        "weightMin": 400,
+        "weightMax": 400,
+        "style": "italic"
+      },
+      {
+        "src": "/fonts/builtin/LiberationSans-Regular.ttf",
+        "weightMin": 400,
+        "weightMax": 400,
+        "style": "normal"
+      }
+    ]
+  },
+  {
+    "id": "builtin-liberation-serif",
+    "family": "Liberation Serif",
+    "category": "Serif",
+    "variants": [
+      {
+        "src": "/fonts/builtin/LiberationSerif-Bold.ttf",
+        "weightMin": 700,
+        "weightMax": 700,
+        "style": "normal"
+      },
+      {
+        "src": "/fonts/builtin/LiberationSerif-BoldItalic.ttf",
+        "weightMin": 700,
+        "weightMax": 700,
+        "style": "italic"
+      },
+      {
+        "src": "/fonts/builtin/LiberationSerif-Italic.ttf",
+        "weightMin": 400,
+        "weightMax": 400,
+        "style": "italic"
+      },
+      {
+        "src": "/fonts/builtin/LiberationSerif-Regular.ttf",
+        "weightMin": 400,
+        "weightMax": 400,
+        "style": "normal"
+      }
+    ]
+  },
+  {
+    "id": "builtin-liberation-mono",
+    "family": "Liberation Mono",
+    "category": "Monospace",
+    "variants": [
+      {
+        "src": "/fonts/builtin/LiberationMono-Bold.ttf",
+        "weightMin": 700,
+        "weightMax": 700,
+        "style": "normal"
+      },
+      {
+        "src": "/fonts/builtin/LiberationMono-BoldItalic.ttf",
+        "weightMin": 700,
+        "weightMax": 700,
+        "style": "italic"
+      },
+      {
+        "src": "/fonts/builtin/LiberationMono-Italic.ttf",
+        "weightMin": 400,
+        "weightMax": 400,
+        "style": "italic"
+      },
+      {
+        "src": "/fonts/builtin/LiberationMono-Regular.ttf",
+        "weightMin": 400,
+        "weightMax": 400,
+        "style": "normal"
+      }
+    ]
+  },
+  {
+    "id": "builtin-david-libre",
+    "family": "David Libre",
+    "category": "Serif",
+    "variants": [
+      {
+        "src": "/fonts/builtin/DavidLibre-Bold.ttf",
+        "weightMin": 700,
+        "weightMax": 700,
+        "style": "normal"
+      },
+      {
+        "src": "/fonts/builtin/DavidLibre-Regular.ttf",
+        "weightMin": 400,
+        "weightMax": 400,
+        "style": "normal"
+      }
+    ]
+  }
+]

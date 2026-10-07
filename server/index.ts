@@ -3,6 +3,7 @@ import { EffectLibrary } from "./effect-library";
 import { EffectBundleSchema } from "../src/effect-bundle";
 import { AgentCommandSchema } from "../src/agent-protocol";
 import { MediaLibrary } from "./media-library";
+import { FontLibrary, MAX_FONT_BYTES } from "./font-library";
 import express from "express";
 import multer from "multer";
 import path from "node:path";
@@ -46,6 +47,7 @@ await Promise.all(
 );
 const library = new MediaLibrary(data);
 const effects = new EffectLibrary(data);
+const fonts = new FontLibrary(data, path.join(root, "public"));
 const app = express();
 app.use((req, res, next) => {
   const host = req.headers.host ?? "";
@@ -59,8 +61,13 @@ app.use((req, res, next) => {
   )
     return res.status(403).json({ error: "Local access only" });
   const origin = req.headers.origin;
+  const fontRead =
+    ["GET", "HEAD"].includes(req.method) && req.path.startsWith("/fonts/");
+  // Remotion renders on its own loopback origin; font files are public local assets.
+  if (fontRead) res.setHeader("Access-Control-Allow-Origin", "*");
   if (
     origin &&
+    !fontRead &&
     ![
       "http://127.0.0.1:5173",
       "http://localhost:5173",
@@ -77,6 +84,25 @@ app.use((req, res, next) => {
   next();
 });
 app.use(express.json({ limit: "2mb" }));
+app.use(
+  "/fonts/builtin",
+  express.static(path.join(root, "public/fonts/builtin")),
+);
+app.use(
+  "/fonts/imported",
+  express.static(path.join(data, "fonts"), {
+    setHeaders: (res) => res.setHeader("X-Content-Type-Options", "nosniff"),
+  }),
+);
+const fontUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: MAX_FONT_BYTES, files: 1, fields: 0 },
+});
+app.get("/api/fonts", async (_req, res) => res.json(await fonts.list()));
+app.post("/api/fonts/import", fontUpload.single("file"), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "Choose a font file" });
+  res.json(await fonts.import(req.file.buffer, req.file.originalname));
+});
 app.use(
   "/media",
   express.static(path.join(data, "media"), {
@@ -284,6 +310,7 @@ async function getBundle() {
 app.post("/api/render", async (req, res) => {
   const project = validateProject(req.body.project),
     frame = req.body.frame;
+  await fonts.assertAvailable(project);
   if (
     !Number.isInteger(frame) ||
     frame < 0 ||
@@ -339,6 +366,7 @@ app.get("/api/renders/:id", (req, res) => {
 app.post("/api/export", async (req, res) => {
   try {
     const project = validateProject(req.body);
+    await fonts.assertAvailable(project);
     for (const l of project.layers)
       if (l.src) await stat(path.join(data, l.src));
     if (active)

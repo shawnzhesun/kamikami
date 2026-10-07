@@ -26,7 +26,7 @@ Codex/Claude Code integration remains available as an advanced option through th
 ## First session
 
 1. Play or scrub the original 15-second sample composition.
-2. Select an element on the canvas or timeline to open Inspector. Transform, trim, or edit its content and effects. Text elements include a Font picker with eight local font families; selection persists with the element and applies to preview and export. Fonts use system fallbacks when unavailable. Layers are independent timeline rows: create them with **New layer**, rename them with their settings button, and drag elements between them. Numeric changes apply on Enter or blur; invalid entries remain visible with an explanation, and Escape restores the saved field value. Continuous typing in one field is a single undo step.
+2. Select an element on the canvas or timeline to open Inspector. Transform, trim, or edit its content and effects. Text elements include a visual font picker with 20 bundled families plus the original eight system choices. Search, category filters, favorites, and recent fonts help find a style; each option previews the selected text. Weight and style controls only offer faces available in the font. Import TTF, OTF, WOFF, or WOFF2 files (up to 20 MB each) from the picker; imported copies work offline. Bundled and imported fonts load from the same files in preview and export; missing files prompt reimport or replacement and block export. Legacy system fonts retain their existing fallback behavior. Layers are independent timeline rows: create them with **New layer**, rename them with their settings button, and drag elements between them. Numeric changes apply on Enter or blur; invalid entries remain visible with an explanation, and Escape restores the saved field value. Continuous typing in one field is a single undo step.
 3. Open Effects. Hover a sample graphic to preview the actual effect, or use its Play/Stop control. Drag a recipe onto a timeline clip, then click the applied effect name to jump to its shared definition. The editor shows how many layers use the effect. Visual effects and transforms are unavailable for audio layers.
 4. Open Media to import, search, preview, and reuse images/video/audio. Drag an asset onto a timeline layer at the desired time; importing to the library alone does not change the composition. Imports are copied into the local workspace. Browser codec support determines which source formats preview correctly; MP4/H.264 and standard image formats are recommended for this prototype.
 5. Open Assistant and describe an edit. Watch the canvas and timeline update, review the action log, and use Undo edits to reverse the latest assistant edits.
@@ -42,6 +42,7 @@ Codex/Claude Code integration remains available as an advanced option through th
 
 ## Canvas, timeline, and media tools
 
+- **Dropdowns:** themed custom menus replace native selectors throughout the app, including curve, layer, font category/weight/style, API format, and model suggestions. Use arrow keys, Home/End, typing to jump, Enter to select, and Escape to dismiss. Model names still accept free text.
 - **Canvas:** click a visible layer, then drag to move. Shift-click toggles multi-selection. Drag corners for proportional scale or the round handle to rotate; Shift snaps rotation to 15° steps. Arrow keys nudge by one composition pixel, Shift+arrows by ten. Center buttons align selected visible layers. Snapping uses canvas and layer centers; Alt bypasses it. Double-click text, then Apply or Cmd/Ctrl+Enter; Escape cancels.
 - **Timeline:** drag the grip beside a layer name up/down to reorder the stack; Up/Down on a focused grip also moves it. Drag clips to move the selected group. Shift-click selects several; labels also accept Cmd/Ctrl-click. Drag either edge to trim, or focus an edge and use Left/Right (one frame, Shift for one second). Split cuts selected clips at the playhead, with at least three frames on each side. Zoom ranges from 1× to 8×; the factor button fits the timeline. Snap targets include clip boundaries and the playhead. Alt bypasses snapping. Each drag is one Undo step; Escape cancels it.
 - **Media:** source duration/dimensions and waveforms persist between sessions. Source details are read on import; timed sources with missing metadata are inspected when added. Waveform decoding is limited to sources up to 32 MB and ten minutes; larger sources still support metadata and playback. Codec support determines whether previews/waveforms are available. Waveforms summarize the first audio channel.
@@ -52,14 +53,16 @@ See [the completed usability plan](docs/usability-plan.md) and [proposed next fe
 
 ## Storage
 
-`.kamikami/project.json` is the current autosaved project. `.kamikami/media/` holds imported copies, and `.kamikami/library.json` persists their names and metadata. `.kamikami/exports/` holds rendered videos and agent-review PNG frames. `.kamikami/effects.json` stores reusable user effects. Deleted media is hidden in Media trash with its source bytes retained for recovery. `.kamikami/assistant.json` stores local conversations and connection metadata (never the API key). All workspace data is gitignored. Project writes use atomic rename. Header Save explicitly flushes the current snapshot. Download project JSON creates an extra project backup; it references the local media library and does not embed media. Opening JSON imports the project into this workspace and autosaves it. Undo history is in memory and resets on reload.
+`.kamikami/project.json` is the current autosaved project. `.kamikami/media/` holds imported copies, and `.kamikami/library.json` persists their names and metadata. `.kamikami/exports/` holds rendered videos and agent-review PNG frames. `.kamikami/effects.json` stores reusable user effects. `.kamikami/fonts/` holds imported font files, and `.kamikami/fonts.json` stores the font catalog shared by projects in the workspace. Projects store snapshots of their custom font definitions; font bytes remain in the workspace. Keep the fonts directory when moving a project. Bundled fonts and their copyright/license notices live in `public/fonts/`. Favorites and recent font choices are local browser preferences. Deleted media is hidden in Media trash with its source bytes retained for recovery. `.kamikami/assistant.json` stores local conversations and connection metadata (never the API key). All workspace data is gitignored. Project writes use atomic rename. Header Save explicitly flushes the current snapshot. Download project JSON creates an extra project backup; it references the local media library and does not embed media. Opening JSON imports the project into this workspace and autosaves it. Undo history is in memory and resets on reload.
 
 Keep the entire `.kamikami` directory to preserve media when moving this prototype. There is currently one active project per workspace. Rendering is local, at 1920×1080/24fps, with one export at a time. Long projects may be slow; start with short scenes.
 
 ## Architecture
 
 - `src/model.ts`: backward-compatible project schema, independent timeline layers and elements, reusable effect definitions, deterministic curve evaluation.
-- `src/Composition.tsx`: shared Remotion composition for preview and MP4 rendering.
+- `src/Composition.tsx`: shared Remotion composition for preview and MP4 rendering. `FontText.tsx` waits for font loading before rendering text.
+- `src/font-catalog.json`, `font-assets.ts`, and `font-loading.ts`: bundled catalog, validated font references, and shared browser font loading.
+- `server/font-library.ts` and `font-metadata.ts`: persistent imports, file validation, face metadata, and missing-font preflight.
 - `src/App.tsx`: manual editing, history, autosave, live agent edits, timeline, inspector.
 - `src/editor/`: canvas, timeline, media library UI, settings dialogs, effect samples, and pure editing operations. `tracks.ts` handles layer membership, insertion, ordering and deletion.
 - `server/index.ts`: local media import/storage, editor session bridge, render jobs.
@@ -93,7 +96,7 @@ npm run build
 npm run test:ui
 ```
 
-`npm run test:ui` runs an isolated Chromium editor fixture on port 5174. It checks dialogs, media drops, multiple elements per layer, cross-layer moves, effects, Undo/Redo and reload, without reading or writing your workspace or calling a model.
+`npm run test:ui` runs an isolated Chromium editor fixture on port 5174. It checks custom dropdowns, font previews/imports/favorites, dialogs, media drops, multiple elements per layer, cross-layer moves, effects, Undo/Redo and reload, without reading or writing your workspace or calling a model.
 
 With the app running, `npm run test:service` additionally checks local request validation, imports a small generated image and tone, and exports/downloads a one-second video. It creates test assets and an export in `.kamikami`, but does not overwrite the active project or make model API calls.
 
