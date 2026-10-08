@@ -1,9 +1,15 @@
+import { AnimatedText } from "../AnimatedText";
 import React from "react";
 import { GraphicEffects } from "../GraphicEffects";
 import { layerAtTime, makeLayer, type Effect } from "../model";
 
 const sample = { ...makeLayer("scene", "Preview"), duration: 6 };
 export function effectPosterTime(effect: Effect) {
+  if (
+    effect.text &&
+    ["typewriter", "scramble", "stagger"].includes(effect.text.kind)
+  )
+    return effect.text.seconds;
   const transition = effect.passes?.find(
     (p) => p.timing === "in" || p.timing === "out",
   );
@@ -14,6 +20,14 @@ export function effectPosterTime(effect: Effect) {
     : 1.5;
 }
 
+export function isTextEffectPreview(effect: Effect) {
+  return (
+    !!effect.text ||
+    effect.channels.some((channel) => channel.property === "letterSpacing") ||
+    !!effect.passes?.some((pass) => pass.kind === "shatter")
+  );
+}
+
 /** Uses the composition's curve and graphics pipeline at thumbnail resolution. */
 export function EffectSample({
   effect,
@@ -22,17 +36,19 @@ export function EffectSample({
   effect: Effect;
   time: number;
 }) {
+  const title = isTextEffectPreview(effect);
   const layer = {
     ...sample,
+    type: title ? ("title" as const) : ("scene" as const),
+    text: "Title",
+    fontSize: 34,
+    color: "#fff7e9",
     effects: [{ effectId: effect.id, amount: 1, enabled: true }],
   };
   const v = layerAtTime(layer, [effect], time);
   const cutout = effect.passes?.some((p) =>
     ["silhouette", "echo"].includes(p.kind),
   );
-  const title =
-    effect.channels.some((c) => c.property === "letterSpacing") ||
-    effect.passes?.some((p) => p.kind === "shatter");
   return (
     <svg
       viewBox="0 0 180 96"
@@ -65,13 +81,14 @@ export function EffectSample({
               {title ? (
                 <span
                   style={{
-                    color: "#f9dfb0",
-                    font: "bold 22px Georgia, serif",
+                    color: "#fff7e9",
+                    font: "bold 34px Georgia, serif",
                     letterSpacing: (v.letterSpacing * 180) / 1920,
                     whiteSpace: "nowrap",
+                    lineHeight: 1.15,
                   }}
                 >
-                  MEMORY
+                  <AnimatedText layer={layer} effects={[effect]} time={time} />
                 </span>
               ) : (
                 <svg viewBox="0 0 180 96" width="180" height="96">

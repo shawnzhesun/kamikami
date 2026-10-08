@@ -24,6 +24,7 @@ export const visualKinds = [
   "smear",
   "repeat",
   "rings",
+  "blinds",
 ] as const;
 export const visualNames: Record<(typeof visualKinds)[number], string> = {
   vignette: "Vignette",
@@ -49,6 +50,7 @@ export const visualNames: Record<(typeof visualKinds)[number], string> = {
   smear: "Motion smear",
   repeat: "Image repetition",
   rings: "Graphic rings",
+  blinds: "Blinds reveal",
 };
 export const VisualPassSchema = z.object({
   kind: z.enum(visualKinds),
@@ -61,6 +63,7 @@ export const VisualPassSchema = z.object({
   timing: z.enum(["constant", "in", "out", "pulse"]),
   seconds: z.number().min(0.05).max(30),
   seed: z.number().int().min(0).max(65535),
+  blindsDirection: z.enum(["horizontal", "vertical"]).optional(),
   paletteMode: z.enum(["negative", "solarize", "posterize"]).optional(),
   smearMode: z.enum(["zoom", "spin", "directional"]).optional(),
   repeatMode: z.enum(["grid", "mirror", "kaleidoscope", "tunnel"]).optional(),

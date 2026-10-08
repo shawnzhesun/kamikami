@@ -8,6 +8,13 @@ import {
 import { builtinEffects } from "./builtin-effects";
 export function effectEngine(effect: Effect) {
   if (
+    effect.text ||
+    effect.passes?.some(
+      (pass) => pass.kind === "blinds" || pass.blindsDirection !== undefined,
+    )
+  )
+    return "kamikami-visual-v4" as const;
+  if (
     effect.passes?.some(
       (p) =>
         ["palette", "smear", "repeat", "rings"].includes(p.kind) ||
@@ -49,6 +56,7 @@ export const EffectBundleSchema = z
       "frameforge-curves-v1",
       "kamikami-visual-v2",
       "kamikami-visual-v3",
+      "kamikami-visual-v4",
     ]),
     name: z.string().min(1).max(80),
     author: z.string().max(100).default(""),
@@ -63,15 +71,17 @@ export const EffectBundleSchema = z
         "frameforge-curves-v1",
         "kamikami-visual-v2",
         "kamikami-visual-v3",
+        "kamikami-visual-v4",
       ].indexOf(bundle.engine) >=
       [
         "frameforge-curves-v1",
         "kamikami-visual-v2",
         "kamikami-visual-v3",
+        "kamikami-visual-v4",
       ].indexOf(effectEngine(bundle.effect)),
     {
       message:
-        "Effect parameters require a newer engine: visual passes use kamikami-visual-v2; remap, repetition, smear and pattern modes use kamikami-visual-v3.",
+        "Effect parameters require a newer engine: visual passes use kamikami-visual-v2; remap, repetition, smear and pattern modes use kamikami-visual-v3; text animation and blinds require kamikami-visual-v4.",
       path: ["engine"],
     },
   );
@@ -107,6 +117,13 @@ export function applyEffectToLayers(
     throw new Error("Choose an existing visual layer.");
   if (project.layers.some((l) => layerIds.includes(l.id) && l.type === "audio"))
     throw new Error("Visual effects cannot be applied to audio clips.");
+  if (
+    effect.text &&
+    project.layers.some(
+      (layer) => layerIds.includes(layer.id) && layer.type !== "title",
+    )
+  )
+    throw new Error("Text effects can only be applied to text elements.");
   const existing = project.effects.find((e) => e.id === effect.id);
   if (
     existing &&

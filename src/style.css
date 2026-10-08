@@ -2584,3 +2584,11 @@ button[aria-pressed="true"] {
   flex-wrap: wrap;
   gap: 8px;
 }
+
+/* A fixed dark stage preserves typography and glow contrast across app themes. */
+.effect-sample.is-text {
+  background: #17232e;
+}
+.effects-grid .effect-sample.is-text .effect-sample-art {
+  width: min(100%, 160px);
+}

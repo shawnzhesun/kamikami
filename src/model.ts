@@ -6,6 +6,7 @@ import {
   resolveFont,
 } from "./font-assets";
 import { z } from "zod";
+import { TextEffectSchema, builtinTextSettings } from "./text-effects";
 import { VisualPassSchema, effectRandom } from "./visual-effects";
 
 export const ChannelSchema = z.object({
@@ -44,6 +45,7 @@ export const EffectSchema = z.object({
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
   tint: z.number().min(0).max(1),
   passes: z.array(VisualPassSchema).max(6).optional(),
+  text: TextEffectSchema.optional(),
 });
 export const InstanceSchema = z.object({
   effectId: z.string(),
@@ -103,6 +105,27 @@ export type TimelineElement = Layer;
 export type Effect = z.infer<typeof EffectSchema>;
 export type Channel = z.infer<typeof ChannelSchema>;
 export function validateProject(input: unknown): Project {
+  // An older hot-running local service could strip the optional text field.
+  // Recover only recognized built-in IDs; preserve all explicit/custom settings.
+  if (
+    input &&
+    typeof input === "object" &&
+    "effects" in input &&
+    Array.isArray(input.effects)
+  ) {
+    input = {
+      ...input,
+      effects: input.effects.map((effect) =>
+        effect &&
+        typeof effect === "object" &&
+        typeof effect.id === "string" &&
+        effect.text === undefined &&
+        Object.hasOwn(builtinTextSettings, effect.id)
+          ? { ...effect, text: structuredClone(builtinTextSettings[effect.id]) }
+          : effect,
+      ),
+    };
+  }
   // Upgrade existing version-1 projects without changing their visible output.
   if (
     input &&

@@ -31,6 +31,28 @@ export const emptyMetadata: MediaMetadata = {
 };
 
 export async function api(url: string, method = "GET", body?: unknown) {
+  // Check before writing: older services silently remove unknown effect fields.
+  const payload = body as { effects?: unknown[]; effect?: unknown } | undefined;
+  const definitions = Array.isArray(body)
+    ? body
+    : (payload?.effects ?? (payload?.effect ? [payload.effect] : []));
+  const needsTextEngine = definitions.some((definition) => {
+    const effect = definition as {
+      text?: unknown;
+      passes?: { kind?: string }[];
+    } | null;
+    return (
+      !!effect?.text || effect?.passes?.some((pass) => pass.kind === "blinds")
+    );
+  });
+  if (method !== "GET" && needsTextEngine) {
+    const health = await api("/api/health");
+    if (health.effectEngine !== "kamikami-visual-v4") {
+      throw new Error(
+        "The local service is outdated. Restart KamiKami's development process before saving or exporting text effects.",
+      );
+    }
+  }
   const r = await fetch(url, {
     method,
     headers: {

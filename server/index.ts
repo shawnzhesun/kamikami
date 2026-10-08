@@ -135,6 +135,7 @@ app.get("/api/health", (_req, res) =>
     ok: true,
     workspace: root,
     node: process.execPath,
+    effectEngine: "kamikami-visual-v4",
   }),
 );
 const bridge = new EditorBridge();
@@ -261,7 +262,7 @@ app.get("/api/capabilities", (_req, res) =>
       importBytes: 500 * 1024 * 1024,
     },
     conventions:
-      "tracks are independent timeline layers ordered bottom to top; layers is the legacy JSON array of elements, each referencing a trackId. Same-track elements cannot overlap; seconds for clip times; x/y from canvas center; source offsets and effect offsets preserve trim continuity. Frequency is cycles per second and phase is cycles. Channels add x/y/rotation/blur/letterSpacing/rotateY and multiply scale/opacity/brightness/contrast/saturation. Curves include linear/ease/ease-out/sine/pulse/shake/steps; shake frequency is held samples per second, steps frequency is the number of steps. Optional visual passes provide alpha-aware lighting, texture, cutout and transition treatments; timing is constant, in, out or pulse. Tint remains a rectangular screen blend on non-text layers. Recipes are declarative, no executable code.",
+      "tracks are independent timeline layers ordered bottom to top; layers is the legacy JSON array of elements, each referencing a trackId. Same-track elements cannot overlap; seconds for clip times; x/y from canvas center; source offsets and effect offsets preserve trim continuity. Frequency is cycles per second and phase is cycles. Channels add x/y/rotation/blur/letterSpacing/rotateY and multiply scale/opacity/brightness/contrast/saturation. Curves include linear/ease/ease-out/sine/pulse/shake/steps; shake frequency is held samples per second, steps frequency is the number of steps. Optional visual passes provide alpha-aware lighting, texture, cutout and transition treatments; timing is constant, in, out or pulse. Optional text recipes animate title elements with typewriter, scramble, stagger (rise/flip/pop), wave, gradient and neon modes. Text seconds are entrance duration; stagger controls relative unit delays or wave phase; distance is in em. Text effects apply only to title elements. Blinds passes support horizontal/vertical strip direction and count. Tint remains a rectangular screen blend on non-text layers. Recipes are declarative, no executable code.",
   }),
 );
 app.post("/api/media/relink", async (req, res) => {

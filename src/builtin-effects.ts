@@ -4,6 +4,7 @@ import {
   type Channel,
   type Effect,
 } from "./model";
+import { builtinTextSettings } from "./text-effects";
 import { type VisualPass } from "./visual-effects";
 
 const pass = (
@@ -463,7 +464,10 @@ export const legacyBuiltinEffects: Effect[] = [
   ...animationEffects,
 ];
 
-type EffectParameters = Pick<Effect, "channels" | "passes" | "color" | "tint">;
+type EffectParameters = Pick<
+  Effect,
+  "channels" | "passes" | "color" | "tint" | "text"
+>;
 type EffectVariation = {
   id: string;
   name: string;
@@ -480,6 +484,7 @@ type EffectFamily = {
 const parameters = (effect: Effect): EffectParameters => ({
   channels: effect.channels,
   passes: effect.passes ?? [],
+  ...(effect.text ? { text: effect.text } : {}),
   color: effect.color,
   tint: effect.tint,
 });
@@ -700,6 +705,68 @@ export const videoPlaybackEffects: Effect[] = videoPlaybackEffectCatalog.map(
     }),
 );
 
+/** Native recipes inspired by lifeprompt-team/remotion-scenes' animation catalog. */
+const textRecipe = (id: string, name: string, description: string): Effect =>
+  EffectSchema.parse({
+    id,
+    name,
+    description,
+    channels: [],
+    color: "#f2765e",
+    tint: 0,
+    text: builtinTextSettings[id],
+  });
+export const remotionSceneEffects: Effect[] = [
+  textRecipe(
+    "text-typewriter",
+    "Typewriter",
+    "Reveal text character by character or word by word, with an optional blinking caret. Duration controls when the complete title is visible. Text elements only.",
+  ),
+  textRecipe(
+    "text-scramble",
+    "Text scramble",
+    "Deterministic changing glyphs resolve into the original title. Adjust duration, scramble speed and seed. Original spacing and line breaks stay in place. Text elements only.",
+  ),
+  textRecipe(
+    "text-stagger",
+    "Staggered text",
+    "Bring characters or words in with a rise, a 3D flip or a pop. Duration and stagger control the entrance; distance sets the rise height. Text elements only.",
+  ),
+  textRecipe(
+    "text-wave",
+    "Text wave",
+    "A continuous wave travels through characters or words. Adjust height, speed and phase spacing. Text elements only.",
+  ),
+  textRecipe(
+    "text-gradient",
+    "Flowing text gradient",
+    "A flowing two-color gradient fills the title while keeping its font and transparency. Adjust both colors and movement speed. Text elements only.",
+  ),
+  textRecipe(
+    "text-neon",
+    "Neon text",
+    "Colored lettering with a breathing neon halo. Adjust glow size, pulse speed and the inner and outer glow colors. Text elements only.",
+  ),
+  EffectSchema.parse({
+    id: "blinds-reveal",
+    name: "Blinds reveal",
+    description:
+      "Reveal or hide an element through parallel horizontal or vertical strips. Adjust strip count, timing and transition duration; the original transparency is preserved.",
+    channels: [],
+    color: "#f2765e",
+    tint: 0,
+    passes: [
+      pass("blinds", {
+        strength: 1,
+        timing: "in",
+        seconds: 0.9,
+        count: 8,
+        blindsDirection: "horizontal",
+      }),
+    ],
+  }),
+];
+
 /** Gallery contains one card per family; legacy definitions remain resolvable. */
 export const builtinEffects: Effect[] = [
   ...legacyBuiltinEffects.flatMap((effect) => {
@@ -710,6 +777,7 @@ export const builtinEffects: Effect[] = [
     return index < 0 ? [] : [familyEffects[index]];
   }),
   ...videoPlaybackEffects,
+  ...remotionSceneEffects,
 ];
 export const allBuiltinEffects: Effect[] = [
   ...builtinEffects,
@@ -727,6 +795,7 @@ const parameterSchema = EffectSchema.pick({
   passes: true,
   color: true,
   tint: true,
+  text: true,
 });
 const parameterKey = (value: EffectParameters) =>
   JSON.stringify(parameterSchema.parse(value));
@@ -758,6 +827,11 @@ export function effectVariationPatch(
 
 export function builtinEffectCategory(id: string) {
   return (
+    (remotionSceneEffects.find((effect) => effect.id === id)
+      ? id === "blinds-reveal"
+        ? "Transitions"
+        : "Typography"
+      : undefined) ??
     getEffectFamily(id)?.category ??
     animationEffectCatalog.find((e) => e.id === id)?.category ??
     videoPlaybackEffectCatalog.find((e) => e.id === id)?.category ??

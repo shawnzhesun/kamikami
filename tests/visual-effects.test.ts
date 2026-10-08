@@ -72,7 +72,13 @@ test("built-ins do not populate My effects automatically; saved and imported cop
   const dir = await mkdtemp(path.join(tmpdir(), "kamikami-visual-effects-"));
   try {
     const library = new EffectLibrary(dir);
-    assert.deepEqual(await library.syncProjectEffects(builtinEffects), []);
+    for (let index = 0; index < builtinEffects.length; index += 40)
+      assert.deepEqual(
+        await library.syncProjectEffects(
+          builtinEffects.slice(index, index + 40),
+        ),
+        [],
+      );
     const effect = animationEffects.find((e) => e.id === "memory-crt")!;
     const saved = await library.save({
       format: "frameforge-effect",

@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import {
   builtinEffects,
   videoPlaybackEffects,
+  remotionSceneEffects,
   effectSearchText,
 } from "../src/builtin-effects";
 import {
@@ -58,8 +59,11 @@ const variants = modes.flatMap(([id, key, choices]) =>
 
 test("video adds four distinct operations and extends existing cards without duplicates", () => {
   assert.equal(videoPlaybackEffects.length, 4);
-  assert.equal(builtinEffects.length, 34);
-  assert.equal(new Set(builtinEffects.map((e) => e.id)).size, 34);
+  assert.equal(builtinEffects.length, 34 + remotionSceneEffects.length);
+  assert.equal(
+    new Set(builtinEffects.map((e) => e.id)).size,
+    builtinEffects.length,
+  );
   const oldKinds = new Set(
     builtinEffects
       .filter((e) => !videoPlaybackEffects.includes(e))

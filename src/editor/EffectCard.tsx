@@ -1,7 +1,11 @@
 import React, { useEffect, useState, useRef } from "react";
 import { Play, Pause } from "lucide-react";
 import { type Effect } from "../model";
-import { EffectSample, effectPosterTime } from "./EffectSample";
+import {
+  EffectSample,
+  effectPosterTime,
+  isTextEffectPreview,
+} from "./EffectSample";
 import { startGesture } from "./gesture";
 export function EffectCard({
   effect,
@@ -44,7 +48,7 @@ export function EffectCard({
       className={`effect-card ${dragging ? "effect-dragging" : ""}`}
       tabIndex={0}
       role="group"
-      aria-label={`${effect.name}. Drag onto a clip; Enter applies to selected elements.`}
+      aria-label={`${effect.name}. Drag onto ${effect.text ? "text" : "a clip"}; Enter applies to selected elements.`}
       title={effect.description + " · Drag to apply. Double-click to inspect."}
       onPointerDown={(e) => {
         if (e.button !== 0 || (e.target as HTMLElement).closest("button"))
@@ -84,7 +88,11 @@ export function EffectCard({
             target =
               document
                 .elementFromPoint(event.clientX, event.clientY)
-                ?.closest<HTMLElement>("[data-element-id]:not(.audio)") ?? null;
+                ?.closest<HTMLElement>(
+                  effect.text
+                    ? "[data-element-id].title"
+                    : "[data-element-id]:not(.audio)",
+                ) ?? null;
             target?.classList.add("effect-drop-target");
           },
           (cancelled) => {
@@ -114,7 +122,7 @@ export function EffectCard({
       }}
     >
       <div
-        className="effect-sample"
+        className={`effect-sample ${isTextEffectPreview(effect) ? "is-text" : ""}`}
         aria-label={`${effect.name} sample graphic preview`}
       >
         <div className="effect-sample-art">

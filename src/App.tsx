@@ -6,6 +6,7 @@ import {
   effectVariationId,
   effectVariationPatch,
 } from "./builtin-effects";
+import { type TextEffect, textEffectNames } from "./text-effects";
 import { visualNames, type VisualPass } from "./visual-effects";
 import { FontPicker } from "./editor/FontPicker";
 import { EffectSettingsDialog } from "./editor/EffectSettingsDialog";
@@ -1372,6 +1373,147 @@ export function App() {
           </label>
         )}
       </section>
+      {editingEffect.text &&
+        (() => {
+          const text = editingEffect.text;
+          const change = (patch: Partial<TextEffect>) =>
+            updateEffect({ text: { ...text, ...patch } });
+          const entrance = ["typewriter", "scramble", "stagger"].includes(
+            text.kind,
+          );
+          const motion = ["stagger", "wave"].includes(text.kind);
+          const colored = ["gradient", "neon"].includes(text.kind);
+          return (
+            <section className="effect-settings-section">
+              <h3>{textEffectNames[text.kind]}</h3>
+              <div className="visual-pass-fields">
+                {entrance && (
+                  <NumberField
+                    label="Duration (seconds)"
+                    value={text.seconds}
+                    min={0.05}
+                    max={30}
+                    step={0.05}
+                    onChange={(seconds) => change({ seconds })}
+                  />
+                )}
+                {!["gradient", "neon"].includes(text.kind) && (
+                  <label>
+                    Animate by
+                    <Dropdown
+                      label="Text animation unit"
+                      value={text.unit}
+                      options={[
+                        { value: "character", label: "Character" },
+                        { value: "word", label: "Word" },
+                      ]}
+                      onChange={(unit) =>
+                        change({ unit: unit as TextEffect["unit"] })
+                      }
+                    />
+                  </label>
+                )}
+                {text.kind === "stagger" && (
+                  <label>
+                    Entrance style
+                    <Dropdown
+                      label="Text entrance style"
+                      value={text.style}
+                      options={[
+                        { value: "rise", label: "Rise" },
+                        { value: "flip", label: "3D flip" },
+                        { value: "pop", label: "Pop" },
+                      ]}
+                      onChange={(style) =>
+                        change({ style: style as TextEffect["style"] })
+                      }
+                    />
+                  </label>
+                )}
+                {motion && (
+                  <NumberField
+                    label={text.kind === "wave" ? "Wave spacing" : "Stagger"}
+                    value={text.stagger}
+                    min={0}
+                    max={0.95}
+                    step={0.01}
+                    onChange={(stagger) => change({ stagger })}
+                  />
+                )}
+                {(text.kind === "wave" ||
+                  text.kind === "neon" ||
+                  (text.kind === "stagger" && text.style === "rise")) && (
+                  <NumberField
+                    label={text.kind === "neon" ? "Glow size" : "Height (em)"}
+                    value={text.distance}
+                    min={0}
+                    max={3}
+                    step={0.05}
+                    onChange={(distance) => change({ distance })}
+                  />
+                )}
+                {["scramble", "wave", "gradient", "neon"].includes(
+                  text.kind,
+                ) && (
+                  <NumberField
+                    label="Speed"
+                    value={text.speed}
+                    min={0}
+                    max={10}
+                    step={0.1}
+                    onChange={(speed) => change({ speed })}
+                  />
+                )}
+                {text.kind === "scramble" && (
+                  <NumberField
+                    label="Scramble seed"
+                    value={text.seed}
+                    min={0}
+                    max={65535}
+                    step={1}
+                    onChange={(seed) => change({ seed: Math.round(seed) })}
+                  />
+                )}
+                {text.kind === "typewriter" && (
+                  <label className="settings-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={text.cursor}
+                      onChange={(event) =>
+                        change({ cursor: event.target.checked })
+                      }
+                    />
+                    Show cursor
+                  </label>
+                )}
+                {colored && (
+                  <>
+                    <label>
+                      Primary color
+                      <input
+                        type="color"
+                        value={text.color}
+                        onChange={(event) =>
+                          change({ color: event.target.value })
+                        }
+                      />
+                    </label>
+                    <label>
+                      Secondary color
+                      <input
+                        type="color"
+                        value={text.secondary}
+                        onChange={(event) =>
+                          change({ secondary: event.target.value })
+                        }
+                      />
+                    </label>
+                  </>
+                )}
+              </div>
+            </section>
+          );
+        })()}
       {!!editingEffect.channels.length && (
         <section className="effect-settings-section">
           <h3>Animation</h3>
@@ -1458,6 +1600,7 @@ export function App() {
                 ),
               });
             const hasColor = ![
+              "blinds",
               "bloom",
               "grain",
               "scanlines",
@@ -1478,9 +1621,13 @@ export function App() {
                 max: 1,
                 step: 0.01,
               },
-              ...((!["silhouette", "duotone", "flash", "palette"].includes(
-                pass.kind,
-              ) &&
+              ...((![
+                "silhouette",
+                "duotone",
+                "flash",
+                "palette",
+                "blinds",
+              ].includes(pass.kind) &&
                 !(pass.kind === "repeat" && pass.repeatMode === "grid")) ||
               (pass.kind === "silhouette" && pass.silhouetteStyle === "outline")
                 ? [
@@ -1565,6 +1712,16 @@ export function App() {
                 <div className="visual-pass-fields">
                   {(
                     [
+                      {
+                        kind: "blinds",
+                        key: "blindsDirection",
+                        label: "Strip direction",
+                        fallback: "horizontal",
+                        options: [
+                          ["horizontal", "Horizontal"],
+                          ["vertical", "Vertical"],
+                        ],
+                      },
                       {
                         kind: "silhouette",
                         key: "silhouetteStyle",
@@ -1657,7 +1814,8 @@ export function App() {
                         />
                       </label>
                     ))}
-                  {(pass.kind === "rings" ||
+                  {(pass.kind === "blinds" ||
+                    pass.kind === "rings" ||
                     (pass.kind === "repeat" && pass.repeatMode !== "mirror") ||
                     (pass.kind === "particles" &&
                       pass.particleStyle === "burst")) && (
@@ -1665,11 +1823,13 @@ export function App() {
                       label="Count"
                       value={
                         pass.count ??
-                        (pass.kind === "repeat"
-                          ? 6
-                          : pass.kind === "rings"
-                            ? 4
-                            : 3)
+                        (pass.kind === "blinds"
+                          ? 8
+                          : pass.kind === "repeat"
+                            ? 6
+                            : pass.kind === "rings"
+                              ? 4
+                              : 3)
                       }
                       min={2}
                       max={12}

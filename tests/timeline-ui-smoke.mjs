@@ -63,7 +63,9 @@ const fixture = {
       const bytes = Buffer.concat(chunks);
       const body = bytes.toString();
       let result = {};
-      if (req.url === "/api/fonts/import") {
+      if (req.url === "/api/health")
+        result = { ok: true, effectEngine: "kamikami-visual-v4" };
+      else if (req.url === "/api/fonts/import") {
         const request = new Request("http://localhost/api/fonts/import", {
           method: "POST",
           headers: { "Content-Type": req.headers["content-type"] },
@@ -812,6 +814,62 @@ try {
   await click('button[aria-label="Close effect settings"]');
   await wait(async () => !(await exists("dialog[open]")));
   assert.equal(await exists(".inspector .effect-editor"), false);
+  // Native typography recipes apply to text and expose editable controls in the modal.
+  const beforeTypography = structuredClone(project);
+  await page.evaluate(() =>
+    document
+      .querySelector('[data-element-id="title"]')
+      .dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+      ),
+  );
+  await page.evaluate(() =>
+    document
+      .querySelector('.effect-card[aria-label^="Typewriter."]')
+      .dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+      ),
+  );
+  await save();
+  assert.equal(
+    project.effects.find((effect) => effect.id === "text-typewriter").text.kind,
+    "typewriter",
+  );
+  assert.ok(
+    project.layers
+      .find((layer) => layer.id === "title")
+      .effects.some((effect) => effect.effectId === "text-typewriter"),
+  );
+  await page.evaluate(() =>
+    [
+      ...document.querySelectorAll(
+        '.inspector .instance button[title="Edit effect definition"]',
+      ),
+    ]
+      .find((button) => button.textContent.includes("Typewriter"))
+      .click(),
+  );
+  await wait(() =>
+    exists('dialog[open] button[aria-label="Text animation unit"]'),
+  );
+  await fill('.effect-dialog-body input[type="number"]', "2.5");
+  await page.evaluate(() =>
+    document
+      .querySelector('.effect-dialog-body input[type="number"]')
+      .dispatchEvent(new FocusEvent("focusout", { bubbles: true })),
+  );
+  await click('.effect-dialog-footer button[type="submit"]');
+  await wait(async () => !(await exists("dialog[open]")));
+  await save();
+  assert.equal(
+    project.effects.find((effect) => effect.id === "text-typewriter").text
+      .seconds,
+    2.5,
+  );
+  await click('header button[aria-label="Undo"]');
+  await click('header button[aria-label="Undo"]');
+  await save();
+  assert.deepEqual(project, beforeTypography);
   const beforeShortening = structuredClone(project);
   await click(".project-name");
   await fill('dialog[open] input[type="number"]', "2");

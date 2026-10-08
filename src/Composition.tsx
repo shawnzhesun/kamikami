@@ -197,6 +197,7 @@ function VisualLayer({
             project={project}
             mediaOrigin={mediaOrigin}
             letterSpacing={v.letterSpacing}
+            time={t}
           />
         )}
         {layer.type === "image" && src && (

@@ -123,6 +123,22 @@ function Pass({
         );
         break;
       }
+      case "blinds": {
+        const count = pass.count ?? 8;
+        const horizontal = pass.blindsDirection !== "vertical";
+        const body = Array.from({ length: count }, (_, i) =>
+          horizontal
+            ? `<rect x="0" y="${(i * h) / count}" width="${w}" height="${(h / count) * (1 - s)}" fill="white"/>`
+            : `<rect x="${(i * w) / count}" y="0" width="${(w / count) * (1 - s)}" height="${h}" fill="white"/>`,
+        ).join("");
+        nodes = (
+          <>
+            {image(body, "blinds-mask")}
+            <feComposite in="SourceGraphic" in2="blinds-mask" operator="in" />
+          </>
+        );
+        break;
+      }
       case "rings": {
         const count = pass.count ?? 4,
           radius = Math.min(w, h) * (0.12 + z * 0.33);

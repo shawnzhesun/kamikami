@@ -1,3 +1,4 @@
+import { AnimatedText } from "./AnimatedText";
 import React, { useEffect, useLayoutEffect, useState } from "react";
 import { flushSync } from "react-dom";
 import { getRemotionEnvironment, useDelayRender } from "remotion";
@@ -11,11 +12,13 @@ export function FontText({
   project,
   mediaOrigin,
   letterSpacing = 0,
+  time = 0,
 }: {
   layer: Layer;
   project: Project;
   mediaOrigin: string;
   letterSpacing?: number;
+  time?: number;
 }) {
   const font = resolveFont(layer.fontId, project.fonts);
   const [retry, setRetry] = useState(0);
@@ -100,7 +103,7 @@ export function FontText({
           textShadow: "0 4px 40px #0008",
         }}
       >
-        {layer.text}
+        <AnimatedText layer={layer} effects={project.effects} time={time} />
       </div>
       {pending && (
         <div

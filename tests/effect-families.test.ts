@@ -6,6 +6,7 @@ import path from "node:path";
 import {
   allBuiltinEffects,
   videoPlaybackEffects,
+  remotionSceneEffects,
   builtinEffects,
   legacyBuiltinEffects,
   effectFamilies,
@@ -31,7 +32,10 @@ import { EffectLibrary } from "../server/effect-library";
 
 test("gallery retains the consolidation and appends only the new video operations", () => {
   assert.equal(legacyBuiltinEffects.length, 36);
-  assert.equal(builtinEffects.length, 30 + videoPlaybackEffects.length);
+  assert.equal(
+    builtinEffects.length,
+    30 + videoPlaybackEffects.length + remotionSceneEffects.length,
+  );
   assert.equal(
     new Set(allBuiltinEffects.map((e) => e.id)).size,
     allBuiltinEffects.length,
@@ -147,7 +151,11 @@ test("legacy projects and saved effects stay intact and legacy presets do not le
   try {
     const store = new EffectLibrary(dir);
     assert.deepEqual(await store.syncProjectEffects(legacyBuiltinEffects), []);
-    assert.deepEqual(await store.syncProjectEffects(builtinEffects), []);
+    for (let index = 0; index < builtinEffects.length; index += 40)
+      assert.deepEqual(
+        await store.syncProjectEffects(builtinEffects.slice(index, index + 40)),
+        [],
+      );
     const old = legacyBuiltinEffects.find((e) => e.id === "memory-red-flash")!;
     const project = applyEffectToLayers(initialProject, old, [
       initialProject.layers[0].id,
