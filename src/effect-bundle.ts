@@ -52,10 +52,7 @@ export const EffectBundleSchema = z
     ]),
     name: z.string().min(1).max(80),
     author: z.string().max(100).default(""),
-    license: z
-      .string()
-      .max(200)
-      .default("Unspecified; contact the author before redistribution"),
+    license: z.string().max(200).default("Free to use and share"),
     description: z.string().max(400).default(""),
     effect: EffectSchema.strict(),
   })

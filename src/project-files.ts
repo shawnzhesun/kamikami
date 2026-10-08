@@ -34,6 +34,19 @@ const types = [
 ];
 const abort = (error: unknown) =>
   error instanceof Error && error.name === "AbortError";
+function projectFileError(error: unknown): unknown {
+  if (
+    error instanceof Error &&
+    /No handler registered for ['"]project-file:(info|open|accept|save)['"]/.test(
+      error.message,
+    )
+  ) {
+    return new Error(
+      "The desktop app needs a restart to load project-file support. Fully quit KamiKami and relaunch it, then try again. Reloading the editor window is not enough.",
+    );
+  }
+  return error;
+}
 export const projectJson = (project: Project) =>
   JSON.stringify(validateProject(project), null, 2) + "\n";
 
@@ -86,11 +99,14 @@ export class ProjectFileAccess {
       this.handle = await handleStore();
       this.file = this.handle ? { name: this.handle.name } : null;
       return { file: this.file };
-    } catch {
+    } catch (error) {
+      const translated = projectFileError(error);
       return {
         file: null,
         warning:
-          "Could not restore the project file location. Save will ask for a location.",
+          translated !== error && translated instanceof Error
+            ? translated.message
+            : "Could not restore the project file location. Save will ask for a location.",
       };
     } finally {
       this.initialized = true;
@@ -139,7 +155,7 @@ export class ProjectFileAccess {
       return { project, file: this.file };
     } catch (error) {
       if (abort(error)) return null;
-      throw error;
+      throw projectFileError(error);
     } finally {
       this.busy = false;
     }
@@ -204,7 +220,7 @@ export class ProjectFileAccess {
       return { ...this.file, warning };
     } catch (error) {
       if (abort(error)) return null;
-      throw error;
+      throw projectFileError(error);
     } finally {
       this.busy = false;
     }

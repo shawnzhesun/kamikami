@@ -16,8 +16,8 @@ app.whenReady().then(async () => {
     path.join(__dirname, "../public/kamikami-icon-macos.png"),
   );
   if (process.platform === "darwin") app.dock.setIcon(icon);
-  await require("./assistant-credentials.cjs")();
   require("./project-files.cjs").installProjectFiles();
+  await require("./assistant-credentials.cjs")();
   session.defaultSession.setPermissionRequestHandler(
     (_webContents, _permission, callback) => callback(false),
   );

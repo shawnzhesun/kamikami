@@ -135,10 +135,7 @@ export const AgentCommandSchema = z.discriminatedUnion("action", [
     action: z.literal("save_user_effect"),
     effectId: z.string(),
     author: z.string().max(100).default(""),
-    license: z
-      .string()
-      .max(200)
-      .default("Unspecified; contact the author before redistribution"),
+    license: z.string().max(200).default("Free to use and share"),
     ...revision,
   }),
   z.object({

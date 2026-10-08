@@ -8,14 +8,12 @@ import {
 } from "./builtin-effects";
 import { visualNames, type VisualPass } from "./visual-effects";
 import { FontPicker } from "./editor/FontPicker";
+import { EffectSettingsDialog } from "./editor/EffectSettingsDialog";
+import { applyEffectDraft } from "./editor/effect-draft";
 import { Dropdown } from "./editor/Dropdown";
 import { ProjectFileAccess, projectJson } from "./project-files";
 import { ThemePicker } from "./editor/ThemePicker";
-import {
-  ProjectSettings,
-  LayerSettings,
-  SettingsDialog,
-} from "./editor/SettingsDialogs";
+import { ProjectSettings, LayerSettings } from "./editor/SettingsDialogs";
 import {
   addTrack,
   updateTrack,
@@ -118,6 +116,11 @@ export function App() {
   }, []);
   const [projectSettings, setProjectSettings] = useState(false);
   const [effectModal, setEffectModal] = useState(false);
+  const [effectDraft, setEffectDraft] = useState<Effect | null>(null);
+  const effectOriginal = useRef<Effect | undefined>(undefined);
+  const [effectError, setEffectError] = useState("");
+  const [effectSharingStatus, setEffectSharingStatus] = useState("");
+  const [effectSharingBusy, setEffectSharingBusy] = useState(false);
   const [layerSettings, setLayerSettings] = useState<{
     track: TimelineLayer;
     isNew: boolean;
@@ -201,10 +204,6 @@ export function App() {
   const [deleteProposal, setDeleteProposal] = useState<MediaAsset | null>(null);
   const deleteDialog = useRef<HTMLDialogElement>(null);
   const effectFile = useRef<HTMLInputElement>(null);
-  const [effectAuthor, setEffectAuthor] = useState("");
-  const [effectLicense, setEffectLicense] = useState(
-    "Unspecified; contact the author before redistribution",
-  );
   useEffect(() => {
     if (deleteProposal) deleteDialog.current?.showModal();
     else deleteDialog.current?.close();
@@ -272,8 +271,6 @@ export function App() {
   const missingSources = libraryAssets
     .filter((a) => a.missing)
     .map((a) => a.src);
-  const [effectNavigation, setEffectNavigation] = useState(0);
-  const effectEditor = useRef<HTMLDivElement>(null);
   const inspector = useRef<HTMLDivElement>(null);
   const player = useRef<PlayerRef>(null),
     file = useRef<HTMLInputElement>(null),
@@ -283,11 +280,8 @@ export function App() {
     saved = useRef(0),
     saveQueue = useRef(Promise.resolve());
   current.current = project;
-  const selected = project.layers.find((l) => l.id === selectedId),
-    editingEffect =
-      project.effects.find((e) => e.id === effectId) ??
-      userEffects.find((e) => e.bundle.effect.id === effectId)?.bundle.effect ??
-      allBuiltinEffects.find((e) => e.id === effectId);
+  const selected = project.layers.find((l) => l.id === selectedId);
+  const editingEffect = effectDraft;
   function commit(next: Project, group?: string) {
     if (!ready) return false;
     try {
@@ -487,7 +481,7 @@ export function App() {
         command.license ??
           userEffects.find((e) => e.bundle.effect.id === effect.id)?.bundle
             .license ??
-          "Unspecified; contact the author before redistribution",
+          "Free to use and share",
       );
       return { ...snapshot(), userEffect: entry };
     }
@@ -653,17 +647,50 @@ export function App() {
       group,
     );
   }
-  function updateEffect(patch: Partial<Effect>, group?: string) {
-    commit(
-      {
-        ...current.current,
-        effects: (current.current.effects.some((e) => e.id === effectId)
-          ? current.current.effects
-          : [...current.current.effects, editingEffect!]
-        ).map((e) => (e.id === effectId ? { ...e, ...patch } : e)),
-      },
-      group,
-    );
+  function updateEffect(patch: Partial<Effect>) {
+    setEffectDraft((draft) => (draft ? { ...draft, ...patch } : draft));
+    setEffectError("");
+    setEffectSharingStatus("");
+  }
+  function closeEffectSettings() {
+    setEffectModal(false);
+    setEffectId(null);
+    setEffectDraft(null);
+  }
+  function saveEffectSettings() {
+    if (!effectDraft) return;
+    try {
+      const next = applyEffectDraft(
+        current.current,
+        effectDraft,
+        effectOriginal.current,
+      );
+      if (!commit(next))
+        throw new Error("The effect could not be saved. Please try again.");
+      setStatus(`Saved ${effectDraft.name.trim()} · Undo available`);
+      closeEffectSettings();
+    } catch (error) {
+      setEffectError((error as Error).message);
+    }
+  }
+  async function saveReusableEffect() {
+    if (!effectDraft) return;
+    if (!effectDraft.name.trim()) {
+      setEffectError("Enter an effect name before saving.");
+      return;
+    }
+    setEffectSharingBusy(true);
+    setEffectError("");
+    try {
+      await persistEffect({ ...effectDraft, name: effectDraft.name.trim() });
+      setEffectSharingStatus("Saved to My effects.");
+    } catch (error) {
+      setEffectError(
+        `Could not save to My effects: ${(error as Error).message}`,
+      );
+    } finally {
+      setEffectSharingBusy(false);
+    }
   }
   function undo() {
     const p = history.current.undo(current.current);
@@ -708,6 +735,7 @@ export function App() {
       if (element) setSelectedTrack(elementTrackId(element));
     }
     setEffectId(null);
+    setEffectModal(false);
     if (rightTab !== "agent") setRightTab("inspector");
   }
   function selectLayer(id: string, additive = false) {
@@ -791,8 +819,10 @@ export function App() {
   }
   async function persistEffect(
     effect: Effect,
-    author = effectAuthor,
-    license = effectLicense,
+    author = userEffects.find((entry) => entry.bundle.effect.id === effect.id)
+      ?.bundle.author ?? "",
+    license = userEffects.find((entry) => entry.bundle.effect.id === effect.id)
+      ?.bundle.license ?? "Free to use and share",
   ) {
     const bundle: EffectBundle = {
       format: "frameforge-effect",
@@ -817,8 +847,8 @@ export function App() {
     const bundle = {
       format: "frameforge-effect",
       version: 1,
-      author: effectAuthor,
-      license: effectLicense,
+      author: "",
+      license: "Free to use and share",
       ...existing,
       engine: effectEngine(effect),
       name: effect.name,
@@ -835,28 +865,21 @@ export function App() {
     a.click();
     URL.revokeObjectURL(url);
   }
-  function inspectLibraryEffect(id: string) {
-    editEffect(id);
-    setEffectModal(true);
-  }
   function editEffect(id: string) {
-    setEffectModal(false);
-    const bundle = userEffects.find((e) => e.bundle.effect.id === id)?.bundle;
-    setEffectAuthor(bundle?.author ?? "");
-    setEffectLicense(
-      bundle?.license ??
-        "Unspecified; contact the author before redistribution",
-    );
+    const original = current.current.effects.find((effect) => effect.id === id);
+    const effect =
+      original ??
+      userEffects.find((entry) => entry.bundle.effect.id === id)?.bundle
+        .effect ??
+      allBuiltinEffects.find((effect) => effect.id === id);
+    if (!effect) return;
+    effectOriginal.current = original;
+    setEffectDraft(structuredClone(effect));
+    setEffectError("");
+    setEffectSharingStatus("");
+    setEffectModal(true);
     setEffectId(id);
-    setRightTab("inspector");
-    setEffectNavigation((n) => n + 1);
   }
-  useEffect(() => {
-    if (rightTab === "inspector" && effectId) {
-      effectEditor.current?.scrollIntoView({ block: "start" });
-      effectEditor.current?.focus({ preventScroll: true });
-    }
-  }, [effectId, rightTab, effectNavigation]);
   function checkpoint() {
     const snapshot = current.current,
       r = revision.current;
@@ -955,10 +978,13 @@ export function App() {
     if (
       effectId &&
       !project.effects.some((e) => e.id === effectId) &&
-      !userEffects.some((e) => e.bundle.effect.id === effectId)
-    )
+      !userEffects.some((e) => e.bundle.effect.id === effectId) &&
+      !allBuiltinEffects.some((e) => e.id === effectId)
+    ) {
       setEffectId(null);
-  }, [project, selectedId, effectId]);
+      setEffectModal(false);
+    }
+  }, [project, selectedId, effectId, userEffects]);
   useEffect(() => {
     const saveShortcut = (event: KeyboardEvent) => {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
@@ -1281,7 +1307,7 @@ export function App() {
       const ids = layerId ? [layerId] : selectedIds;
       if (commit(applyEffectToLayers(current.current, effect, ids))) {
         setSelectedIds(ids);
-        editEffect(id);
+        setRightTab("inspector");
         setStatus(`Applied ${effect.name} · Undo available`);
       }
     } catch (e) {
@@ -1298,505 +1324,510 @@ export function App() {
   const effectControls = editingEffect && (
     <div
       className="effect-editor"
-      ref={effectEditor}
       tabIndex={-1}
       role="region"
       aria-label={`${editingEffect.name} effect controls`}
     >
-      <div className="section-line">
-        <span>EFFECT DEFINITION</span>
-        <button
-          aria-label="Close effect controls"
-          title="Close effect controls"
-          onClick={() => {
-            setEffectId(null);
-            setEffectModal(false);
-          }}
-        >
-          <X size={14} />
-        </button>
-      </div>
-      <p className="muted">{editingEffect.description}</p>
-      <p className="muted">
-        Editing {editingEffect.name}. Changes affect all{" "}
-        {
-          project.layers.filter((l) =>
-            l.effects.some((i) => i.effectId === editingEffect.id),
-          ).length
-        }{" "}
-        elements using this effect.
-      </p>
-      <div className="effect-sharing">
-        <label>
-          Author
-          <input
-            value={effectAuthor}
-            maxLength={100}
-            onChange={(e) => setEffectAuthor(e.target.value)}
-          />
-        </label>
-        <label>
-          License / sharing terms
-          <input
-            value={effectLicense}
-            maxLength={200}
-            onChange={(e) => setEffectLicense(e.target.value)}
-          />
-        </label>
-        <button
-          onClick={() =>
-            void persistEffect(editingEffect).catch((e) => setStatus(e.message))
-          }
-        >
-          Save to My effects
-        </button>
-        <button onClick={() => downloadEffect(editingEffect)}>
-          Export effect bundle
-        </button>
-      </div>
-      <TextField
-        label="Effect name"
-        value={editingEffect.name}
-        maxLength={80}
-        onChange={(name) =>
-          updateEffect({ name }, `effect:${editingEffect.id}:name`)
-        }
-        onEndEdit={() => history.current.endGroup()}
-      />
-      {getEffectFamily(editingEffect.id) && (
-        <label>
-          Variation
-          <Dropdown
-            label={`${getEffectFamily(editingEffect.id)!.name} variation`}
-            value={effectVariationId(editingEffect)}
-            options={[
-              ...getEffectFamily(editingEffect.id)!.variations.map((v) => ({
-                value: v.id,
-                label: v.name,
-              })),
-              { value: "custom", label: "Custom", disabled: true },
-            ]}
-            onChange={(id) => {
-              const patch = effectVariationPatch(editingEffect, id);
-              if (patch) updateEffect(patch);
-            }}
-          />
-          <small className="muted">
-            Choosing a variation resets the parameters below.
-          </small>
-        </label>
-      )}
-      {editingEffect.channels.map((c, i) => (
-        <div className="channel" key={i}>
-          <div className="section-line">
-            <span>{c.property.toUpperCase()}</span>
-            <Dropdown
-              label="Curve"
-              value={c.curve}
-              onChange={(value) =>
-                updateEffect({
-                  channels: editingEffect.channels.map((v, j) =>
-                    j === i
-                      ? {
-                          ...v,
-                          curve: value as typeof c.curve,
-                        }
-                      : v,
-                  ),
-                })
-              }
-              options={[
-                "linear",
-                "ease",
-                "ease-out",
-                "sine",
-                "pulse",
-                "shake",
-                "steps",
-              ].map((c) => ({
-                value: c,
-                label: c,
-              }))}
-            />
-          </div>
-          <div className="field-row">
-            {(["from", "to"] as const).map((key) => (
-              <NumberField
-                key={key}
-                label={key}
-                value={c[key]}
-                min={-2000}
-                max={2000}
-                step={0.1}
-                onChange={(n) =>
-                  updateEffect({
-                    channels: editingEffect.channels.map((v, j) =>
-                      j === i ? { ...v, [key]: n } : v,
-                    ),
-                  })
-                }
-              />
-            ))}
-          </div>
-          {["sine", "pulse", "shake", "steps"].includes(c.curve) && (
-            <NumberField
-              label={c.curve === "steps" ? "Steps" : "Frequency (Hz)"}
-              value={c.frequency}
-              min={0}
-              max={20}
-              step={0.1}
-              onChange={(n) =>
-                updateEffect({
-                  channels: editingEffect.channels.map((v, j) =>
-                    j === i ? { ...v, frequency: n } : v,
-                  ),
-                })
-              }
-            />
-          )}
-        </div>
-      ))}
-      {editingEffect.passes?.map((pass, index) => {
-        const change = (patch: Partial<VisualPass>) =>
-          updateEffect({
-            passes: editingEffect.passes!.map((p, i) =>
-              i === index ? { ...p, ...patch } : p,
-            ),
-          });
-        const hasColor = ![
-          "bloom",
-          "grain",
-          "scanlines",
-          "chromatic",
-          "distortion",
-          "iris",
-          "shatter",
-          "echo",
-          "palette",
-          "smear",
-          "repeat",
-        ].includes(pass.kind);
-        const numeric = [
+      <section className="effect-settings-section">
+        <h3>General</h3>
+        <p className="muted">{editingEffect.description}</p>
+        <p className="effect-usage-note">
           {
-            key: "strength" as const,
-            label: "Strength",
-            min: 0,
-            max: 1,
-            step: 0.01,
-          },
-          ...((!["silhouette", "duotone", "flash", "palette"].includes(
-            pass.kind,
-          ) &&
-            !(pass.kind === "repeat" && pass.repeatMode === "grid")) ||
-          (pass.kind === "silhouette" && pass.silhouetteStyle === "outline")
-            ? [
-                {
-                  key: "size" as const,
-                  label:
-                    pass.kind === "smear"
-                      ? "Spread"
-                      : pass.kind === "rings"
-                        ? "Radius"
-                        : "Size",
-                  min: 0,
-                  max: 1,
-                  step: 0.01,
-                },
-              ]
-            : []),
-          ...([
-            "spotlight",
-            "flare",
-            "grain",
-            "scanlines",
-            "hatch",
-            "chromatic",
-            "distortion",
-            "hexagons",
-            "particles",
-            "echo",
-            "palette",
-            "rings",
-          ].includes(pass.kind) ||
-          (pass.kind === "repeat" && pass.repeatMode === "kaleidoscope") ||
-          pass.timing === "pulse"
-            ? [
-                {
-                  key: "speed" as const,
-                  label: "Speed",
-                  min: 0,
-                  max: 10,
-                  step: 0.1,
-                },
-              ]
-            : []),
-          ...(["hatch", "flare", "echo", "palette", "rings"].includes(
-            pass.kind,
-          ) ||
-          (pass.kind === "smear" && pass.smearMode !== "zoom") ||
-          (pass.kind === "repeat" && pass.repeatMode === "kaleidoscope")
-            ? [
-                {
-                  key: "angle" as const,
-                  label: "Angle",
-                  min: -180,
-                  max: 180,
-                  step: 1,
-                },
-              ]
-            : []),
-          ...([
-            "grain",
-            "distortion",
-            "hexagons",
-            "particles",
-            "shatter",
-          ].includes(pass.kind)
-            ? [
-                {
-                  key: "seed" as const,
-                  label: "Pattern seed",
-                  min: 0,
-                  max: 65535,
-                  step: 1,
-                },
-              ]
-            : []),
-        ];
-        return (
-          <div className="channel" key={index}>
-            <div className="section-line">
-              <span>{visualNames[pass.kind]}</span>
-            </div>
-            <div className="visual-pass-fields">
-              {(
-                [
-                  {
-                    kind: "silhouette",
-                    key: "silhouetteStyle",
-                    label: "Cutout style",
-                    fallback: "fill",
-                    options: [
-                      ["fill", "Filled silhouette"],
-                      ["outline", "Outline only"],
-                    ],
-                  },
-                  {
-                    kind: "palette",
-                    key: "paletteMode",
-                    label: "Color mapping",
-                    fallback: "negative",
-                    options: [
-                      ["negative", "Negative"],
-                      ["solarize", "Solarize"],
-                      ["posterize", "Posterize"],
-                    ],
-                  },
-                  {
-                    kind: "smear",
-                    key: "smearMode",
-                    label: "Smear geometry",
-                    fallback: "zoom",
-                    options: [
-                      ["zoom", "Zoom"],
-                      ["spin", "Spin"],
-                      ["directional", "Directional"],
-                    ],
-                  },
-                  {
-                    kind: "repeat",
-                    key: "repeatMode",
-                    label: "Repetition layout",
-                    fallback: "mirror",
-                    options: [
-                      ["grid", "Grid"],
-                      ["mirror", "Mirror"],
-                      ["kaleidoscope", "Kaleidoscope"],
-                      ["tunnel", "Nested frames"],
-                    ],
-                  },
-                  {
-                    kind: "distortion",
-                    key: "distortionMode",
-                    label: "Distortion pattern",
-                    fallback: "bands",
-                    options: [
-                      ["bands", "Horizontal bands"],
-                      ["blocks", "Digital blocks"],
-                      ["wave", "Wave"],
-                    ],
-                  },
-                  {
-                    kind: "hatch",
-                    key: "screenPattern",
-                    label: "Print pattern",
-                    fallback: "lines",
-                    options: [
-                      ["lines", "Lines"],
-                      ["dots", "Dots"],
-                    ],
-                  },
-                  {
-                    kind: "particles",
-                    key: "particleStyle",
-                    label: "Particle style",
-                    fallback: "paper",
-                    options: [
-                      ["paper", "Drifting paper"],
-                      ["burst", "Radial bursts"],
-                    ],
-                  },
-                ] as const
-              )
-                .filter((control) => control.kind === pass.kind)
-                .map((control) => (
-                  <label key={control.key}>
-                    {control.label}
-                    <Dropdown
-                      label={control.label}
-                      value={pass[control.key] ?? control.fallback}
-                      options={control.options.map(([value, label]) => ({
-                        value,
-                        label,
-                      }))}
-                      onChange={(value) => change({ [control.key]: value })}
-                    />
-                  </label>
-                ))}
-              {(pass.kind === "rings" ||
-                (pass.kind === "repeat" && pass.repeatMode !== "mirror") ||
-                (pass.kind === "particles" &&
-                  pass.particleStyle === "burst")) && (
-                <NumberField
-                  label="Count"
-                  value={
-                    pass.count ??
-                    (pass.kind === "repeat" ? 6 : pass.kind === "rings" ? 4 : 3)
-                  }
-                  min={2}
-                  max={12}
-                  step={1}
-                  onChange={(count) => change({ count: Math.round(count) })}
-                />
-              )}
-              {pass.kind === "repeat" && (
-                <small className="muted">
-                  Mirror uses two panels; size ≥ 0.5 adds vertical mirroring.
-                  Grid uses count for columns. Kaleidoscope uses an even count
-                  of at least four sectors. Size sets nested-frame spacing.
-                </small>
-              )}
-              {pass.kind === "palette" && pass.paletteMode === "posterize" && (
-                <NumberField
-                  label="Color levels"
-                  value={2 + Math.round(pass.size * 10)}
-                  min={2}
-                  max={12}
-                  step={1}
-                  onChange={(levels) =>
-                    change({ size: (Math.round(levels) - 2) / 10 })
-                  }
-                />
-              )}
-              {pass.kind === "palette" && (
-                <small className="muted">
-                  Angle shifts hue; speed cycles hue.
-                </small>
-              )}
-              {numeric.map(({ key, ...field }) => (
-                <NumberField
-                  key={key}
-                  {...field}
-                  value={pass[key]}
-                  onChange={(n) =>
-                    change({ [key]: key === "seed" ? Math.round(n) : n })
-                  }
-                />
-              ))}
-              {hasColor && (
-                <label>
-                  Color
-                  <input
-                    type="color"
-                    value={pass.color}
-                    onChange={(e) => change({ color: e.target.value })}
-                  />
-                </label>
-              )}
-              {(["duotone", "hexagons", "rings"].includes(pass.kind) ||
-                (pass.kind === "particles" &&
-                  pass.particleStyle === "burst")) && (
-                <label>
-                  Secondary color
-                  <input
-                    type="color"
-                    value={pass.secondary}
-                    onChange={(e) => change({ secondary: e.target.value })}
-                  />
-                </label>
-              )}
-              <label>
-                Timing
+            project.layers.filter((layer) =>
+              layer.effects.some(
+                (effect) => effect.effectId === editingEffect.id,
+              ),
+            ).length
+          }{" "}
+          elements use this definition. Saving updates all of them.
+        </p>
+        <TextField
+          label="Effect name"
+          value={editingEffect.name}
+          maxLength={80}
+          onChange={(name) => updateEffect({ name })}
+          onEndEdit={() => {}}
+        />
+        {getEffectFamily(editingEffect.id) && (
+          <label>
+            Variation
+            <Dropdown
+              label={`${getEffectFamily(editingEffect.id)!.name} variation`}
+              value={effectVariationId(editingEffect)}
+              options={[
+                ...getEffectFamily(editingEffect.id)!.variations.map((v) => ({
+                  value: v.id,
+                  label: v.name,
+                })),
+                { value: "custom", label: "Custom", disabled: true },
+              ]}
+              onChange={(id) => {
+                const patch = effectVariationPatch(editingEffect, id);
+                if (patch) updateEffect(patch);
+              }}
+            />
+            <small className="muted">
+              Choosing a variation resets the parameters below.
+            </small>
+          </label>
+        )}
+      </section>
+      {!!editingEffect.channels.length && (
+        <section className="effect-settings-section">
+          <h3>Animation</h3>
+          {editingEffect.channels.map((c, i) => (
+            <div className="channel" key={i}>
+              <div className="section-line">
+                <span>{c.property.toUpperCase()}</span>
                 <Dropdown
-                  label={`${visualNames[pass.kind]} timing`}
-                  value={pass.timing}
-                  onChange={(timing) =>
-                    change({ timing: timing as VisualPass["timing"] })
+                  label="Curve"
+                  value={c.curve}
+                  onChange={(value) =>
+                    updateEffect({
+                      channels: editingEffect.channels.map((v, j) =>
+                        j === i
+                          ? {
+                              ...v,
+                              curve: value as typeof c.curve,
+                            }
+                          : v,
+                      ),
+                    })
                   }
                   options={[
-                    { value: "constant", label: "Throughout clip" },
-                    { value: "in", label: "At clip start" },
-                    { value: "out", label: "At clip end" },
-                    { value: "pulse", label: "Repeating pulse" },
-                  ]}
+                    "linear",
+                    "ease",
+                    "ease-out",
+                    "sine",
+                    "pulse",
+                    "shake",
+                    "steps",
+                  ].map((c) => ({
+                    value: c,
+                    label: c,
+                  }))}
                 />
-              </label>
-              {["in", "out"].includes(pass.timing) && (
+              </div>
+              <div className="field-row">
+                {(["from", "to"] as const).map((key) => (
+                  <NumberField
+                    key={key}
+                    label={key}
+                    value={c[key]}
+                    min={-2000}
+                    max={2000}
+                    step={0.1}
+                    onChange={(n) =>
+                      updateEffect({
+                        channels: editingEffect.channels.map((v, j) =>
+                          j === i ? { ...v, [key]: n } : v,
+                        ),
+                      })
+                    }
+                  />
+                ))}
+              </div>
+              {["sine", "pulse", "shake", "steps"].includes(c.curve) && (
                 <NumberField
-                  label="Transition (seconds)"
-                  value={pass.seconds}
-                  min={0.05}
-                  max={30}
-                  step={0.05}
-                  onChange={(seconds) => change({ seconds })}
+                  label={c.curve === "steps" ? "Steps" : "Frequency (Hz)"}
+                  value={c.frequency}
+                  min={0}
+                  max={20}
+                  step={0.1}
+                  onChange={(n) =>
+                    updateEffect({
+                      channels: editingEffect.channels.map((v, j) =>
+                        j === i ? { ...v, frequency: n } : v,
+                      ),
+                    })
+                  }
                 />
               )}
             </div>
-          </div>
-        );
-      })}
-      <div className="field-row">
-        <label>
-          Tint color
-          <input
-            type="color"
-            value={editingEffect.color}
-            onChange={(e) => updateEffect({ color: e.target.value })}
+          ))}
+        </section>
+      )}
+      {!!editingEffect.passes?.length && (
+        <section className="effect-settings-section">
+          <h3>Visual effects</h3>
+          {editingEffect.passes?.map((pass, index) => {
+            const change = (patch: Partial<VisualPass>) =>
+              updateEffect({
+                passes: editingEffect.passes!.map((p, i) =>
+                  i === index ? { ...p, ...patch } : p,
+                ),
+              });
+            const hasColor = ![
+              "bloom",
+              "grain",
+              "scanlines",
+              "chromatic",
+              "distortion",
+              "iris",
+              "shatter",
+              "echo",
+              "palette",
+              "smear",
+              "repeat",
+            ].includes(pass.kind);
+            const numeric = [
+              {
+                key: "strength" as const,
+                label: "Strength",
+                min: 0,
+                max: 1,
+                step: 0.01,
+              },
+              ...((!["silhouette", "duotone", "flash", "palette"].includes(
+                pass.kind,
+              ) &&
+                !(pass.kind === "repeat" && pass.repeatMode === "grid")) ||
+              (pass.kind === "silhouette" && pass.silhouetteStyle === "outline")
+                ? [
+                    {
+                      key: "size" as const,
+                      label:
+                        pass.kind === "smear"
+                          ? "Spread"
+                          : pass.kind === "rings"
+                            ? "Radius"
+                            : "Size",
+                      min: 0,
+                      max: 1,
+                      step: 0.01,
+                    },
+                  ]
+                : []),
+              ...([
+                "spotlight",
+                "flare",
+                "grain",
+                "scanlines",
+                "hatch",
+                "chromatic",
+                "distortion",
+                "hexagons",
+                "particles",
+                "echo",
+                "palette",
+                "rings",
+              ].includes(pass.kind) ||
+              (pass.kind === "repeat" && pass.repeatMode === "kaleidoscope") ||
+              pass.timing === "pulse"
+                ? [
+                    {
+                      key: "speed" as const,
+                      label: "Speed",
+                      min: 0,
+                      max: 10,
+                      step: 0.1,
+                    },
+                  ]
+                : []),
+              ...(["hatch", "flare", "echo", "palette", "rings"].includes(
+                pass.kind,
+              ) ||
+              (pass.kind === "smear" && pass.smearMode !== "zoom") ||
+              (pass.kind === "repeat" && pass.repeatMode === "kaleidoscope")
+                ? [
+                    {
+                      key: "angle" as const,
+                      label: "Angle",
+                      min: -180,
+                      max: 180,
+                      step: 1,
+                    },
+                  ]
+                : []),
+              ...([
+                "grain",
+                "distortion",
+                "hexagons",
+                "particles",
+                "shatter",
+              ].includes(pass.kind)
+                ? [
+                    {
+                      key: "seed" as const,
+                      label: "Pattern seed",
+                      min: 0,
+                      max: 65535,
+                      step: 1,
+                    },
+                  ]
+                : []),
+            ];
+            return (
+              <div className="channel" key={index}>
+                <div className="section-line">
+                  <span>{visualNames[pass.kind]}</span>
+                </div>
+                <div className="visual-pass-fields">
+                  {(
+                    [
+                      {
+                        kind: "silhouette",
+                        key: "silhouetteStyle",
+                        label: "Cutout style",
+                        fallback: "fill",
+                        options: [
+                          ["fill", "Filled silhouette"],
+                          ["outline", "Outline only"],
+                        ],
+                      },
+                      {
+                        kind: "palette",
+                        key: "paletteMode",
+                        label: "Color mapping",
+                        fallback: "negative",
+                        options: [
+                          ["negative", "Negative"],
+                          ["solarize", "Solarize"],
+                          ["posterize", "Posterize"],
+                        ],
+                      },
+                      {
+                        kind: "smear",
+                        key: "smearMode",
+                        label: "Smear geometry",
+                        fallback: "zoom",
+                        options: [
+                          ["zoom", "Zoom"],
+                          ["spin", "Spin"],
+                          ["directional", "Directional"],
+                        ],
+                      },
+                      {
+                        kind: "repeat",
+                        key: "repeatMode",
+                        label: "Repetition layout",
+                        fallback: "mirror",
+                        options: [
+                          ["grid", "Grid"],
+                          ["mirror", "Mirror"],
+                          ["kaleidoscope", "Kaleidoscope"],
+                          ["tunnel", "Nested frames"],
+                        ],
+                      },
+                      {
+                        kind: "distortion",
+                        key: "distortionMode",
+                        label: "Distortion pattern",
+                        fallback: "bands",
+                        options: [
+                          ["bands", "Horizontal bands"],
+                          ["blocks", "Digital blocks"],
+                          ["wave", "Wave"],
+                        ],
+                      },
+                      {
+                        kind: "hatch",
+                        key: "screenPattern",
+                        label: "Print pattern",
+                        fallback: "lines",
+                        options: [
+                          ["lines", "Lines"],
+                          ["dots", "Dots"],
+                        ],
+                      },
+                      {
+                        kind: "particles",
+                        key: "particleStyle",
+                        label: "Particle style",
+                        fallback: "paper",
+                        options: [
+                          ["paper", "Drifting paper"],
+                          ["burst", "Radial bursts"],
+                        ],
+                      },
+                    ] as const
+                  )
+                    .filter((control) => control.kind === pass.kind)
+                    .map((control) => (
+                      <label key={control.key}>
+                        {control.label}
+                        <Dropdown
+                          label={control.label}
+                          value={pass[control.key] ?? control.fallback}
+                          options={control.options.map(([value, label]) => ({
+                            value,
+                            label,
+                          }))}
+                          onChange={(value) => change({ [control.key]: value })}
+                        />
+                      </label>
+                    ))}
+                  {(pass.kind === "rings" ||
+                    (pass.kind === "repeat" && pass.repeatMode !== "mirror") ||
+                    (pass.kind === "particles" &&
+                      pass.particleStyle === "burst")) && (
+                    <NumberField
+                      label="Count"
+                      value={
+                        pass.count ??
+                        (pass.kind === "repeat"
+                          ? 6
+                          : pass.kind === "rings"
+                            ? 4
+                            : 3)
+                      }
+                      min={2}
+                      max={12}
+                      step={1}
+                      onChange={(count) => change({ count: Math.round(count) })}
+                    />
+                  )}
+                  {pass.kind === "repeat" && (
+                    <small className="muted">
+                      Mirror uses two panels; size ≥ 0.5 adds vertical
+                      mirroring. Grid uses count for columns. Kaleidoscope uses
+                      an even count of at least four sectors. Size sets
+                      nested-frame spacing.
+                    </small>
+                  )}
+                  {pass.kind === "palette" &&
+                    pass.paletteMode === "posterize" && (
+                      <NumberField
+                        label="Color levels"
+                        value={2 + Math.round(pass.size * 10)}
+                        min={2}
+                        max={12}
+                        step={1}
+                        onChange={(levels) =>
+                          change({ size: (Math.round(levels) - 2) / 10 })
+                        }
+                      />
+                    )}
+                  {pass.kind === "palette" && (
+                    <small className="muted">
+                      Angle shifts hue; speed cycles hue.
+                    </small>
+                  )}
+                  {numeric.map(({ key, ...field }) => (
+                    <NumberField
+                      key={key}
+                      {...field}
+                      value={pass[key]}
+                      onChange={(n) =>
+                        change({ [key]: key === "seed" ? Math.round(n) : n })
+                      }
+                    />
+                  ))}
+                  {hasColor && (
+                    <label>
+                      Color
+                      <input
+                        type="color"
+                        value={pass.color}
+                        onChange={(e) => change({ color: e.target.value })}
+                      />
+                    </label>
+                  )}
+                  {(["duotone", "hexagons", "rings"].includes(pass.kind) ||
+                    (pass.kind === "particles" &&
+                      pass.particleStyle === "burst")) && (
+                    <label>
+                      Secondary color
+                      <input
+                        type="color"
+                        value={pass.secondary}
+                        onChange={(e) => change({ secondary: e.target.value })}
+                      />
+                    </label>
+                  )}
+                  <label>
+                    Timing
+                    <Dropdown
+                      label={`${visualNames[pass.kind]} timing`}
+                      value={pass.timing}
+                      onChange={(timing) =>
+                        change({ timing: timing as VisualPass["timing"] })
+                      }
+                      options={[
+                        { value: "constant", label: "Throughout clip" },
+                        { value: "in", label: "At clip start" },
+                        { value: "out", label: "At clip end" },
+                        { value: "pulse", label: "Repeating pulse" },
+                      ]}
+                    />
+                  </label>
+                  {["in", "out"].includes(pass.timing) && (
+                    <NumberField
+                      label="Transition (seconds)"
+                      value={pass.seconds}
+                      min={0.05}
+                      max={30}
+                      step={0.05}
+                      onChange={(seconds) => change({ seconds })}
+                    />
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </section>
+      )}
+      <section className="effect-settings-section">
+        <h3>Color tint</h3>
+        <div className="field-row">
+          <label>
+            Tint color
+            <input
+              type="color"
+              value={editingEffect.color}
+              onChange={(e) => updateEffect({ color: e.target.value })}
+            />
+          </label>
+          <NumberField
+            label="Tint amount"
+            value={editingEffect.tint}
+            min={0}
+            max={1}
+            step={0.01}
+            onChange={(n) => updateEffect({ tint: n })}
           />
-        </label>
-        <NumberField
-          label="Tint amount"
-          value={editingEffect.tint}
-          min={0}
-          max={1}
-          step={0.01}
-          onChange={(n) => updateEffect({ tint: n })}
-        />
-      </div>
+        </div>
+      </section>
+      <section className="effect-settings-section effect-sharing">
+        <h3>Reuse &amp; share</h3>
+        <div className="effect-sharing-actions">
+          <button
+            type="button"
+            data-effect-draft-action
+            disabled={effectSharingBusy}
+            onClick={() => void saveReusableEffect()}
+          >
+            {effectSharingBusy ? "Saving…" : "Save to My effects"}
+          </button>
+          <button
+            type="button"
+            data-effect-draft-action
+            disabled={effectSharingBusy}
+            onClick={() => downloadEffect(editingEffect)}
+          >
+            Export effect bundle
+          </button>
+        </div>
+        {effectSharingStatus && (
+          <p role="status" className="muted">
+            {effectSharingStatus}
+          </p>
+        )}
+      </section>
     </div>
   );
   return (
     <div className="app">
       {effectModal && editingEffect && (
-        <SettingsDialog
-          title={`${editingEffect.name} effect`}
-          onClose={() => {
-            setEffectModal(false);
-            setEffectId(null);
-          }}
+        <EffectSettingsDialog
+          name={editingEffect.name}
+          busy={effectSharingBusy}
+          error={effectError}
+          onClose={closeEffectSettings}
+          onSave={saveEffectSettings}
         >
           {effectControls}
-        </SettingsDialog>
+        </EffectSettingsDialog>
       )}
       {projectSettings && (
         <ProjectSettings
@@ -1898,15 +1929,6 @@ export function App() {
           <span>{project.name}</span>
           <Settings2 size={14} />
         </button>
-        <button
-          className="open-project-button"
-          onClick={() => void openProject()}
-          disabled={!ready || !fileAccessReady || fileBusy}
-          title="Open project JSON"
-        >
-          <FolderOpen size={15} />
-          Open project
-        </button>
         <div className="header-actions">
           <ThemePicker />
           <button
@@ -1926,6 +1948,15 @@ export function App() {
             <Redo2 size={17} />
           </button>
           <span className="divider" />
+          <button
+            className="open-project-button"
+            onClick={() => void openProject()}
+            disabled={!ready || !fileAccessReady || fileBusy}
+            title="Open project JSON"
+          >
+            <FolderOpen size={15} />
+            Open project
+          </button>
           <button
             onClick={() => void save()}
             disabled={!ready || !fileAccessReady || fileBusy}
@@ -2080,7 +2111,7 @@ export function App() {
                     key={e.id}
                     effect={e}
                     onApply={() => applyEffect(e.id)}
-                    onInspect={() => inspectLibraryEffect(e.id)}
+                    onInspect={() => editEffect(e.id)}
                     onDrop={(layerId) => applyEffect(e.id, layerId)}
                   />
                 ))}
@@ -2104,7 +2135,7 @@ export function App() {
                         ) ?? e.bundle.effect
                       }
                       onApply={() => applyEffect(e.bundle.effect.id)}
-                      onInspect={() => inspectLibraryEffect(e.bundle.effect.id)}
+                      onInspect={() => editEffect(e.bundle.effect.id)}
                       onDrop={(layerId) =>
                         applyEffect(e.bundle.effect.id, layerId)
                       }
@@ -2283,11 +2314,7 @@ export function App() {
             onMediaImported={() => void refreshMedia()}
           />
           {rightTab === "inspector" && (
-            <div
-              className="inspector"
-              ref={inspector}
-              key={`${selectedId}:${effectId ?? ""}`}
-            >
+            <div className="inspector" ref={inspector} key={selectedId}>
               {!selected && (
                 <div className="inspector-empty">
                   <Settings2 size={22} />
@@ -2615,6 +2642,8 @@ export function App() {
                         <div className="instance" key={instance.effectId}>
                           <div>
                             <button
+                              aria-haspopup="dialog"
+                              title="Edit effect definition"
                               onClick={() => editEffect(instance.effectId)}
                             >
                               <Sparkles size={13} />
@@ -2660,9 +2689,6 @@ export function App() {
                   )}
                 </>
               )}
-              {!effectModal &&
-                selected?.effects.some((e) => e.effectId === effectId) &&
-                effectControls}
             </div>
           )}
         </aside>

@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createRequire } from "node:module";
+import { runInNewContext } from "node:vm";
 import {
   mkdtemp,
   readFile,
@@ -21,6 +22,159 @@ import {
 const { ProjectFiles } = createRequire(import.meta.url)(
   "../electron/project-files.cjs",
 );
+
+test("desktop startup registers project IPC before loading the editor and Save reaches the file writer", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "kamikami-project-ipc-"));
+  try {
+    const handlers = new Map<string, (...args: any[]) => Promise<any>>();
+    const filename = path.join(dir, "movie.json");
+    let startup: Promise<unknown> | undefined;
+    let loaded = false;
+    let dialogs = 0;
+    const assertHandlers = () => {
+      for (const name of ["info", "open", "accept", "save"])
+        assert.ok(
+          handlers.has(`project-file:${name}`),
+          `Missing ${name} handler`,
+        );
+    };
+    class Window {
+      static fromWebContents() {
+        return {};
+      }
+      webContents = { setWindowOpenHandler() {}, on() {} };
+      loadURL() {
+        assertHandlers();
+        loaded = true;
+      }
+    }
+    const electron = {
+      app: {
+        getPath: () => dir,
+        setPath() {},
+        setName() {},
+        on() {},
+        dock: { setIcon() {} },
+        whenReady: () => ({
+          then: (callback: () => unknown) => {
+            startup = Promise.resolve().then(callback);
+            return startup;
+          },
+        }),
+      },
+      ipcMain: {
+        handle: (name: string, callback: (...args: any[]) => Promise<any>) => {
+          assert.ok(!handlers.has(name));
+          handlers.set(name, callback);
+        },
+      },
+      dialog: {
+        showSaveDialog: async () => {
+          dialogs++;
+          return { canceled: false, filePath: filename };
+        },
+      },
+      BrowserWindow: Window,
+      nativeImage: { createFromPath() {} },
+      session: { defaultSession: { setPermissionRequestHandler() {} } },
+    };
+    const nativeRequire = createRequire(import.meta.url);
+    const projectModule = { exports: {} as { installProjectFiles(): void } };
+    const electronDir = path.resolve("electron");
+    runInNewContext(
+      await readFile(path.join(electronDir, "project-files.cjs"), "utf8"),
+      {
+        module: projectModule,
+        __dirname: electronDir,
+        Buffer,
+        URL,
+        require: (name: string) =>
+          name === "electron" ? electron : nativeRequire(name),
+      },
+    );
+    runInNewContext(
+      await readFile(path.join(electronDir, "main.cjs"), "utf8"),
+      {
+        __dirname: electronDir,
+        process,
+        URL,
+        require: (name: string) => {
+          if (name === "electron") return electron;
+          if (name === "./project-files.cjs") return projectModule.exports;
+          if (name === "./assistant-credentials.cjs")
+            return async () => assertHandlers();
+          return nativeRequire(name);
+        },
+      },
+    );
+    await startup;
+    assert.equal(loaded, true);
+    const frame = { url: "http://127.0.0.1:5173/" };
+    const event = { senderFrame: frame, sender: { mainFrame: frame } };
+    const save = handlers.get("project-file:save")!;
+    await save(event, projectJson(initialProject), initialProject.name);
+    await save(
+      event,
+      projectJson({ ...initialProject, name: "Updated" }),
+      "Updated",
+    );
+    assert.equal(dialogs, 1);
+    assert.equal(JSON.parse(await readFile(filename, "utf8")).name, "Updated");
+    const info = await handlers.get("project-file:info")!(event);
+    assert.equal(info.file.name, "movie.json");
+    const untrusted = { url: "https://example.com/" };
+    await assert.rejects(
+      save(
+        { senderFrame: untrusted, sender: { mainFrame: untrusted } },
+        projectJson(initialProject),
+        "Movie",
+      ),
+      /Only the editor/,
+    );
+    assert.equal(dialogs, 1);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("stale desktop handlers report restart instructions instead of promising a file picker", async () => {
+  const original = Object.getOwnPropertyDescriptor(globalThis, "window");
+  const missing = (channel: string) => async () => {
+    throw new Error(
+      `Error invoking remote method 'project-file:${channel}': Error: No handler registered for 'project-file:${channel}'`,
+    );
+  };
+  const desktop = {
+    info: missing("info"),
+    open: missing("open"),
+    save: missing("save"),
+  };
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: { kamikamiProjectFiles: desktop },
+  });
+  try {
+    const access = new ProjectFileAccess();
+    const restored = await access.restore();
+    assert.match(restored.warning!, /Fully quit KamiKami and relaunch/);
+    assert.doesNotMatch(restored.warning!, /Save will ask for a location/);
+    await assert.rejects(
+      access.save(initialProject),
+      /Fully quit KamiKami and relaunch/,
+    );
+    await assert.rejects(access.open(), /Fully quit KamiKami and relaunch/);
+    desktop.save = async () => {
+      throw new Error("Permission denied");
+    };
+    await assert.rejects(
+      access.save(initialProject),
+      /^Error: Permission denied$/,
+    );
+  } finally {
+    if (original) Object.defineProperty(globalThis, "window", original);
+    else Reflect.deleteProperty(globalThis, "window");
+  }
+});
 
 test("desktop Save chooses a JSON once, overwrites atomically, and restores the destination", async () => {
   const dir = await mkdtemp(path.join(tmpdir(), "kamikami-project-save-"));

@@ -111,9 +111,9 @@ code {
 header {
   height: 66px;
   flex: none;
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 240px) minmax(0, 1fr);
   align-items: center;
-  justify-content: space-between;
   padding: 0 22px;
   gap: 20px;
   background: var(--chrome);
@@ -155,7 +155,8 @@ header button:focus-visible {
   align-items: center;
   gap: 10px;
   min-width: 0;
-  max-width: 35%;
+  max-width: 100%;
+  justify-self: center;
 }
 .project-name > span:nth-child(2) {
   overflow: hidden;
@@ -167,6 +168,7 @@ header button:focus-visible {
   opacity: 0.8;
 }
 .header-actions {
+  justify-self: end;
   display: flex;
   align-items: center;
   gap: 5px;
@@ -676,17 +678,6 @@ h2 {
 }
 .instance label {
   margin: 8px 0 0;
-}
-.effect-editor {
-  border-top: 1px solid var(--line);
-  margin-top: 22px;
-  scroll-margin-top: 10px;
-  outline: none;
-}
-.effect-editor:focus-visible {
-  outline: 2px solid var(--blue);
-  outline-offset: 4px;
-  border-radius: 4px;
 }
 .channel {
   background: var(--hover);
@@ -1573,15 +1564,6 @@ button[aria-pressed="true"] {
 .media-trash button {
   font-size: 10px;
 }
-.effect-sharing {
-  padding: 10px 0;
-  border-bottom: 1px solid var(--line);
-  margin-bottom: 14px;
-}
-.effect-sharing button {
-  font-size: 11px;
-}
-
 .effect-card {
   touch-action: none;
   user-select: none;
@@ -2472,4 +2454,133 @@ button[aria-pressed="true"] {
 }
 .visual-pass-fields label {
   min-width: 0;
+}
+
+@media (max-width: 1250px) {
+  header {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 160px) minmax(0, 1fr);
+    gap: 12px;
+  }
+  header .version {
+    display: none;
+  }
+}
+
+/* Effect settings keep navigation and save actions visible while controls scroll. */
+.effect-dialog {
+  width: min(680px, calc(100vw - 40px));
+  padding: 0;
+  overflow: hidden;
+  border-color: var(--line);
+}
+.effect-dialog form {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  max-height: calc(85vh - 2px);
+}
+.effect-dialog-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 22px 24px 18px;
+  border-bottom: 1px solid var(--line);
+}
+.effect-dialog-header > div {
+  min-width: 0;
+}
+.effect-dialog-header h2 {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 650;
+  letter-spacing: -0.3px;
+}
+.effect-dialog-header p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.effect-dialog-header > button {
+  flex: none;
+  padding: 6px;
+}
+.effect-dialog-body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0 24px;
+}
+.effect-dialog-fields {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.effect-editor {
+  outline: none;
+}
+.effect-settings-section {
+  display: grid;
+  gap: 14px;
+  padding: 22px 0;
+}
+.effect-settings-section + .effect-settings-section {
+  border-top: 1px solid var(--line);
+}
+.effect-settings-section h3 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 650;
+}
+.effect-settings-section p {
+  margin: 0;
+}
+.effect-settings-section label {
+  margin: 0;
+}
+.effect-usage-note {
+  background: var(--hover);
+  border-radius: 6px;
+  padding: 10px 12px;
+  color: var(--muted);
+}
+.effect-dialog .channel {
+  margin: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.effect-dialog .channel .field-row {
+  margin-bottom: 10px;
+}
+.effect-dialog .channel .dropdown-control {
+  width: 120px;
+  font-size: 12px;
+}
+.effect-sharing-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.effect-sharing-actions button {
+  border-color: var(--line);
+}
+.effect-dialog-footer {
+  flex: none;
+  padding: 16px 24px;
+  border-top: 1px solid var(--line);
+  background: var(--panel);
+}
+.effect-dialog-footer > p {
+  margin: 0 0 12px;
+}
+.effect-dialog-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
 }

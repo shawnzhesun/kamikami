@@ -13,6 +13,8 @@ npm run desktop
 
 Or run `npm run dev` and open `http://127.0.0.1:5173` in a browser. Both commands start the local service on port 4318. Run only one of them at a time. `desktop` is a development launcher, not yet a distributable app installer.
 
+After changes to `electron/`, fully quit and restart `npm run desktop`; refreshing the editor only reloads the UI. A “No handler registered for project-file” error indicates the running desktop process has not loaded the project-file handlers. Wait for local recovery to finish, then restart the desktop launcher and retry Save.
+
 ## Native assistant
 
 Open **Assistant**, choose **Connect assistant**, and enter a connection name, base URL, API key and model/deployment. OpenAI and LiteLLM/OpenAI-compatible proxies are supported. Choose Responses or Chat Completions to match the endpoint and model. **Load models** retrieves model aliases from the saved connection. Requests run inside the app; no terminal or external agent is required. Electron encrypts saved credentials with the OS-backed secure storage when available. Browser mode holds the key only in the local service's memory. `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_BASE_URL`, `OPENAI_CONNECTION_NAME` and `OPENAI_API_MODE` (`responses` or `chat`) are also supported when launching the service. API access is billed by the provider; there is no KamiKami account or bundled subscription yet.
@@ -38,7 +40,7 @@ Codex/Claude Code integration remains available as an advanced option through th
 - Drag clips to see their destination time before release. Escape cancels a drag. The timeline ruler supports click/drag scrubbing, arrow keys for one-frame steps, Shift+arrows for one-second steps, and Home/End.
 - Click the project name in the header to open the project settings dialog. The preview fits its window automatically.
 - The header palette button opens four app themes: Original, Olive, Daylight, and Dusk. Each option shows its four palette colors; changes apply immediately and persist across reloads. Project artwork and effect colors remain independent of the app theme. Selected cards use a full background fill without left-edge accents.
-- Drag the divider beside the library to resize it. Width persists across reloads; double-click resets it. Media includes Add media, delete and trash recovery controls. Open project sits beside the project title in the header. Add text from the Timeline toolbar.
+- Drag the divider beside the library to resize it. Width persists across reloads; double-click resets it. Media includes Add media, delete and trash recovery controls. Open project sits next to Save in the header, with the project title centered. Add text from the Timeline toolbar.
 
 ## Canvas, timeline, and media tools
 
@@ -106,7 +108,7 @@ Verified October 6, 2026: 31 regression tests, TypeScript/Vite build, skill vali
 
 ## User effects and comprehensive agent verification
 
-Agents can author effects through a schema, preview them on live clips, inspect rendered frames, and save reusable snapshots. Share `.kamikami-effect.json` files containing the recipe, author, sharing terms and compatibility version. Import them from Effects, then drag onto a visual clip. No executable plugin installation is required.
+Agents can author effects through a schema, preview them on live clips, inspect rendered frames, and save reusable snapshots. Share `.kamikami-effect.json` files containing the recipe and compatibility version. Import them from Effects, then drag onto a visual clip. No executable plugin installation is required.
 
 See [the capability audit](docs/mcp-audit.md) for the 37-tool editing map, test coverage and limits. Run `npm run test:mcp:full` with the editor open to exercise the complete workflow.
 
@@ -119,6 +121,6 @@ The app is now **KamiKami**. Existing local workspace data moves from `.framefor
 
 Layers are named timeline rows and may be empty or contain multiple image/video, audio, and text elements. Elements retain their own timing, transforms, sound settings and effects. Elements on the same layer cannot overlap; different layers can overlap. Media drops snap to frames and fill the available gap up to the source duration (still images extend to the next element or project end). Move existing elements vertically to change their layer, or use the Inspector's Layer selector.
 
-Project settings and layer names are edited in dialogs with Save/Cancel. Deleting a layer is immediate and undoable. Backspace deletes selected elements while preserving their layers. The Inspector is reserved for the selected element and its applied effects; browsing an unrelated library effect opens its own dialog.
+Project settings and layer names are edited in dialogs with Save/Cancel. Deleting a layer is immediate and undoable. Backspace deletes selected elements while preserving their layers. The Inspector is reserved for the selected element and its applied effects. Click an applied effect's name or inspect a library effect to edit its definition in a dialog. Effect settings use a draft: Save changes applies the definition as one undoable edit, while Cancel, Escape, or the header close button discard uncommitted changes. The header and save actions stay visible while grouped controls scroll. Reuse & share at the bottom saves the draft to My effects or exports an effect bundle independently of the project save.
 
 Existing projects migrate to one timeline layer per element. See [the layer model and compatibility notes](docs/timeline-layers.md) for storage and agent API details. Restart the local service after updating to this model so frontend and backend validations match.

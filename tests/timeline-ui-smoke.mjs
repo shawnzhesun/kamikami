@@ -180,7 +180,37 @@ try {
     );
   };
   await wait(() => exists(".media-card"));
-  assert.equal(await exists("header .open-project-button"), true);
+  assert.equal(await exists(".header-actions .open-project-button"), true);
+  assert.equal(
+    await page.evaluate(() =>
+      document
+        .querySelector(".open-project-button")
+        .nextElementSibling.textContent.trim(),
+    ),
+    "Save",
+  );
+  for (const width of [1100, 1440]) {
+    await page.setViewport({ width, height: 980, deviceScaleFactor: 1 });
+    const layout = await page.evaluate(() => {
+      const header = document.querySelector("header").getBoundingClientRect();
+      const title = document
+        .querySelector(".project-name")
+        .getBoundingClientRect();
+      const actions = document
+        .querySelector(".header-actions")
+        .getBoundingClientRect();
+      return {
+        centered:
+          Math.abs(title.x + title.width / 2 - header.x - header.width / 2) < 1,
+        separated: title.right <= actions.left,
+      };
+    });
+    assert.ok(layout.centered, `Project title is centered at ${width}px`);
+    assert.ok(
+      layout.separated,
+      `Header actions do not overlap the title at ${width}px`,
+    );
+  }
   assert.equal(await exists(".library .library-foot"), false);
   assert.ok(!(await text()).includes("Download project JSON"));
   assert.ok((await text()).includes("Add media"));
@@ -705,6 +735,67 @@ try {
     0,
   );
   assert.ok((await text()).includes("SELECTED ELEMENT"));
+  assert.equal(await exists("dialog[open]"), false);
+  assert.equal(await exists(".inspector .effect-editor"), false);
+  await click('.inspector .instance button[title="Edit effect definition"]');
+  await wait(() => exists("dialog[open] .effect-editor"));
+  assert.equal(await exists(".inspector .effect-editor"), false);
+  assert.equal(
+    await exists(
+      '.effect-dialog-header button[aria-label="Close effect settings"]',
+    ),
+    true,
+  );
+  const beforeEffectEdit = structuredClone(project);
+  const originalEffectName = project.effects.find(
+    (effect) => effect.id === "slow-push",
+  ).name;
+  await fill(".effect-dialog-body input", "Cancelled effect edit");
+  await click('button[aria-label="Close effect settings"]');
+  await wait(async () => !(await exists("dialog[open]")));
+  await save();
+  assert.deepEqual(project, beforeEffectEdit);
+  await click('.inspector .instance button[title="Edit effect definition"]');
+  await wait(() => exists("dialog[open] .effect-editor"));
+  assert.equal(
+    await page.evaluate(
+      () => document.querySelector(".effect-dialog-body input").value,
+    ),
+    originalEffectName,
+  );
+  await fill(".effect-dialog-body input", "Saved effect edit");
+  await click('.effect-dialog-footer button[type="submit"]');
+  await wait(async () => !(await exists("dialog[open]")));
+  await save();
+  assert.equal(
+    project.effects.find((effect) => effect.id === "slow-push").name,
+    "Saved effect edit",
+  );
+  await click('header button[aria-label="Undo"]');
+  await save();
+  assert.deepEqual(project, beforeEffectEdit);
+  await click('.inspector .instance button[title="Edit effect definition"]');
+  await wait(() => exists("dialog[open] .effect-editor"));
+  await fill(".effect-dialog-body input", "Cancelled via Escape");
+  await page.evaluate(() =>
+    document
+      .querySelector("dialog[open]")
+      .dispatchEvent(new Event("cancel", { cancelable: true })),
+  );
+  await wait(async () => !(await exists("dialog[open]")));
+  await save();
+  assert.deepEqual(project, beforeEffectEdit);
+  await wait(async () => !(await exists("dialog[open]")));
+  assert.equal(
+    await page.evaluate(
+      (id) =>
+        document
+          .querySelector(`[data-element-id="${id}"]`)
+          .getAttribute("aria-pressed"),
+      first.id,
+    ),
+    "true",
+  );
   await click('header button[aria-label="Undo"]');
   await save();
   await page.evaluate(() =>
@@ -718,7 +809,7 @@ try {
       .dispatchEvent(new MouseEvent("dblclick", { bubbles: true })),
   );
   await wait(() => exists("dialog[open] .effect-editor"));
-  await click('button[aria-label="Close effect controls"]');
+  await click('button[aria-label="Close effect settings"]');
   await wait(async () => !(await exists("dialog[open]")));
   assert.equal(await exists(".inspector .effect-editor"), false);
   const beforeShortening = structuredClone(project);
