@@ -1,6 +1,6 @@
 import React, { useId } from "react";
 import { effectRandom, visualFrame, type VisualPass } from "./visual-effects";
-import type { Effect, Layer } from "./model";
+import { resolveEffectInstance, type Effect, type Layer } from "./model";
 import { GraphicMapEffects } from "./GraphicMapEffects";
 import { svgImage } from "./graphic-maps";
 
@@ -635,7 +635,7 @@ export function GraphicEffects({
   let result = children;
   for (const instance of layer.effects) {
     if (!instance.enabled || instance.amount === 0) continue;
-    const effect = effects.find((e) => e.id === instance.effectId);
+    const effect = resolveEffectInstance(instance, effects);
     for (const [index, pass] of (effect?.passes ?? []).entries()) {
       result = (
         <Pass

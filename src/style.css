@@ -2503,9 +2503,45 @@ button[aria-pressed="true"] {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.effect-dialog-header > button {
+.effect-dialog-header > div:first-child {
+  flex: 1;
+}
+.effect-dialog-name-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin-top: 10px;
+}
+.effect-dialog-name-row p {
+  min-width: 0;
+  margin: 0;
+}
+.effect-dialog-name-input {
+  flex: 1 1 180px;
+  min-width: 0;
+  max-width: 100%;
+}
+.effect-dialog-header-actions {
+  display: flex;
+  align-items: center;
+  flex: none;
+  gap: 8px;
+}
+.effect-dialog-header-actions button {
+  white-space: nowrap;
+}
+.effect-dialog-header-actions .effect-delete-button {
+  color: var(--danger, #b34141);
+}
+.effect-dialog-header > .effect-dialog-close {
   flex: none;
   padding: 6px;
+}
+@media (max-width: 560px) {
+  .effect-dialog-header {
+    gap: 12px;
+  }
 }
 .effect-dialog-body {
   min-height: 0;
@@ -2588,6 +2624,35 @@ button[aria-pressed="true"] {
 /* A fixed dark stage preserves typography and glow contrast across app themes. */
 .effect-sample.is-text {
   background: #17232e;
+}
+.effect-preset-picker {
+  display: grid;
+  gap: 8px;
+}
+.effect-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 6px;
+}
+.effect-preset-option {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 8px;
+  text-align: left;
+  white-space: normal;
+}
+.effect-preset-option:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: -2px;
+}
+.effect-preset-option .effect-sample {
+  width: 100%;
+  min-height: 80px;
+}
+.effect-preset-option strong {
+  font-size: 12px;
 }
 .effects-grid .effect-sample.is-text .effect-sample-art {
   width: min(100%, 160px);

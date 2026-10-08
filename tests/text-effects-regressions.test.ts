@@ -97,7 +97,13 @@ test("stale services cannot receive and strip text-effect writes; legacy request
         String(url) === "/api/health"
           ? {
               ok: true,
-              ...(current ? { effectEngine: "kamikami-visual-v4" } : {}),
+              ...(current
+                ? {
+                    effectEngine: "kamikami-visual-v4",
+                    projectVersion: 2,
+                    effectLibraryVersion: 2,
+                  }
+                : {}),
             }
           : { ok: true },
       ),
@@ -125,8 +131,49 @@ test("stale services cannot receive and strip text-effect writes; legacy request
     assert.deepEqual(requests, ["/api/health", "/api/project"]);
     current = false;
     requests.length = 0;
-    await api("/api/project", "PUT", initialProject);
+    await api("/api/project", "PUT", { ...initialProject, version: 1 });
     assert.deepEqual(requests, ["/api/project"]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("effect library requests reject old services and explain missing delete routes", async () => {
+  const originalFetch = globalThis.fetch;
+  const requests: string[] = [];
+  let version = 1,
+    routeAvailable = false;
+  globalThis.fetch = (async (url: string | URL | Request) => {
+    requests.push(String(url));
+    if (String(url) === "/api/health")
+      return Response.json({ effectLibraryVersion: version });
+    return routeAvailable
+      ? Response.json({ deleted: true })
+      : new Response("Cannot POST /api/effects/delete", { status: 404 });
+  }) as typeof fetch;
+  try {
+    for (const [url, method, body] of [
+      ["/api/effects", "GET", undefined],
+      ["/api/effects/sync", "POST", []],
+      ["/api/effects/delete", "POST", { effectId: "user-test" }],
+    ] as const) {
+      requests.length = 0;
+      await assert.rejects(
+        api(url, method, body),
+        /outdated.*Restart.*npm run desktop/,
+      );
+      assert.deepEqual(requests, ["/api/health"]);
+    }
+    version = 2;
+    await assert.rejects(
+      api("/api/effects/delete", "POST", { effectId: "user-test" }),
+      /outdated.*Restart/,
+    );
+    routeAvailable = true;
+    assert.deepEqual(
+      await api("/api/effects/delete", "POST", { effectId: "user-test" }),
+      { deleted: true },
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }

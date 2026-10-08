@@ -10,6 +10,8 @@ import { z } from "zod";
 import {
   LayerSchema,
   EffectSchema,
+  EffectSettingsSchema,
+  resolveEffectInstance,
   ProjectSchema,
   makeLayer,
   validateProject,
@@ -17,6 +19,7 @@ import {
 } from "./model";
 import { EffectBundleSchema } from "./effect-bundle";
 import { moveClips, trimClip, splitClips } from "./editor/editing";
+import { applyInstanceEffectDraft } from "./editor/effect-draft";
 import { durationChange } from "./editor-utils";
 import type { MediaAsset } from "./media";
 const revision = { expectedRevision: z.string().min(1) };
@@ -117,6 +120,13 @@ export const AgentCommandSchema = z.discriminatedUnion("action", [
     action: z.literal("update_effect"),
     effectId: z.string(),
     patch: EffectSchema.omit({ id: true }).partial().strict(),
+    ...revision,
+  }),
+  z.object({
+    action: z.literal("update_effect_instance"),
+    layerId: z.string(),
+    effectId: z.string(),
+    patch: EffectSettingsSchema.partial().strict(),
     ...revision,
   }),
   z.object({
@@ -224,6 +234,7 @@ export function applyAgentEdit(
   knownSources: string[],
   assets: MediaAsset[] = [],
 ): Project {
+  project = validateProject(project);
   let next = project;
   if (command.action === "create_track")
     next = addTrack(project, command.track);
@@ -308,6 +319,20 @@ export function applyAgentEdit(
         e.id === command.effectId ? { ...e, ...command.patch } : e,
       ),
     };
+  }
+  if (command.action === "update_effect_instance") {
+    const instance = project.layers
+      .find((layer) => layer.id === command.layerId)
+      ?.effects.find((item) => item.effectId === command.effectId);
+    const original =
+      instance && resolveEffectInstance(instance, project.effects);
+    if (!original) throw new Error("Effect instance not found.");
+    next = applyInstanceEffectDraft(
+      project,
+      command.layerId,
+      { ...original, ...command.patch },
+      original,
+    );
   }
   if (command.action === "remove_effect")
     next = {

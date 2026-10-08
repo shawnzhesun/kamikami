@@ -31,11 +31,24 @@ export const emptyMetadata: MediaMetadata = {
 };
 
 export async function api(url: string, method = "GET", body?: unknown) {
+  const needsEffectLibrary =
+    url === "/api/effects" || url.startsWith("/api/effects/");
+  const effectsRestartMessage =
+    "The local effects service is outdated. Restart KamiKami with npm run desktop to load effect deletion and library persistence.";
   // Check before writing: older services silently remove unknown effect fields.
-  const payload = body as { effects?: unknown[]; effect?: unknown } | undefined;
+  const payload = body as
+    | {
+        version?: number;
+        project?: { version?: number; effects?: unknown[] };
+        effects?: unknown[];
+        effect?: unknown;
+      }
+    | undefined;
+  const project = payload?.project ?? payload;
+  const needsInstanceSupport = project?.version === 2;
   const definitions = Array.isArray(body)
     ? body
-    : (payload?.effects ?? (payload?.effect ? [payload.effect] : []));
+    : (project?.effects ?? (payload?.effect ? [payload.effect] : []));
   const needsTextEngine = definitions.some((definition) => {
     const effect = definition as {
       text?: unknown;
@@ -45,9 +58,18 @@ export async function api(url: string, method = "GET", body?: unknown) {
       !!effect?.text || effect?.passes?.some((pass) => pass.kind === "blinds")
     );
   });
-  if (method !== "GET" && needsTextEngine) {
+  if (
+    needsEffectLibrary ||
+    (method !== "GET" && (needsTextEngine || needsInstanceSupport))
+  ) {
     const health = await api("/api/health");
-    if (health.effectEngine !== "kamikami-visual-v4") {
+    if (needsEffectLibrary && health.effectLibraryVersion !== 2)
+      throw new Error(effectsRestartMessage);
+    if (needsInstanceSupport && health.projectVersion !== 2)
+      throw new Error(
+        "The local service is outdated. Restart KamiKami's development process before saving independent effect settings.",
+      );
+    if (needsTextEngine && health.effectEngine !== "kamikami-visual-v4") {
       throw new Error(
         "The local service is outdated. Restart KamiKami's development process before saving or exporting text effects.",
       );
@@ -69,6 +91,8 @@ export async function api(url: string, method = "GET", body?: unknown) {
           : JSON.stringify(body),
   });
   const text = await r.text();
+  if (r.status === 404 && url === "/api/effects/delete")
+    throw new Error(effectsRestartMessage);
   let result;
   try {
     result = JSON.parse(text);

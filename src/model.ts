@@ -1,3 +1,5 @@
+import { resolveEffectInstance } from "./effect-instance";
+export { resolveEffectInstance } from "./effect-instance";
 import { DEFAULT_FONT, fontFamilies } from "./fonts";
 import {
   FontAssetSchema,
@@ -41,18 +43,24 @@ export const EffectSchema = z.object({
   id: z.string().max(100),
   name: z.string().max(80),
   description: z.string().max(400),
+  // Keep named starting points available after a library effect is forked.
+  presetFamilyId: z.string().max(100).optional(),
   channels: z.array(ChannelSchema).max(12),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
   tint: z.number().min(0).max(1),
   passes: z.array(VisualPassSchema).max(6).optional(),
   text: TextEffectSchema.optional(),
 });
+// Complete snapshots avoid implicit inheritance when a preset changes later.
+export const EffectSettingsSchema = EffectSchema.omit({ id: true }).strict();
+export type EffectSettings = z.infer<typeof EffectSettingsSchema>;
 export const InstanceSchema = z.object({
   effectId: z.string(),
   amount: z.number().min(0).max(2),
   enabled: z.boolean(),
+  settings: EffectSettingsSchema.optional(),
 });
-// `layers` and Layer remain wire/API aliases for timeline elements in version 1.
+// `layers` and Layer remain legacy wire/API aliases for timeline elements.
 export const LayerSchema = z.object({
   trackId: z.string().min(1).max(100).optional(),
   id: z.string().max(100),
@@ -90,7 +98,7 @@ export type TimelineLayer = z.infer<typeof TimelineLayerSchema>;
 export const ProjectSchema = z.object({
   fonts: z.array(FontAssetSchema).max(100).optional(),
   tracks: z.array(TimelineLayerSchema).max(40).optional(),
-  version: z.literal(1),
+  version: z.literal(2),
   name: z.string().min(1).max(100),
   width: z.literal(1920),
   height: z.literal(1080),
@@ -104,7 +112,19 @@ export type Layer = z.infer<typeof LayerSchema>;
 export type TimelineElement = Layer;
 export type Effect = z.infer<typeof EffectSchema>;
 export type Channel = z.infer<typeof ChannelSchema>;
+export type EffectInstance = z.infer<typeof InstanceSchema>;
+export function effectSettings(effect: Effect): EffectSettings {
+  const { id: _id, ...settings } = effect;
+  return EffectSettingsSchema.parse(settings);
+}
 export function validateProject(input: unknown): Project {
+  if (
+    input &&
+    typeof input === "object" &&
+    "version" in input &&
+    input.version === 1
+  )
+    input = { ...input, version: 2 };
   // An older hot-running local service could strip the optional text field.
   // Recover only recognized built-in IDs; preserve all explicit/custom settings.
   if (
@@ -173,7 +193,7 @@ export function validateProject(input: unknown): Project {
         throw new Error(`Unsupported weight or style for “${font.family}”`);
     }
     if (new Set(l.effects.map((e) => e.effectId)).size !== l.effects.length)
-      throw new Error("An effect can only be applied once per layer");
+      throw new Error("An effect preset can only be applied once per element");
     if (l.start + l.duration > p.duration + 0.001)
       throw new Error(`“${l.name}” extends beyond the project duration`);
     if (
@@ -185,6 +205,14 @@ export function validateProject(input: unknown): Project {
       throw new Error("Media must be imported into this workspace");
     if (l.effects.some((e) => !p.effects.some((def) => def.id === e.effectId)))
       throw new Error("Unknown effect reference");
+    l.effects = l.effects.map((instance) => ({
+      ...instance,
+      settings:
+        instance.settings ??
+        effectSettings(
+          p.effects.find((effect) => effect.id === instance.effectId)!,
+        ),
+    }));
   }
   const tracks = p.tracks ? [...p.tracks] : [];
   if (new Set(tracks.map((t) => t.id)).size !== tracks.length)
@@ -277,8 +305,7 @@ export function layerAtTime(layer: Layer, effects: Effect[], t: number) {
     rotateY: 0,
   };
   for (const instance of layer.effects.filter((e) => e.enabled)) {
-    for (const c of effects.find((e) => e.id === instance.effectId)?.channels ??
-      []) {
+    for (const c of resolveEffectInstance(instance, effects)?.channels ?? []) {
       const value = channelValue(
         c,
         t + layer.effectOffset,
@@ -338,7 +365,7 @@ export function layerVolume(layer: Layer, layers: Layer[]) {
   return layer.muted || (soloing && !layer.solo) ? 0 : layer.volume;
 }
 export const initialProject: Project = validateProject({
-  version: 1,
+  version: 2,
   name: "After the last train",
   width: 1920,
   height: 1080,

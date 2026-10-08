@@ -218,8 +218,19 @@ definitions.push(
   ],
   [
     "update_effect",
-    "Patch a project effect definition. All layers sharing the definition change. For My effects, updates the same saved entry automatically.",
+    "Patch an editable My effects/project preset for future applications. Built-in and imported library originals are read-only: create_effect with a new ID to fork one. Existing instances keep their own settings; use update_effect_instance to edit those.",
     { effectId: z.string(), patch: z.record(z.string(), z.unknown()), ...rev },
+    false,
+  ],
+  [
+    "update_effect_instance",
+    "Patch the settings of one applied effect on one element, without changing its preset or other instances. Patch can contain name, description, channels, passes, color, tint, or text. Get capabilities for the schema. Undoable.",
+    {
+      layerId: z.string(),
+      effectId: z.string(),
+      patch: z.record(z.string(), z.unknown()),
+      ...rev,
+    },
     false,
   ],
   [

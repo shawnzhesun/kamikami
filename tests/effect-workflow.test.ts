@@ -53,7 +53,7 @@ test("portable effects validate versions, reject executable payloads, remap coll
     await rm(dir, { recursive: true, force: true });
   }
 });
-test("effect application copies definitions, is idempotent and rejects audio and ID collisions", () => {
+test("effect application snapshots recipes, is idempotent and rejects audio", () => {
   const p = structuredClone(initialProject),
     id = p.layers[0].id;
   const next = applyEffectToLayers(p, effect, [id]);
@@ -63,9 +63,9 @@ test("effect application copies definitions, is idempotent and rejects audio and
     p.layers[0].effects.some((e) => e.effectId === effect.id),
     false,
   );
-  assert.throws(
-    () => applyEffectToLayers(next, { ...effect, name: "Conflict" }, [id]),
-    /conflicts/,
+  assert.deepEqual(
+    applyEffectToLayers(next, { ...effect, name: "New recipe" }, [id]),
+    next,
   );
   const audio = { ...makeLayer("audio", "Audio"), duration: 1 };
   assert.throws(

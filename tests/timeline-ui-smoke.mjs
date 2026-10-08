@@ -8,9 +8,11 @@ import react from "@vitejs/plugin-react";
 import { openBrowser } from "@remotion/renderer";
 import { initialProject, validateProject } from "../src/model.ts";
 import { FontLibrary } from "../server/font-library.ts";
+import { EffectLibrary } from "../server/effect-library.ts";
 
 const fontData = await mkdtemp(path.join(tmpdir(), "kamikami-font-ui-"));
 const fontLibrary = new FontLibrary(fontData, path.resolve("public"));
+const effectLibrary = new EffectLibrary(fontData);
 
 let project = structuredClone(initialProject);
 const assets = [
@@ -64,7 +66,12 @@ const fixture = {
       const body = bytes.toString();
       let result = {};
       if (req.url === "/api/health")
-        result = { ok: true, effectEngine: "kamikami-visual-v4" };
+        result = {
+          ok: true,
+          effectEngine: "kamikami-visual-v4",
+          projectVersion: 2,
+          effectLibraryVersion: 2,
+        };
       else if (req.url === "/api/fonts/import") {
         const request = new Request("http://localhost/api/fonts/import", {
           method: "POST",
@@ -82,7 +89,15 @@ const fixture = {
         if (req.method === "PUT") project = validateProject(JSON.parse(body));
         result = project;
       } else if (req.url.startsWith("/api/media")) result = assets;
-      else if (req.url.startsWith("/api/effects")) result = [];
+      else if (req.url === "/api/effects/save")
+        result = await effectLibrary.save(JSON.parse(body));
+      else if (req.url === "/api/effects/delete")
+        result = await effectLibrary.delete(JSON.parse(body).effectId);
+      else if (req.url === "/api/effects/sync")
+        result = await effectLibrary.syncProjectEffects(JSON.parse(body));
+      else if (req.url === "/api/effects/import")
+        result = await effectLibrary.import(JSON.parse(body));
+      else if (req.url === "/api/effects") result = await effectLibrary.list();
       else if (req.url === "/api/editor/poll")
         result = { primary: true, requests: [] };
       else if (req.url === "/api/assistant")
@@ -739,7 +754,7 @@ try {
   assert.ok((await text()).includes("SELECTED ELEMENT"));
   assert.equal(await exists("dialog[open]"), false);
   assert.equal(await exists(".inspector .effect-editor"), false);
-  await click('.inspector .instance button[title="Edit effect definition"]');
+  await click('.inspector .instance button[title="Edit effect settings"]');
   await wait(() => exists("dialog[open] .effect-editor"));
   assert.equal(await exists(".inspector .effect-editor"), false);
   assert.equal(
@@ -749,36 +764,49 @@ try {
     true,
   );
   const beforeEffectEdit = structuredClone(project);
-  const originalEffectName = project.effects.find(
-    (effect) => effect.id === "slow-push",
-  ).name;
-  await fill(".effect-dialog-body input", "Cancelled effect edit");
+  assert.equal(await exists('input[aria-label="Effect name"]'), false);
+  assert.equal(await exists('button[aria-label="Fork effect"]'), false);
+  assert.equal(
+    await exists('button[aria-label="Delete from My effects"]'),
+    false,
+  );
+  const originalFrom = project.layers
+    .find((layer) => layer.id === first.id)
+    .effects.find((effect) => effect.effectId === "slow-push").settings
+    .channels[0].from;
+  await fill('.effect-dialog-body input[type="number"]', "1.02");
   await click('button[aria-label="Close effect settings"]');
   await wait(async () => !(await exists("dialog[open]")));
   await save();
   assert.deepEqual(project, beforeEffectEdit);
-  await click('.inspector .instance button[title="Edit effect definition"]');
+  await click('.inspector .instance button[title="Edit effect settings"]');
   await wait(() => exists("dialog[open] .effect-editor"));
   assert.equal(
     await page.evaluate(
-      () => document.querySelector(".effect-dialog-body input").value,
+      () =>
+        document.querySelector('.effect-dialog-body input[type="number"]')
+          .value,
     ),
-    originalEffectName,
+    String(originalFrom),
   );
-  await fill(".effect-dialog-body input", "Saved effect edit");
+  await fill('.effect-dialog-body input[type="number"]', "1.02");
   await click('.effect-dialog-footer button[type="submit"]');
   await wait(async () => !(await exists("dialog[open]")));
   await save();
   assert.equal(
-    project.effects.find((effect) => effect.id === "slow-push").name,
-    "Saved effect edit",
+    project.layers
+      .find((layer) => layer.id === first.id)
+      .effects.find((effect) => effect.effectId === "slow-push").settings
+      .channels[0].from,
+    1.02,
   );
+  assert.deepEqual(project.effects, beforeEffectEdit.effects);
   await click('header button[aria-label="Undo"]');
   await save();
   assert.deepEqual(project, beforeEffectEdit);
-  await click('.inspector .instance button[title="Edit effect definition"]');
+  await click('.inspector .instance button[title="Edit effect settings"]');
   await wait(() => exists("dialog[open] .effect-editor"));
-  await fill(".effect-dialog-body input", "Cancelled via Escape");
+  await fill('.effect-dialog-body input[type="number"]', "1.03");
   await page.evaluate(() =>
     document
       .querySelector("dialog[open]")
@@ -807,12 +835,63 @@ try {
   );
   await page.evaluate(() =>
     document
-      .querySelector(".effect-card")
+      .querySelector('.effect-card[aria-label^="Color flash."]')
       .dispatchEvent(new MouseEvent("dblclick", { bubbles: true })),
   );
   await wait(() => exists("dialog[open] .effect-editor"));
-  await click('button[aria-label="Close effect settings"]');
+  assert.equal(await exists(".effect-dialog-body input"), false);
+  assert.equal(await exists('button[aria-label="Fork effect"]'), true);
+  assert.equal(
+    await exists('.effect-dialog-footer button[type="submit"]'),
+    false,
+  );
+  assert.equal(
+    await page.evaluate(() =>
+      [...document.querySelectorAll("dialog[open] button")].some((button) =>
+        /Delete|Export effect/.test(button.textContent),
+      ),
+    ),
+    false,
+  );
+  const beforeFork = structuredClone(project);
+  await click('button[aria-label="Fork effect"]');
+  await wait(() => exists('input[aria-label="Effect name"]'));
+  assert.equal(
+    await exists('button[aria-label="Delete from My effects"]'),
+    true,
+  );
+  await fill('input[aria-label="Effect name"]', "My red flash");
+  await click('button[aria-label="Color flash presets"]');
+  await wait(() => exists(".effect-preset-option"));
+  await page.evaluate(() =>
+    [...document.querySelectorAll(".effect-preset-option")]
+      .find((button) => button.textContent.trim() === "Red")
+      .click(),
+  );
+  await click('.effect-dialog-footer button[type="submit"]');
   await wait(async () => !(await exists("dialog[open]")));
+  await save();
+  const fork = project.effects.find((effect) => effect.name === "My red flash");
+  assert.ok(fork);
+  assert.notEqual(fork.id, "color-flash");
+  assert.equal(fork.passes[0].color, "#fa162a");
+  assert.deepEqual(
+    project.effects.filter((effect) => effect.id !== fork.id),
+    beforeFork.effects,
+  );
+  await wait(() => exists('.effect-card[aria-label^="My red flash."]'));
+  await page.evaluate(() =>
+    document
+      .querySelector('.effect-card[aria-label^="My red flash."]')
+      .dispatchEvent(new MouseEvent("dblclick", { bubbles: true })),
+  );
+  await wait(() => exists('button[aria-label="Delete from My effects"]'));
+  await click('button[aria-label="Delete from My effects"]');
+  await wait(async () => !(await exists("dialog[open]")));
+  assert.equal(
+    await exists('.effect-card[aria-label^="My red flash."]'),
+    false,
+  );
   assert.equal(await exists(".inspector .effect-editor"), false);
   // Native typography recipes apply to text and expose editable controls in the modal.
   const beforeTypography = structuredClone(project);
@@ -840,10 +919,11 @@ try {
       .find((layer) => layer.id === "title")
       .effects.some((effect) => effect.effectId === "text-typewriter"),
   );
+  const typographyPresets = structuredClone(project.effects);
   await page.evaluate(() =>
     [
       ...document.querySelectorAll(
-        '.inspector .instance button[title="Edit effect definition"]',
+        '.inspector .instance button[title="Edit effect settings"]',
       ),
     ]
       .find((button) => button.textContent.includes("Typewriter"))
@@ -862,10 +942,13 @@ try {
   await wait(async () => !(await exists("dialog[open]")));
   await save();
   assert.equal(
-    project.effects.find((effect) => effect.id === "text-typewriter").text
-      .seconds,
+    project.layers
+      .find((layer) => layer.id === "title")
+      .effects.find((effect) => effect.effectId === "text-typewriter").settings
+      .text.seconds,
     2.5,
   );
+  assert.deepEqual(project.effects, typographyPresets);
   await click('header button[aria-label="Undo"]');
   await click('header button[aria-label="Undo"]');
   await save();

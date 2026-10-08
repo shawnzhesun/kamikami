@@ -51,6 +51,6 @@ Persistent instructional copy was removed from the library footer, effects galle
 
 Assistant-created effects automatically save to **My effects**. Refinements update the same saved entry, including edits made in the Inspector. Existing custom project definitions migrate there without changing their IDs or clip instances. Applying an effect keeps its rendering definition in the project without adding a duplicate gallery card. Saved effects remain available after project Undo or removal from clips.
 
-Export a My effects entry from its Inspector as a `.kamikami-effect.json` bundle. Importing a bundle adds an independent copy to the **Local effect library**, preserving author and sharing terms and assigning a new effect ID. The bundle format remains version 1; collection membership belongs to this workspace, not to the portable file.
+Effect modals do not offer export actions. Importing a bundle adds an independent copy to the **Effect Library**, preserving author and sharing terms and assigning a new effect ID. The bundle format remains version 1; collection membership belongs to this workspace, not to the portable file.
 
 Independent timeline layers use `create_track`, `update_track`, `delete_track` and `reorder_tracks`. Element tools retain their legacy names. See [layer and element conventions](timeline-layers.md).

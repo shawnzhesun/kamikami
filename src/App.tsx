@@ -2,15 +2,17 @@ import {
   allBuiltinEffects,
   builtinEffectCategory,
   effectSearchText,
-  getEffectFamily,
-  effectVariationId,
-  effectVariationPatch,
 } from "./builtin-effects";
 import { type TextEffect, textEffectNames } from "./text-effects";
 import { visualNames, type VisualPass } from "./visual-effects";
 import { FontPicker } from "./editor/FontPicker";
 import { EffectSettingsDialog } from "./editor/EffectSettingsDialog";
-import { applyEffectDraft } from "./editor/effect-draft";
+import { EffectPresetPicker } from "./editor/EffectPresetPicker";
+import {
+  applyEffectDraft,
+  applyInstanceEffectDraft,
+  forkEffect,
+} from "./editor/effect-draft";
 import { Dropdown } from "./editor/Dropdown";
 import { ProjectFileAccess, projectJson } from "./project-files";
 import { ThemePicker } from "./editor/ThemePicker";
@@ -52,6 +54,7 @@ import {
   initialProject,
   makeLayer,
   validateProject,
+  resolveEffectInstance,
   type Project,
   type Layer,
   type Effect,
@@ -61,6 +64,8 @@ import { validateNumericDraft } from "./editor-utils";
 import {
   applyEffectToLayers,
   effectCollections,
+  libraryEffect,
+  effectForApplication,
   EffectBundleSchema,
   effectEngine,
   type UserEffect,
@@ -118,6 +123,8 @@ export function App() {
   const [projectSettings, setProjectSettings] = useState(false);
   const [effectModal, setEffectModal] = useState(false);
   const [effectDraft, setEffectDraft] = useState<Effect | null>(null);
+  const [effectElementId, setEffectElementId] = useState<string | null>(null);
+  const [effectReadOnly, setEffectReadOnly] = useState(false);
   const effectOriginal = useRef<Effect | undefined>(undefined);
   const [effectError, setEffectError] = useState("");
   const [effectSharingStatus, setEffectSharingStatus] = useState("");
@@ -283,6 +290,10 @@ export function App() {
   current.current = project;
   const selected = project.layers.find((l) => l.id === selectedId);
   const editingEffect = effectDraft;
+  const editingMyEffect =
+    !effectElementId &&
+    !effectReadOnly &&
+    myEffects.some((entry) => entry.bundle.effect.id === editingEffect?.id);
   function commit(next: Project, group?: string) {
     if (!ready) return false;
     try {
@@ -512,12 +523,11 @@ export function App() {
       return { ...snapshot(), job };
     }
     if (command.action === "apply_effect") {
-      const effect =
-        current.current.effects.find((e) => e.id === command.effectId) ??
-        (await refreshEffects()).find(
-          (e) => e.bundle.effect.id === command.effectId,
-        )?.bundle.effect ??
-        allBuiltinEffects.find((e) => e.id === command.effectId);
+      const effect = effectForApplication(
+        current.current,
+        await refreshEffects(),
+        command.effectId,
+      );
       if (!effect) throw new Error("Effect not found.");
       if (revisionToken() !== command.expectedRevision)
         throw new Error("Project changed. Read it again.");
@@ -566,6 +576,13 @@ export function App() {
       if (!history.current.canRedo) throw new Error("Nothing to redo.");
       redo();
     } else {
+      if (
+        command.action === "update_effect" &&
+        libraryEffect(command.effectId, userEffects)
+      )
+        throw new Error(
+          "Library effects are read-only. Create a copy with a new ID or edit an applied instance.",
+        );
       const next = applyAgentEdit(
         current.current,
         command,
@@ -649,6 +666,7 @@ export function App() {
     );
   }
   function updateEffect(patch: Partial<Effect>) {
+    if (effectReadOnly) return;
     setEffectDraft((draft) => (draft ? { ...draft, ...patch } : draft));
     setEffectError("");
     setEffectSharingStatus("");
@@ -657,15 +675,23 @@ export function App() {
     setEffectModal(false);
     setEffectId(null);
     setEffectDraft(null);
+    setEffectElementId(null);
   }
   function saveEffectSettings() {
-    if (!effectDraft) return;
+    if (!effectDraft || effectReadOnly) return;
     try {
-      const next = applyEffectDraft(
-        current.current,
-        effectDraft,
-        effectOriginal.current,
-      );
+      const next = effectElementId
+        ? applyInstanceEffectDraft(
+            current.current,
+            effectElementId,
+            effectDraft,
+            effectOriginal.current!,
+          )
+        : applyEffectDraft(
+            current.current,
+            effectDraft,
+            effectOriginal.current,
+          );
       if (!commit(next))
         throw new Error("The effect could not be saved. Please try again.");
       setStatus(`Saved ${effectDraft.name.trim()} · Undo available`);
@@ -675,7 +701,7 @@ export function App() {
     }
   }
   async function saveReusableEffect() {
-    if (!effectDraft) return;
+    if (!effectDraft || effectElementId || effectSharingBusy) return;
     if (!effectDraft.name.trim()) {
       setEffectError("Enter an effect name before saving.");
       return;
@@ -683,12 +709,40 @@ export function App() {
     setEffectSharingBusy(true);
     setEffectError("");
     try {
-      await persistEffect({ ...effectDraft, name: effectDraft.name.trim() });
+      const entry = await persistEffect(
+        forkEffect(effectDraft, "user-" + crypto.randomUUID()),
+      );
+      if (!effectElementId) {
+        effectOriginal.current = undefined;
+        setEffectDraft(structuredClone(entry.bundle.effect));
+        setEffectId(entry.bundle.effect.id);
+        setEffectReadOnly(false);
+      }
       setEffectSharingStatus("Saved to My effects.");
     } catch (error) {
       setEffectError(
         `Could not save to My effects: ${(error as Error).message}`,
       );
+    } finally {
+      setEffectSharingBusy(false);
+    }
+  }
+  async function deleteReusableEffect() {
+    if (!effectDraft || !editingMyEffect || effectSharingBusy) return;
+    const { id, name } = effectDraft;
+    setEffectSharingBusy(true);
+    setEffectError("");
+    try {
+      await api("/api/effects/delete", "POST", { effectId: id });
+      // Invalidate earlier library reads and remove the card immediately.
+      effectRefresh.current++;
+      setUserEffects((entries) =>
+        entries.filter((entry) => entry.bundle.effect.id !== id),
+      );
+      closeEffectSettings();
+      setStatus(`Deleted ${name} from My effects`);
+    } catch (error) {
+      setEffectError(`Could not delete effect: ${(error as Error).message}`);
     } finally {
       setEffectSharingBusy(false);
     }
@@ -841,40 +895,25 @@ export function App() {
     setStatus(`Saved ${effect.name} to My effects`);
     return entry;
   }
-  function downloadEffect(effect: Effect) {
-    const existing = userEffects.find(
-      (e) => e.bundle.effect.id === effect.id,
-    )?.bundle;
-    const bundle = {
-      format: "frameforge-effect",
-      version: 1,
-      author: "",
-      license: "Free to use and share",
-      ...existing,
-      engine: effectEngine(effect),
-      name: effect.name,
-      description: effect.description,
-      effect,
-    };
-    const url = URL.createObjectURL(
-      new Blob([JSON.stringify(bundle, null, 2)], { type: "application/json" }),
-    );
-    const a = document.createElement("a");
-    a.href = url;
-    a.download =
-      effect.name.replace(/[^a-z0-9_-]/gi, "-") + ".kamikami-effect.json";
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-  function editEffect(id: string) {
-    const original = current.current.effects.find((effect) => effect.id === id);
+  function editEffect(id: string, elementId: string | null = null) {
+    const instance = current.current.layers
+      .find((layer) => layer.id === elementId)
+      ?.effects.find((item) => item.effectId === id);
+    if (elementId && !instance) return;
+    const librarySource = libraryEffect(id, userEffects);
+    const readOnly = !elementId && !!librarySource;
+    const original = instance
+      ? resolveEffectInstance(instance, current.current.effects)
+      : current.current.effects.find((effect) => effect.id === id);
     const effect =
-      original ??
+      (readOnly ? librarySource : original) ??
       userEffects.find((entry) => entry.bundle.effect.id === id)?.bundle
         .effect ??
       allBuiltinEffects.find((effect) => effect.id === id);
     if (!effect) return;
     effectOriginal.current = original;
+    setEffectReadOnly(readOnly);
+    setEffectElementId(elementId);
     setEffectDraft(structuredClone(effect));
     setEffectError("");
     setEffectSharingStatus("");
@@ -1300,10 +1339,7 @@ export function App() {
   }
   function applyEffect(id: string, layerId?: string) {
     try {
-      const effect =
-        project.effects.find((e) => e.id === id) ??
-        userEffects.find((e) => e.bundle.effect.id === id)?.bundle.effect ??
-        allBuiltinEffects.find((e) => e.id === id);
+      const effect = effectForApplication(current.current, userEffects, id);
       if (!effect) throw new Error("Effect not found.");
       const ids = layerId ? [layerId] : selectedIds;
       if (commit(applyEffectToLayers(current.current, effect, ids))) {
@@ -1333,647 +1369,612 @@ export function App() {
         <h3>General</h3>
         <p className="muted">{editingEffect.description}</p>
         <p className="effect-usage-note">
-          {
-            project.layers.filter((layer) =>
-              layer.effects.some(
-                (effect) => effect.effectId === editingEffect.id,
-              ),
-            ).length
-          }{" "}
-          elements use this definition. Saving updates all of them.
+          {effectElementId
+            ? `${project.layers.find((layer) => layer.id === effectElementId)?.name ?? "Selected element"} · Changes affect only this instance.`
+            : effectReadOnly
+              ? "Library effect · Fork to My effects to create your own editable copy."
+              : "My effect · Changes apply to future uses. Existing instances keep their settings."}
         </p>
-        <TextField
-          label="Effect name"
-          value={editingEffect.name}
-          maxLength={80}
-          onChange={(name) => updateEffect({ name })}
-          onEndEdit={() => {}}
-        />
-        {getEffectFamily(editingEffect.id) && (
-          <label>
-            Variation
-            <Dropdown
-              label={`${getEffectFamily(editingEffect.id)!.name} variation`}
-              value={effectVariationId(editingEffect)}
-              options={[
-                ...getEffectFamily(editingEffect.id)!.variations.map((v) => ({
-                  value: v.id,
-                  label: v.name,
-                })),
-                { value: "custom", label: "Custom", disabled: true },
-              ]}
-              onChange={(id) => {
-                const patch = effectVariationPatch(editingEffect, id);
-                if (patch) updateEffect(patch);
-              }}
-            />
-            <small className="muted">
-              Choosing a variation resets the parameters below.
-            </small>
-          </label>
+        {!effectReadOnly && (
+          <EffectPresetPicker effect={editingEffect} onChange={updateEffect} />
         )}
       </section>
-      {editingEffect.text &&
-        (() => {
-          const text = editingEffect.text;
-          const change = (patch: Partial<TextEffect>) =>
-            updateEffect({ text: { ...text, ...patch } });
-          const entrance = ["typewriter", "scramble", "stagger"].includes(
-            text.kind,
-          );
-          const motion = ["stagger", "wave"].includes(text.kind);
-          const colored = ["gradient", "neon"].includes(text.kind);
-          return (
-            <section className="effect-settings-section">
-              <h3>{textEffectNames[text.kind]}</h3>
-              <div className="visual-pass-fields">
-                {entrance && (
-                  <NumberField
-                    label="Duration (seconds)"
-                    value={text.seconds}
-                    min={0.05}
-                    max={30}
-                    step={0.05}
-                    onChange={(seconds) => change({ seconds })}
-                  />
-                )}
-                {!["gradient", "neon"].includes(text.kind) && (
-                  <label>
-                    Animate by
-                    <Dropdown
-                      label="Text animation unit"
-                      value={text.unit}
-                      options={[
-                        { value: "character", label: "Character" },
-                        { value: "word", label: "Word" },
-                      ]}
-                      onChange={(unit) =>
-                        change({ unit: unit as TextEffect["unit"] })
-                      }
-                    />
-                  </label>
-                )}
-                {text.kind === "stagger" && (
-                  <label>
-                    Entrance style
-                    <Dropdown
-                      label="Text entrance style"
-                      value={text.style}
-                      options={[
-                        { value: "rise", label: "Rise" },
-                        { value: "flip", label: "3D flip" },
-                        { value: "pop", label: "Pop" },
-                      ]}
-                      onChange={(style) =>
-                        change({ style: style as TextEffect["style"] })
-                      }
-                    />
-                  </label>
-                )}
-                {motion && (
-                  <NumberField
-                    label={text.kind === "wave" ? "Wave spacing" : "Stagger"}
-                    value={text.stagger}
-                    min={0}
-                    max={0.95}
-                    step={0.01}
-                    onChange={(stagger) => change({ stagger })}
-                  />
-                )}
-                {(text.kind === "wave" ||
-                  text.kind === "neon" ||
-                  (text.kind === "stagger" && text.style === "rise")) && (
-                  <NumberField
-                    label={text.kind === "neon" ? "Glow size" : "Height (em)"}
-                    value={text.distance}
-                    min={0}
-                    max={3}
-                    step={0.05}
-                    onChange={(distance) => change({ distance })}
-                  />
-                )}
-                {["scramble", "wave", "gradient", "neon"].includes(
-                  text.kind,
-                ) && (
-                  <NumberField
-                    label="Speed"
-                    value={text.speed}
-                    min={0}
-                    max={10}
-                    step={0.1}
-                    onChange={(speed) => change({ speed })}
-                  />
-                )}
-                {text.kind === "scramble" && (
-                  <NumberField
-                    label="Scramble seed"
-                    value={text.seed}
-                    min={0}
-                    max={65535}
-                    step={1}
-                    onChange={(seed) => change({ seed: Math.round(seed) })}
-                  />
-                )}
-                {text.kind === "typewriter" && (
-                  <label className="settings-checkbox">
-                    <input
-                      type="checkbox"
-                      checked={text.cursor}
-                      onChange={(event) =>
-                        change({ cursor: event.target.checked })
-                      }
-                    />
-                    Show cursor
-                  </label>
-                )}
-                {colored && (
-                  <>
-                    <label>
-                      Primary color
-                      <input
-                        type="color"
-                        value={text.color}
-                        onChange={(event) =>
-                          change({ color: event.target.value })
-                        }
-                      />
-                    </label>
-                    <label>
-                      Secondary color
-                      <input
-                        type="color"
-                        value={text.secondary}
-                        onChange={(event) =>
-                          change({ secondary: event.target.value })
-                        }
-                      />
-                    </label>
-                  </>
-                )}
-              </div>
-            </section>
-          );
-        })()}
-      {!!editingEffect.channels.length && (
-        <section className="effect-settings-section">
-          <h3>Animation</h3>
-          {editingEffect.channels.map((c, i) => (
-            <div className="channel" key={i}>
-              <div className="section-line">
-                <span>{c.property.toUpperCase()}</span>
-                <Dropdown
-                  label="Curve"
-                  value={c.curve}
-                  onChange={(value) =>
-                    updateEffect({
-                      channels: editingEffect.channels.map((v, j) =>
-                        j === i
-                          ? {
-                              ...v,
-                              curve: value as typeof c.curve,
-                            }
-                          : v,
-                      ),
-                    })
-                  }
-                  options={[
-                    "linear",
-                    "ease",
-                    "ease-out",
-                    "sine",
-                    "pulse",
-                    "shake",
-                    "steps",
-                  ].map((c) => ({
-                    value: c,
-                    label: c,
-                  }))}
-                />
-              </div>
-              <div className="field-row">
-                {(["from", "to"] as const).map((key) => (
-                  <NumberField
-                    key={key}
-                    label={key}
-                    value={c[key]}
-                    min={-2000}
-                    max={2000}
-                    step={0.1}
-                    onChange={(n) =>
-                      updateEffect({
-                        channels: editingEffect.channels.map((v, j) =>
-                          j === i ? { ...v, [key]: n } : v,
-                        ),
-                      })
-                    }
-                  />
-                ))}
-              </div>
-              {["sine", "pulse", "shake", "steps"].includes(c.curve) && (
-                <NumberField
-                  label={c.curve === "steps" ? "Steps" : "Frequency (Hz)"}
-                  value={c.frequency}
-                  min={0}
-                  max={20}
-                  step={0.1}
-                  onChange={(n) =>
-                    updateEffect({
-                      channels: editingEffect.channels.map((v, j) =>
-                        j === i ? { ...v, frequency: n } : v,
-                      ),
-                    })
-                  }
-                />
-              )}
-            </div>
-          ))}
-        </section>
-      )}
-      {!!editingEffect.passes?.length && (
-        <section className="effect-settings-section">
-          <h3>Visual effects</h3>
-          {editingEffect.passes?.map((pass, index) => {
-            const change = (patch: Partial<VisualPass>) =>
-              updateEffect({
-                passes: editingEffect.passes!.map((p, i) =>
-                  i === index ? { ...p, ...patch } : p,
-                ),
-              });
-            const hasColor = ![
-              "blinds",
-              "bloom",
-              "grain",
-              "scanlines",
-              "chromatic",
-              "distortion",
-              "iris",
-              "shatter",
-              "echo",
-              "palette",
-              "smear",
-              "repeat",
-            ].includes(pass.kind);
-            const numeric = [
-              {
-                key: "strength" as const,
-                label: "Strength",
-                min: 0,
-                max: 1,
-                step: 0.01,
-              },
-              ...((![
-                "silhouette",
-                "duotone",
-                "flash",
-                "palette",
-                "blinds",
-              ].includes(pass.kind) &&
-                !(pass.kind === "repeat" && pass.repeatMode === "grid")) ||
-              (pass.kind === "silhouette" && pass.silhouetteStyle === "outline")
-                ? [
-                    {
-                      key: "size" as const,
-                      label:
-                        pass.kind === "smear"
-                          ? "Spread"
-                          : pass.kind === "rings"
-                            ? "Radius"
-                            : "Size",
-                      min: 0,
-                      max: 1,
-                      step: 0.01,
-                    },
-                  ]
-                : []),
-              ...([
-                "spotlight",
-                "flare",
-                "grain",
-                "scanlines",
-                "hatch",
-                "chromatic",
-                "distortion",
-                "hexagons",
-                "particles",
-                "echo",
-                "palette",
-                "rings",
-              ].includes(pass.kind) ||
-              (pass.kind === "repeat" && pass.repeatMode === "kaleidoscope") ||
-              pass.timing === "pulse"
-                ? [
-                    {
-                      key: "speed" as const,
-                      label: "Speed",
-                      min: 0,
-                      max: 10,
-                      step: 0.1,
-                    },
-                  ]
-                : []),
-              ...(["hatch", "flare", "echo", "palette", "rings"].includes(
-                pass.kind,
-              ) ||
-              (pass.kind === "smear" && pass.smearMode !== "zoom") ||
-              (pass.kind === "repeat" && pass.repeatMode === "kaleidoscope")
-                ? [
-                    {
-                      key: "angle" as const,
-                      label: "Angle",
-                      min: -180,
-                      max: 180,
-                      step: 1,
-                    },
-                  ]
-                : []),
-              ...([
-                "grain",
-                "distortion",
-                "hexagons",
-                "particles",
-                "shatter",
-              ].includes(pass.kind)
-                ? [
-                    {
-                      key: "seed" as const,
-                      label: "Pattern seed",
-                      min: 0,
-                      max: 65535,
-                      step: 1,
-                    },
-                  ]
-                : []),
-            ];
-            return (
-              <div className="channel" key={index}>
-                <div className="section-line">
-                  <span>{visualNames[pass.kind]}</span>
-                </div>
-                <div className="visual-pass-fields">
-                  {(
-                    [
-                      {
-                        kind: "blinds",
-                        key: "blindsDirection",
-                        label: "Strip direction",
-                        fallback: "horizontal",
-                        options: [
-                          ["horizontal", "Horizontal"],
-                          ["vertical", "Vertical"],
-                        ],
-                      },
-                      {
-                        kind: "silhouette",
-                        key: "silhouetteStyle",
-                        label: "Cutout style",
-                        fallback: "fill",
-                        options: [
-                          ["fill", "Filled silhouette"],
-                          ["outline", "Outline only"],
-                        ],
-                      },
-                      {
-                        kind: "palette",
-                        key: "paletteMode",
-                        label: "Color mapping",
-                        fallback: "negative",
-                        options: [
-                          ["negative", "Negative"],
-                          ["solarize", "Solarize"],
-                          ["posterize", "Posterize"],
-                        ],
-                      },
-                      {
-                        kind: "smear",
-                        key: "smearMode",
-                        label: "Smear geometry",
-                        fallback: "zoom",
-                        options: [
-                          ["zoom", "Zoom"],
-                          ["spin", "Spin"],
-                          ["directional", "Directional"],
-                        ],
-                      },
-                      {
-                        kind: "repeat",
-                        key: "repeatMode",
-                        label: "Repetition layout",
-                        fallback: "mirror",
-                        options: [
-                          ["grid", "Grid"],
-                          ["mirror", "Mirror"],
-                          ["kaleidoscope", "Kaleidoscope"],
-                          ["tunnel", "Nested frames"],
-                        ],
-                      },
-                      {
-                        kind: "distortion",
-                        key: "distortionMode",
-                        label: "Distortion pattern",
-                        fallback: "bands",
-                        options: [
-                          ["bands", "Horizontal bands"],
-                          ["blocks", "Digital blocks"],
-                          ["wave", "Wave"],
-                        ],
-                      },
-                      {
-                        kind: "hatch",
-                        key: "screenPattern",
-                        label: "Print pattern",
-                        fallback: "lines",
-                        options: [
-                          ["lines", "Lines"],
-                          ["dots", "Dots"],
-                        ],
-                      },
-                      {
-                        kind: "particles",
-                        key: "particleStyle",
-                        label: "Particle style",
-                        fallback: "paper",
-                        options: [
-                          ["paper", "Drifting paper"],
-                          ["burst", "Radial bursts"],
-                        ],
-                      },
-                    ] as const
-                  )
-                    .filter((control) => control.kind === pass.kind)
-                    .map((control) => (
-                      <label key={control.key}>
-                        {control.label}
-                        <Dropdown
-                          label={control.label}
-                          value={pass[control.key] ?? control.fallback}
-                          options={control.options.map(([value, label]) => ({
-                            value,
-                            label,
-                          }))}
-                          onChange={(value) => change({ [control.key]: value })}
-                        />
-                      </label>
-                    ))}
-                  {(pass.kind === "blinds" ||
-                    pass.kind === "rings" ||
-                    (pass.kind === "repeat" && pass.repeatMode !== "mirror") ||
-                    (pass.kind === "particles" &&
-                      pass.particleStyle === "burst")) && (
-                    <NumberField
-                      label="Count"
-                      value={
-                        pass.count ??
-                        (pass.kind === "blinds"
-                          ? 8
-                          : pass.kind === "repeat"
-                            ? 6
-                            : pass.kind === "rings"
-                              ? 4
-                              : 3)
-                      }
-                      min={2}
-                      max={12}
-                      step={1}
-                      onChange={(count) => change({ count: Math.round(count) })}
-                    />
-                  )}
-                  {pass.kind === "repeat" && (
-                    <small className="muted">
-                      Mirror uses two panels; size ≥ 0.5 adds vertical
-                      mirroring. Grid uses count for columns. Kaleidoscope uses
-                      an even count of at least four sectors. Size sets
-                      nested-frame spacing.
-                    </small>
-                  )}
-                  {pass.kind === "palette" &&
-                    pass.paletteMode === "posterize" && (
+      {!effectReadOnly && (
+        <>
+          {editingEffect.text &&
+            (() => {
+              const text = editingEffect.text;
+              const change = (patch: Partial<TextEffect>) =>
+                updateEffect({ text: { ...text, ...patch } });
+              const entrance = ["typewriter", "scramble", "stagger"].includes(
+                text.kind,
+              );
+              const motion = ["stagger", "wave"].includes(text.kind);
+              const colored = ["gradient", "neon"].includes(text.kind);
+              return (
+                <section className="effect-settings-section">
+                  <h3>{textEffectNames[text.kind]}</h3>
+                  <div className="visual-pass-fields">
+                    {entrance && (
                       <NumberField
-                        label="Color levels"
-                        value={2 + Math.round(pass.size * 10)}
-                        min={2}
-                        max={12}
-                        step={1}
-                        onChange={(levels) =>
-                          change({ size: (Math.round(levels) - 2) / 10 })
-                        }
+                        label="Duration (seconds)"
+                        value={text.seconds}
+                        min={0.05}
+                        max={30}
+                        step={0.05}
+                        onChange={(seconds) => change({ seconds })}
                       />
                     )}
-                  {pass.kind === "palette" && (
-                    <small className="muted">
-                      Angle shifts hue; speed cycles hue.
-                    </small>
-                  )}
-                  {numeric.map(({ key, ...field }) => (
-                    <NumberField
-                      key={key}
-                      {...field}
-                      value={pass[key]}
-                      onChange={(n) =>
-                        change({ [key]: key === "seed" ? Math.round(n) : n })
-                      }
-                    />
-                  ))}
-                  {hasColor && (
-                    <label>
-                      Color
-                      <input
-                        type="color"
-                        value={pass.color}
-                        onChange={(e) => change({ color: e.target.value })}
+                    {!["gradient", "neon"].includes(text.kind) && (
+                      <label>
+                        Animate by
+                        <Dropdown
+                          label="Text animation unit"
+                          value={text.unit}
+                          options={[
+                            { value: "character", label: "Character" },
+                            { value: "word", label: "Word" },
+                          ]}
+                          onChange={(unit) =>
+                            change({ unit: unit as TextEffect["unit"] })
+                          }
+                        />
+                      </label>
+                    )}
+                    {text.kind === "stagger" && (
+                      <label>
+                        Entrance style
+                        <Dropdown
+                          label="Text entrance style"
+                          value={text.style}
+                          options={[
+                            { value: "rise", label: "Rise" },
+                            { value: "flip", label: "3D flip" },
+                            { value: "pop", label: "Pop" },
+                          ]}
+                          onChange={(style) =>
+                            change({ style: style as TextEffect["style"] })
+                          }
+                        />
+                      </label>
+                    )}
+                    {motion && (
+                      <NumberField
+                        label={
+                          text.kind === "wave" ? "Wave spacing" : "Stagger"
+                        }
+                        value={text.stagger}
+                        min={0}
+                        max={0.95}
+                        step={0.01}
+                        onChange={(stagger) => change({ stagger })}
                       />
-                    </label>
-                  )}
-                  {(["duotone", "hexagons", "rings"].includes(pass.kind) ||
-                    (pass.kind === "particles" &&
-                      pass.particleStyle === "burst")) && (
-                    <label>
-                      Secondary color
-                      <input
-                        type="color"
-                        value={pass.secondary}
-                        onChange={(e) => change({ secondary: e.target.value })}
+                    )}
+                    {(text.kind === "wave" ||
+                      text.kind === "neon" ||
+                      (text.kind === "stagger" && text.style === "rise")) && (
+                      <NumberField
+                        label={
+                          text.kind === "neon" ? "Glow size" : "Height (em)"
+                        }
+                        value={text.distance}
+                        min={0}
+                        max={3}
+                        step={0.05}
+                        onChange={(distance) => change({ distance })}
                       />
-                    </label>
-                  )}
-                  <label>
-                    Timing
+                    )}
+                    {["scramble", "wave", "gradient", "neon"].includes(
+                      text.kind,
+                    ) && (
+                      <NumberField
+                        label="Speed"
+                        value={text.speed}
+                        min={0}
+                        max={10}
+                        step={0.1}
+                        onChange={(speed) => change({ speed })}
+                      />
+                    )}
+                    {text.kind === "scramble" && (
+                      <NumberField
+                        label="Scramble seed"
+                        value={text.seed}
+                        min={0}
+                        max={65535}
+                        step={1}
+                        onChange={(seed) => change({ seed: Math.round(seed) })}
+                      />
+                    )}
+                    {text.kind === "typewriter" && (
+                      <label className="settings-checkbox">
+                        <input
+                          type="checkbox"
+                          checked={text.cursor}
+                          onChange={(event) =>
+                            change({ cursor: event.target.checked })
+                          }
+                        />
+                        Show cursor
+                      </label>
+                    )}
+                    {colored && (
+                      <>
+                        <label>
+                          Primary color
+                          <input
+                            type="color"
+                            value={text.color}
+                            onChange={(event) =>
+                              change({ color: event.target.value })
+                            }
+                          />
+                        </label>
+                        <label>
+                          Secondary color
+                          <input
+                            type="color"
+                            value={text.secondary}
+                            onChange={(event) =>
+                              change({ secondary: event.target.value })
+                            }
+                          />
+                        </label>
+                      </>
+                    )}
+                  </div>
+                </section>
+              );
+            })()}
+          {!!editingEffect.channels.length && (
+            <section className="effect-settings-section">
+              <h3>Animation</h3>
+              {editingEffect.channels.map((c, i) => (
+                <div className="channel" key={i}>
+                  <div className="section-line">
+                    <span>{c.property.toUpperCase()}</span>
                     <Dropdown
-                      label={`${visualNames[pass.kind]} timing`}
-                      value={pass.timing}
-                      onChange={(timing) =>
-                        change({ timing: timing as VisualPass["timing"] })
+                      label="Curve"
+                      value={c.curve}
+                      onChange={(value) =>
+                        updateEffect({
+                          channels: editingEffect.channels.map((v, j) =>
+                            j === i
+                              ? {
+                                  ...v,
+                                  curve: value as typeof c.curve,
+                                }
+                              : v,
+                          ),
+                        })
                       }
                       options={[
-                        { value: "constant", label: "Throughout clip" },
-                        { value: "in", label: "At clip start" },
-                        { value: "out", label: "At clip end" },
-                        { value: "pulse", label: "Repeating pulse" },
-                      ]}
+                        "linear",
+                        "ease",
+                        "ease-out",
+                        "sine",
+                        "pulse",
+                        "shake",
+                        "steps",
+                      ].map((c) => ({
+                        value: c,
+                        label: c,
+                      }))}
                     />
-                  </label>
-                  {["in", "out"].includes(pass.timing) && (
+                  </div>
+                  <div className="field-row">
+                    {(["from", "to"] as const).map((key) => (
+                      <NumberField
+                        key={key}
+                        label={key}
+                        value={c[key]}
+                        min={-2000}
+                        max={2000}
+                        step={0.1}
+                        onChange={(n) =>
+                          updateEffect({
+                            channels: editingEffect.channels.map((v, j) =>
+                              j === i ? { ...v, [key]: n } : v,
+                            ),
+                          })
+                        }
+                      />
+                    ))}
+                  </div>
+                  {["sine", "pulse", "shake", "steps"].includes(c.curve) && (
                     <NumberField
-                      label="Transition (seconds)"
-                      value={pass.seconds}
-                      min={0.05}
-                      max={30}
-                      step={0.05}
-                      onChange={(seconds) => change({ seconds })}
+                      label={c.curve === "steps" ? "Steps" : "Frequency (Hz)"}
+                      value={c.frequency}
+                      min={0}
+                      max={20}
+                      step={0.1}
+                      onChange={(n) =>
+                        updateEffect({
+                          channels: editingEffect.channels.map((v, j) =>
+                            j === i ? { ...v, frequency: n } : v,
+                          ),
+                        })
+                      }
                     />
                   )}
                 </div>
-              </div>
-            );
-          })}
-        </section>
+              ))}
+            </section>
+          )}
+          {!!editingEffect.passes?.length && (
+            <section className="effect-settings-section">
+              <h3>Visual effects</h3>
+              {editingEffect.passes?.map((pass, index) => {
+                const change = (patch: Partial<VisualPass>) =>
+                  updateEffect({
+                    passes: editingEffect.passes!.map((p, i) =>
+                      i === index ? { ...p, ...patch } : p,
+                    ),
+                  });
+                const hasColor = ![
+                  "blinds",
+                  "bloom",
+                  "grain",
+                  "scanlines",
+                  "chromatic",
+                  "distortion",
+                  "iris",
+                  "shatter",
+                  "echo",
+                  "palette",
+                  "smear",
+                  "repeat",
+                ].includes(pass.kind);
+                const numeric = [
+                  {
+                    key: "strength" as const,
+                    label: "Strength",
+                    min: 0,
+                    max: 1,
+                    step: 0.01,
+                  },
+                  ...((![
+                    "silhouette",
+                    "duotone",
+                    "flash",
+                    "palette",
+                    "blinds",
+                  ].includes(pass.kind) &&
+                    !(pass.kind === "repeat" && pass.repeatMode === "grid")) ||
+                  (pass.kind === "silhouette" &&
+                    pass.silhouetteStyle === "outline")
+                    ? [
+                        {
+                          key: "size" as const,
+                          label:
+                            pass.kind === "smear"
+                              ? "Spread"
+                              : pass.kind === "rings"
+                                ? "Radius"
+                                : "Size",
+                          min: 0,
+                          max: 1,
+                          step: 0.01,
+                        },
+                      ]
+                    : []),
+                  ...([
+                    "spotlight",
+                    "flare",
+                    "grain",
+                    "scanlines",
+                    "hatch",
+                    "chromatic",
+                    "distortion",
+                    "hexagons",
+                    "particles",
+                    "echo",
+                    "palette",
+                    "rings",
+                  ].includes(pass.kind) ||
+                  (pass.kind === "repeat" &&
+                    pass.repeatMode === "kaleidoscope") ||
+                  pass.timing === "pulse"
+                    ? [
+                        {
+                          key: "speed" as const,
+                          label: "Speed",
+                          min: 0,
+                          max: 10,
+                          step: 0.1,
+                        },
+                      ]
+                    : []),
+                  ...(["hatch", "flare", "echo", "palette", "rings"].includes(
+                    pass.kind,
+                  ) ||
+                  (pass.kind === "smear" && pass.smearMode !== "zoom") ||
+                  (pass.kind === "repeat" && pass.repeatMode === "kaleidoscope")
+                    ? [
+                        {
+                          key: "angle" as const,
+                          label: "Angle",
+                          min: -180,
+                          max: 180,
+                          step: 1,
+                        },
+                      ]
+                    : []),
+                  ...([
+                    "grain",
+                    "distortion",
+                    "hexagons",
+                    "particles",
+                    "shatter",
+                  ].includes(pass.kind)
+                    ? [
+                        {
+                          key: "seed" as const,
+                          label: "Pattern seed",
+                          min: 0,
+                          max: 65535,
+                          step: 1,
+                        },
+                      ]
+                    : []),
+                ];
+                return (
+                  <div className="channel" key={index}>
+                    <div className="section-line">
+                      <span>{visualNames[pass.kind]}</span>
+                    </div>
+                    <div className="visual-pass-fields">
+                      {(
+                        [
+                          {
+                            kind: "blinds",
+                            key: "blindsDirection",
+                            label: "Strip direction",
+                            fallback: "horizontal",
+                            options: [
+                              ["horizontal", "Horizontal"],
+                              ["vertical", "Vertical"],
+                            ],
+                          },
+                          {
+                            kind: "silhouette",
+                            key: "silhouetteStyle",
+                            label: "Cutout style",
+                            fallback: "fill",
+                            options: [
+                              ["fill", "Filled silhouette"],
+                              ["outline", "Outline only"],
+                            ],
+                          },
+                          {
+                            kind: "palette",
+                            key: "paletteMode",
+                            label: "Color mapping",
+                            fallback: "negative",
+                            options: [
+                              ["negative", "Negative"],
+                              ["solarize", "Solarize"],
+                              ["posterize", "Posterize"],
+                            ],
+                          },
+                          {
+                            kind: "smear",
+                            key: "smearMode",
+                            label: "Smear geometry",
+                            fallback: "zoom",
+                            options: [
+                              ["zoom", "Zoom"],
+                              ["spin", "Spin"],
+                              ["directional", "Directional"],
+                            ],
+                          },
+                          {
+                            kind: "repeat",
+                            key: "repeatMode",
+                            label: "Repetition layout",
+                            fallback: "mirror",
+                            options: [
+                              ["grid", "Grid"],
+                              ["mirror", "Mirror"],
+                              ["kaleidoscope", "Kaleidoscope"],
+                              ["tunnel", "Nested frames"],
+                            ],
+                          },
+                          {
+                            kind: "distortion",
+                            key: "distortionMode",
+                            label: "Distortion pattern",
+                            fallback: "bands",
+                            options: [
+                              ["bands", "Horizontal bands"],
+                              ["blocks", "Digital blocks"],
+                              ["wave", "Wave"],
+                            ],
+                          },
+                          {
+                            kind: "hatch",
+                            key: "screenPattern",
+                            label: "Print pattern",
+                            fallback: "lines",
+                            options: [
+                              ["lines", "Lines"],
+                              ["dots", "Dots"],
+                            ],
+                          },
+                          {
+                            kind: "particles",
+                            key: "particleStyle",
+                            label: "Particle style",
+                            fallback: "paper",
+                            options: [
+                              ["paper", "Drifting paper"],
+                              ["burst", "Radial bursts"],
+                            ],
+                          },
+                        ] as const
+                      )
+                        .filter((control) => control.kind === pass.kind)
+                        .map((control) => (
+                          <label key={control.key}>
+                            {control.label}
+                            <Dropdown
+                              label={control.label}
+                              value={pass[control.key] ?? control.fallback}
+                              options={control.options.map(
+                                ([value, label]) => ({
+                                  value,
+                                  label,
+                                }),
+                              )}
+                              onChange={(value) =>
+                                change({ [control.key]: value })
+                              }
+                            />
+                          </label>
+                        ))}
+                      {(pass.kind === "blinds" ||
+                        pass.kind === "rings" ||
+                        (pass.kind === "repeat" &&
+                          pass.repeatMode !== "mirror") ||
+                        (pass.kind === "particles" &&
+                          pass.particleStyle === "burst")) && (
+                        <NumberField
+                          label="Count"
+                          value={
+                            pass.count ??
+                            (pass.kind === "blinds"
+                              ? 8
+                              : pass.kind === "repeat"
+                                ? 6
+                                : pass.kind === "rings"
+                                  ? 4
+                                  : 3)
+                          }
+                          min={2}
+                          max={12}
+                          step={1}
+                          onChange={(count) =>
+                            change({ count: Math.round(count) })
+                          }
+                        />
+                      )}
+                      {pass.kind === "repeat" && (
+                        <small className="muted">
+                          Mirror uses two panels; size ≥ 0.5 adds vertical
+                          mirroring. Grid uses count for columns. Kaleidoscope
+                          uses an even count of at least four sectors. Size sets
+                          nested-frame spacing.
+                        </small>
+                      )}
+                      {pass.kind === "palette" &&
+                        pass.paletteMode === "posterize" && (
+                          <NumberField
+                            label="Color levels"
+                            value={2 + Math.round(pass.size * 10)}
+                            min={2}
+                            max={12}
+                            step={1}
+                            onChange={(levels) =>
+                              change({ size: (Math.round(levels) - 2) / 10 })
+                            }
+                          />
+                        )}
+                      {pass.kind === "palette" && (
+                        <small className="muted">
+                          Angle shifts hue; speed cycles hue.
+                        </small>
+                      )}
+                      {numeric.map(({ key, ...field }) => (
+                        <NumberField
+                          key={key}
+                          {...field}
+                          value={pass[key]}
+                          onChange={(n) =>
+                            change({
+                              [key]: key === "seed" ? Math.round(n) : n,
+                            })
+                          }
+                        />
+                      ))}
+                      {hasColor && (
+                        <label>
+                          Color
+                          <input
+                            type="color"
+                            value={pass.color}
+                            onChange={(e) => change({ color: e.target.value })}
+                          />
+                        </label>
+                      )}
+                      {(["duotone", "hexagons", "rings"].includes(pass.kind) ||
+                        (pass.kind === "particles" &&
+                          pass.particleStyle === "burst")) && (
+                        <label>
+                          Secondary color
+                          <input
+                            type="color"
+                            value={pass.secondary}
+                            onChange={(e) =>
+                              change({ secondary: e.target.value })
+                            }
+                          />
+                        </label>
+                      )}
+                      <label>
+                        Timing
+                        <Dropdown
+                          label={`${visualNames[pass.kind]} timing`}
+                          value={pass.timing}
+                          onChange={(timing) =>
+                            change({ timing: timing as VisualPass["timing"] })
+                          }
+                          options={[
+                            { value: "constant", label: "Throughout clip" },
+                            { value: "in", label: "At clip start" },
+                            { value: "out", label: "At clip end" },
+                            { value: "pulse", label: "Repeating pulse" },
+                          ]}
+                        />
+                      </label>
+                      {["in", "out"].includes(pass.timing) && (
+                        <NumberField
+                          label="Transition (seconds)"
+                          value={pass.seconds}
+                          min={0.05}
+                          max={30}
+                          step={0.05}
+                          onChange={(seconds) => change({ seconds })}
+                        />
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </section>
+          )}
+          <section className="effect-settings-section">
+            <h3>Color tint</h3>
+            <div className="field-row">
+              <label>
+                Tint color
+                <input
+                  type="color"
+                  value={editingEffect.color}
+                  onChange={(e) => updateEffect({ color: e.target.value })}
+                />
+              </label>
+              <NumberField
+                label="Tint amount"
+                value={editingEffect.tint}
+                min={0}
+                max={1}
+                step={0.01}
+                onChange={(n) => updateEffect({ tint: n })}
+              />
+            </div>
+          </section>
+        </>
       )}
-      <section className="effect-settings-section">
-        <h3>Color tint</h3>
-        <div className="field-row">
-          <label>
-            Tint color
-            <input
-              type="color"
-              value={editingEffect.color}
-              onChange={(e) => updateEffect({ color: e.target.value })}
-            />
-          </label>
-          <NumberField
-            label="Tint amount"
-            value={editingEffect.tint}
-            min={0}
-            max={1}
-            step={0.01}
-            onChange={(n) => updateEffect({ tint: n })}
-          />
-        </div>
-      </section>
-      <section className="effect-settings-section effect-sharing">
-        <h3>Reuse &amp; share</h3>
-        <div className="effect-sharing-actions">
-          <button
-            type="button"
-            data-effect-draft-action
-            disabled={effectSharingBusy}
-            onClick={() => void saveReusableEffect()}
-          >
-            {effectSharingBusy ? "Saving…" : "Save to My effects"}
-          </button>
-          <button
-            type="button"
-            data-effect-draft-action
-            disabled={effectSharingBusy}
-            onClick={() => downloadEffect(editingEffect)}
-          >
-            Export effect bundle
-          </button>
-        </div>
-        {effectSharingStatus && (
-          <p role="status" className="muted">
-            {effectSharingStatus}
-          </p>
-        )}
-      </section>
     </div>
   );
   return (
@@ -1985,6 +1986,23 @@ export function App() {
           error={effectError}
           onClose={closeEffectSettings}
           onSave={saveEffectSettings}
+          mode={
+            effectReadOnly
+              ? "library"
+              : effectElementId
+                ? "instance"
+                : "personal"
+          }
+          status={effectSharingStatus}
+          onNameChange={
+            editingMyEffect ? (name) => updateEffect({ name }) : undefined
+          }
+          onFork={
+            !effectElementId ? () => void saveReusableEffect() : undefined
+          }
+          onDelete={
+            editingMyEffect ? () => void deleteReusableEffect() : undefined
+          }
         >
           {effectControls}
         </EffectSettingsDialog>
@@ -2206,7 +2224,7 @@ export function App() {
           ) : (
             <>
               <div className="section-line">
-                <span>LOCAL EFFECT LIBRARY</span>
+                <span>EFFECT LIBRARY</span>
                 <span>{libraryEffects.length}</span>
               </div>
               <div className="effect-library-actions">
@@ -2803,14 +2821,15 @@ export function App() {
                           <div>
                             <button
                               aria-haspopup="dialog"
-                              title="Edit effect definition"
-                              onClick={() => editEffect(instance.effectId)}
+                              title="Edit effect settings"
+                              onClick={() =>
+                                editEffect(instance.effectId, selected.id)
+                              }
                             >
                               <Sparkles size={13} />
                               {
-                                project.effects.find(
-                                  (e) => e.id === instance.effectId,
-                                )?.name
+                                resolveEffectInstance(instance, project.effects)
+                                  ?.name
                               }
                             </button>
                             <button
@@ -3008,6 +3027,7 @@ function TextField({
   }, [value]);
   const props = {
     value: draft,
+    "aria-label": label,
     maxLength,
     required,
     "aria-invalid": !!error,

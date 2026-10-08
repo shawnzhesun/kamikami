@@ -1,6 +1,6 @@
 import { FontText } from "./FontText";
 import { GraphicEffects } from "./GraphicEffects";
-import { orderedElements } from "./model";
+import { orderedElements, resolveEffectInstance } from "./model";
 import React from "react";
 import {
   AbsoluteFill,
@@ -218,7 +218,7 @@ function VisualLayer({
           layer.effects
             .filter((i) => i.enabled)
             .map((i) => {
-              const e = project.effects.find((e) => e.id === i.effectId);
+              const e = resolveEffectInstance(i, project.effects);
               return e && e.tint > 0 ? (
                 <AbsoluteFill
                   key={i.effectId}

@@ -819,10 +819,17 @@ export function effectVariationPatch(
   effect: Effect,
   variationId: string,
 ): EffectParameters | undefined {
-  const variation = getEffectFamily(effect.id)?.variations.find(
-    (v) => v.id === variationId,
-  );
-  return variation ? structuredClone(variation.parameters) : undefined;
+  const variation = getEffectFamily(
+    effect.presetFamilyId ?? effect.id,
+  )?.variations.find((v) => v.id === variationId);
+  return variation
+    ? structuredClone({
+        ...variation.parameters,
+        ...(effect.text && !variation.parameters.text
+          ? { text: undefined }
+          : {}),
+      })
+    : undefined;
 }
 
 export function builtinEffectCategory(id: string) {

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { clamp01, effectRandom, smooth } from "./visual-effects";
+import { resolveEffectInstance } from "./effect-instance";
 import type { Effect, Layer } from "./model";
 
 export const textEffectKinds = [
@@ -71,7 +72,7 @@ export function activeTextEffects(
 ): ActiveTextEffect[] {
   if (layer.type !== "title") return [];
   return layer.effects.flatMap((instance) => {
-    const effect = effects.find((item) => item.id === instance.effectId)?.text;
+    const effect = resolveEffectInstance(instance, effects)?.text;
     return effect && instance.enabled && instance.amount > 0
       ? [{ effect, amount: clamp01(instance.amount) }]
       : [];

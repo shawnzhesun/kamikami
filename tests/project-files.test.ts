@@ -307,7 +307,7 @@ test("frontend validates an opened JSON before accepting its target and handles 
     },
     save: async (json: string) => {
       saves++;
-      assert.equal(JSON.parse(json).version, 1);
+      assert.equal(JSON.parse(json).version, 2);
       return cancel ? null : { name: "opened.json" };
     },
   };

@@ -208,6 +208,22 @@ try {
     patch: { description: "Verified authoring" },
   });
   await edit("apply_effect", { effectId: effect.id, layerIds: [imageId] });
+  await edit("update_effect_instance", {
+    layerId: imageId,
+    effectId: effect.id,
+    patch: { name: "QA local fade" },
+  });
+  assert.equal(
+    last!.project.layers
+      .find((layer) => layer.id === imageId)!
+      .effects.find((instance) => instance.effectId === effect.id)!.settings!
+      .name,
+    "QA local fade",
+  );
+  assert.equal(
+    last!.project.effects.find((item) => item.id === effect.id)!.name,
+    effect.name,
+  );
   const r0 = await raw("render_frame", {
     frame: 0,
     expectedRevision: last!.revision,

@@ -1,11 +1,12 @@
 import { z } from "zod";
 import {
   EffectSchema,
+  effectSettings,
   validateProject,
   type Effect,
   type Project,
 } from "./model";
-import { builtinEffects } from "./builtin-effects";
+import { builtinEffects, allBuiltinEffects } from "./builtin-effects";
 export function effectEngine(effect: Effect) {
   if (
     effect.text ||
@@ -93,12 +94,35 @@ export type UserEffect = {
   bundle: EffectBundle;
 };
 
-export function effectCollections(project: Project, entries: UserEffect[]) {
+export function libraryEffect(
+  id: string,
+  entries: UserEffect[],
+): Effect | undefined {
+  return (
+    allBuiltinEffects.find((effect) => effect.id === id) ??
+    entries.find(
+      (entry) =>
+        entry.collection === "library" && entry.bundle.effect.id === id,
+    )?.bundle.effect
+  );
+}
+
+export function effectForApplication(
+  project: Project,
+  entries: UserEffect[],
+  id: string,
+): Effect | undefined {
+  return (
+    libraryEffect(id, entries) ??
+    project.effects.find((effect) => effect.id === id) ??
+    entries.find((entry) => entry.bundle.effect.id === id)?.bundle.effect
+  );
+}
+
+export function effectCollections(_project: Project, entries: UserEffect[]) {
   const mine = entries.filter((e) => e.collection !== "library");
   const library = [
-    ...builtinEffects.map(
-      (effect) => project.effects.find((e) => e.id === effect.id) ?? effect,
-    ),
+    ...builtinEffects,
     ...entries
       .filter((e) => e.collection === "library")
       .map((e) => e.bundle.effect),
@@ -110,6 +134,7 @@ export function applyEffectToLayers(
   effect: Effect,
   layerIds: string[],
 ) {
+  project = validateProject(project);
   if (
     !layerIds.length ||
     layerIds.some((id) => !project.layers.some((l) => l.id === id))
@@ -125,14 +150,8 @@ export function applyEffectToLayers(
   )
     throw new Error("Text effects can only be applied to text elements.");
   const existing = project.effects.find((e) => e.id === effect.id);
-  if (
-    existing &&
-    JSON.stringify(EffectSchema.parse(existing)) !==
-      JSON.stringify(EffectSchema.parse(effect))
-  )
-    throw new Error(
-      "Effect ID conflicts with an existing definition. Import it with a new ID.",
-    );
+  // The catalog recipe can differ from a historical project definition.
+  // New instances use the supplied recipe; existing snapshots stay untouched.
   return validateProject({
     ...project,
     effects: existing ? project.effects : [...project.effects, effect],
@@ -144,7 +163,12 @@ export function applyEffectToLayers(
               ? l.effects
               : [
                   ...l.effects,
-                  { effectId: effect.id, amount: 1, enabled: true },
+                  {
+                    effectId: effect.id,
+                    amount: 1,
+                    enabled: true,
+                    settings: effectSettings(effect),
+                  },
                 ],
           }
         : l,
