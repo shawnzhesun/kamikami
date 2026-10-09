@@ -188,6 +188,7 @@ function VisualLayer({
         alignItems: "center",
         transform: `translate(${v.x}px,${v.y}px) scale(${v.scale}) rotate(${v.rotation}deg) perspective(${v.perspective}px) rotateX(${v.rotateX}deg) rotateY(${v.rotateY}deg) scale(${v.scaleX},${v.scaleY}) skewX(${v.skewX}deg)`,
         opacity: v.opacity,
+        transformOrigin: `${50 + v.originX * 50}% ${50 + v.originY * 50}%`,
         filter: `blur(${v.blur}px) brightness(${v.brightness}) contrast(${v.contrast}) saturate(${v.saturation})`,
       }}
     >

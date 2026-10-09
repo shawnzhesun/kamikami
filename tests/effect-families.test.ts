@@ -10,6 +10,8 @@ import {
   motionEffects,
   builtinEffects,
   styleEffects,
+  titleEffects,
+  packEffects,
   legacyBuiltinEffects,
   effectFamilies,
   getEffectFamily,
@@ -40,7 +42,9 @@ test("gallery retains the consolidation and appends only the new video operation
       videoPlaybackEffects.length +
       remotionSceneEffects.length +
       motionEffects.length +
-      styleEffects.length,
+      styleEffects.length +
+      titleEffects.length +
+      packEffects.length,
   );
   assert.equal(
     new Set(allBuiltinEffects.map((e) => e.id)).size,

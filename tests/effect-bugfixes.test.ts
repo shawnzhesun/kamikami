@@ -99,8 +99,8 @@ test("depth tilt X is clamped like tilt Y", () => {
     [depth],
     0,
   );
-  assert.equal(v.rotateX, 80);
-  assert.equal(v.rotateY, 80);
+  assert.equal(v.rotateX, 90);
+  assert.equal(v.rotateY, 90);
 });
 
 test("every family's untouched card matches a named variation", () => {

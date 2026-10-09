@@ -8,8 +8,14 @@ import {
   type Project,
 } from "./model";
 import { builtinEffects, allBuiltinEffects } from "./builtin-effects";
-import { usesV6Features } from "./visual-effects";
+import {
+  effectEngines,
+  engineAtLeast,
+  usesV6Features,
+  usesV7Features,
+} from "./visual-effects";
 export function effectEngine(effect: Effect) {
+  if (usesV7Features(effect)) return "kamikami-visual-v7" as const;
   if (usesV6Features(effect)) return "kamikami-visual-v6" as const;
   if (usesSpatialMotion(effect)) return "kamikami-visual-v5" as const;
   if (
@@ -57,14 +63,7 @@ export const EffectBundleSchema = z
   .object({
     format: z.literal("frameforge-effect"),
     version: z.literal(1),
-    engine: z.enum([
-      "frameforge-curves-v1",
-      "kamikami-visual-v2",
-      "kamikami-visual-v3",
-      "kamikami-visual-v4",
-      "kamikami-visual-v5",
-      "kamikami-visual-v6",
-    ]),
+    engine: z.enum(effectEngines),
     name: z.string().min(1).max(80),
     author: z.string().max(100).default(""),
     license: z.string().max(200).default("Free to use and share"),
@@ -74,25 +73,11 @@ export const EffectBundleSchema = z
   .strict()
   .refine(
     (bundle) =>
-      [
-        "frameforge-curves-v1",
-        "kamikami-visual-v2",
-        "kamikami-visual-v3",
-        "kamikami-visual-v4",
-        "kamikami-visual-v5",
-        "kamikami-visual-v6",
-      ].indexOf(bundle.engine) >=
-      [
-        "frameforge-curves-v1",
-        "kamikami-visual-v2",
-        "kamikami-visual-v3",
-        "kamikami-visual-v4",
-        "kamikami-visual-v5",
-        "kamikami-visual-v6",
-      ].indexOf(effectEngine(bundle.effect)),
+      effectEngines.indexOf(bundle.engine) >=
+      effectEngines.indexOf(effectEngine(bundle.effect)),
     {
       message:
-        "Effect parameters require a newer engine: visual passes use kamikami-visual-v2; remap, repetition, smear and pattern modes use kamikami-visual-v3; text animation and blinds require kamikami-visual-v4; spatial motion and text glitches require kamikami-visual-v5; spring curves, stretch/skew/tilt channels and the illustration, 3D-look and organic passes require kamikami-visual-v6.",
+        "Effect parameters require a newer engine: visual passes use kamikami-visual-v2; remap, repetition, smear and pattern modes use kamikami-visual-v3; text animation and blinds require kamikami-visual-v4; spatial motion and text glitches require kamikami-visual-v5; spring curves, stretch/skew/tilt channels and the illustration, 3D-look and organic passes require kamikami-visual-v6; title-pack text kinds require kamikami-visual-v7.",
       path: ["engine"],
     },
   );
@@ -103,7 +88,7 @@ export type EffectBundle = z.infer<typeof EffectBundleSchema>;
  */
 export function portableBundle(bundle: EffectBundle): EffectBundle {
   if (
-    ["kamikami-visual-v5", "kamikami-visual-v6"].includes(bundle.engine) ||
+    engineAtLeast(bundle.engine, "kamikami-visual-v5") ||
     !bundle.effect.presetFamilyId
   )
     return bundle;

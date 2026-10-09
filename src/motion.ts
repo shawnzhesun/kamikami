@@ -260,3 +260,27 @@ export function usesSpatialMotion(value: unknown): boolean {
     !!effect.passes?.some((pass) => !!pass.field || !!pass.particles)
   );
 }
+
+/** Bounces with geometrically shrinking heights; `count` impacts, ending at rest. */
+export function bounceOut(u: number, count = 3) {
+  if (u >= 1) return 1;
+  // Durations shrink by half per bounce; the first segment is the fall.
+  // Height ratio 1/4 per bounce gives each bounce half the previous airtime.
+  const segments = [
+    1,
+    ...Array.from({ length: count }, (_, i) => 2 * Math.pow(0.5, i + 1)),
+  ];
+  const total = segments.reduce((a, b) => a + b, 0);
+  let x = u * total;
+  for (let i = 0; i < segments.length; i++) {
+    const d = segments[i];
+    if (x <= d || i === segments.length - 1) {
+      if (i === 0) return (x / d) ** 2;
+      const height = Math.pow(0.25, i);
+      const p = Math.min(1, x / d) * 2 - 1;
+      return 1 - height * (1 - p * p);
+    }
+    x -= d;
+  }
+  return 1;
+}

@@ -8,7 +8,8 @@ import {
   resolveFont,
 } from "./font-assets";
 import { z } from "zod";
-import { DepthSchema, depthFrame } from "./motion";
+import { DepthSchema, bounceOut, depthFrame } from "./motion";
+export { bounceOut } from "./motion";
 import { TextEffectSchema, builtinTextSettings } from "./text-effects";
 import { VisualPassSchema, effectRandom } from "./visual-effects";
 import {
@@ -77,6 +78,11 @@ export const EffectSchema = z.object({
   tint: z.number().min(0).max(1),
   passes: z.array(VisualPassSchema).max(6).optional(),
   text: TextEffectSchema.optional(),
+  /** Transform pivot in canvas units (−1 left/top … 1 right/bottom), for hinged 3D moves. */
+  origin: z
+    .object({ x: z.number().min(-1).max(1), y: z.number().min(-1).max(1) })
+    .strict()
+    .optional(),
 });
 // Complete snapshots avoid implicit inheritance when a preset changes later.
 export const EffectSettingsSchema = EffectSchema.omit({ id: true }).strict();
@@ -347,29 +353,6 @@ export function orderedElements(project: Project): Layer[] {
       (order.get(elementTrackId(a)) ?? 0) - (order.get(elementTrackId(b)) ?? 0),
   );
 }
-/** Bounces with geometrically shrinking heights; `count` impacts, ending at rest. */
-export function bounceOut(u: number, count = 3) {
-  if (u >= 1) return 1;
-  // Durations shrink by half per bounce; the first segment is the fall.
-  // Height ratio 1/4 per bounce gives each bounce half the previous airtime.
-  const segments = [
-    1,
-    ...Array.from({ length: count }, (_, i) => 2 * Math.pow(0.5, i + 1)),
-  ];
-  const total = segments.reduce((a, b) => a + b, 0);
-  let x = u * total;
-  for (let i = 0; i < segments.length; i++) {
-    const d = segments[i];
-    if (x <= d || i === segments.length - 1) {
-      if (i === 0) return (x / d) ** 2;
-      const height = Math.pow(0.25, i);
-      const p = Math.min(1, x / d) * 2 - 1;
-      return 1 - height * (1 - p * p);
-    }
-    x -= d;
-  }
-  return 1;
-}
 export function channelValue(c: Channel, t: number, duration: number) {
   if (c.seconds !== undefined) {
     const span = Math.min(c.seconds, Math.max(duration, 0.001));
@@ -441,11 +424,17 @@ export function layerAtTime(layer: Layer, effects: Effect[], t: number) {
     scaleX: 1,
     scaleY: 1,
     skewX: 0,
+    originX: 0,
+    originY: 0,
   };
   const time = animationTime(layer, t);
   for (const instance of layer.effects.filter((e) => e.enabled)) {
     const definition = resolveEffectInstanceAt(instance, effects, time);
     const amount = instanceAmountAt(instance, time);
+    if (definition?.origin && amount > 0) {
+      v.originX = definition.origin.x;
+      v.originY = definition.origin.y;
+    }
     if (definition?.depth && amount > 0) {
       const d = depthFrame(
         definition.depth,
@@ -489,8 +478,9 @@ export function layerAtTime(layer: Layer, effects: Effect[], t: number) {
   v.brightness = Math.max(0, Math.min(10, v.brightness));
   v.contrast = Math.max(0, Math.min(10, v.contrast));
   v.saturation = Math.max(0, Math.min(10, v.saturation));
-  v.rotateY = Math.max(-80, Math.min(80, v.rotateY));
-  v.rotateX = Math.max(-80, Math.min(80, v.rotateX));
+  // ±90° reaches edge-on (invisible) for page turns without showing a mirrored back.
+  v.rotateY = Math.max(-90, Math.min(90, v.rotateY));
+  v.rotateX = Math.max(-90, Math.min(90, v.rotateX));
   v.scaleX = Math.max(0.001, v.scaleX);
   v.scaleY = Math.max(0.001, v.scaleY);
   v.skewX = Math.max(-80, Math.min(80, v.skewX));

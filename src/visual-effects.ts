@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { FieldSchema, ParticleSchema } from "./motion";
+import { titleKinds } from "./title-effects";
 
 export const visualKinds = [
   "vignette",
@@ -37,6 +38,16 @@ export const visualKinds = [
   "goo",
   "glow",
   "lens",
+  "shape",
+  "doors",
+  "clock",
+  "feather",
+  "lumawipe",
+  "reflection",
+  "tiltshift",
+  "oldfilm",
+  "ripple",
+  "cells",
 ] as const;
 export const visualNames: Record<(typeof visualKinds)[number], string> = {
   vignette: "Vignette",
@@ -74,6 +85,16 @@ export const visualNames: Record<(typeof visualKinds)[number], string> = {
   goo: "Gooey morph",
   glow: "Energy edge",
   lens: "Lens bulge",
+  shape: "Shape iris",
+  doors: "Barn doors",
+  clock: "Clock wipe",
+  feather: "Feathered wipe",
+  lumawipe: "Luma wipe",
+  reflection: "Reflection",
+  tiltshift: "Tilt-shift",
+  oldfilm: "Old film",
+  ripple: "Ripple",
+  cells: "Cell reveal",
 };
 /** Kinds and mode fields added with kamikami-visual-v6. */
 export const v6Kinds: readonly string[] = [
@@ -114,6 +135,12 @@ export const VisualPassSchema = z.object({
   warpMode: z.enum(["boil", "liquid", "melt"]).optional(),
   sheenStyle: z.enum(["gloss", "foil"]).optional(),
   pixelMode: z.enum(["pixelate", "dither", "gameboy"]).optional(),
+  shapeMode: z.enum(["star", "heart", "flower", "diamond", "rect"]).optional(),
+  doorMode: z.enum(["horizontal", "vertical", "bowtie"]).optional(),
+  clockMode: z.enum(["clock", "pinwheel"]).optional(),
+  cellMode: z.enum(["squares", "random", "checker", "dots"]).optional(),
+  rippleMode: z.enum(["ripple", "shockwave", "drop"]).optional(),
+  lumaOrder: z.enum(["dark", "bright"]).optional(),
 });
 export type VisualPass = z.infer<typeof VisualPassSchema>;
 export const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
@@ -178,6 +205,63 @@ export function usesV6Features(value: unknown): boolean {
         v6Curves.includes(c.curve ?? "") ||
         c.seconds !== undefined ||
         c.align !== undefined,
+    )
+  );
+}
+
+/** Bundle engines in capability order; a reader accepts its own and older ones. */
+export const effectEngines = [
+  "frameforge-curves-v1",
+  "kamikami-visual-v2",
+  "kamikami-visual-v3",
+  "kamikami-visual-v4",
+  "kamikami-visual-v5",
+  "kamikami-visual-v6",
+  "kamikami-visual-v7",
+] as const;
+export type EffectEngine = (typeof effectEngines)[number];
+export const engineAtLeast = (engine: unknown, minimum: EffectEngine) =>
+  effectEngines.indexOf(engine as EffectEngine) >=
+  effectEngines.indexOf(minimum);
+const titleTextKinds: readonly string[] = titleKinds;
+const v7Kinds = [
+  "shape",
+  "doors",
+  "clock",
+  "feather",
+  "lumawipe",
+  "reflection",
+  "tiltshift",
+  "oldfilm",
+  "ripple",
+  "cells",
+];
+/** Title-pack text kinds and their direction/variant fields need kamikami-visual-v7. */
+export function usesV7Features(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const effect = value as {
+    text?: Record<string, unknown>;
+    passes?: Record<string, unknown>[];
+    origin?: unknown;
+  };
+  const text = effect.text;
+  return (
+    (!!text &&
+      (titleTextKinds.includes(String(text.kind)) ||
+        text.direction !== undefined ||
+        text.variant !== undefined)) ||
+    effect.origin !== undefined ||
+    !!effect.passes?.some(
+      (p) =>
+        v7Kinds.includes(String(p.kind)) ||
+        [
+          "shapeMode",
+          "doorMode",
+          "clockMode",
+          "cellMode",
+          "rippleMode",
+          "lumaOrder",
+        ].some((key) => p[key] !== undefined),
     )
   );
 }

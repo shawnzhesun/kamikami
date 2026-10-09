@@ -1,4 +1,5 @@
 import { AnimatedText } from "../AnimatedText";
+import { isTitleKind } from "../title-effects";
 import React from "react";
 import { GraphicEffects } from "../GraphicEffects";
 import { layerAtTime, makeLayer, type Effect } from "../model";
@@ -6,6 +7,17 @@ import { layerAtTime, makeLayer, type Effect } from "../model";
 const sample = { ...makeLayer("scene", "Preview"), duration: 6 };
 export function effectPosterTime(effect: Effect) {
   if (effect.text?.kind === "glitch") return 0.04;
+  // Title-pack looks read best mid-entrance (exits: mid-exit); circles show their ring.
+  if (effect.text && isTitleKind(effect.text.kind))
+    return effect.text.kind === "circle"
+      ? 0
+      : ["rotate", "morph"].includes(effect.text.kind)
+        ? 2.15
+        : effect.text.kind === "typeloop"
+          ? 0.6
+          : effect.text.motion?.direction === "out"
+            ? Math.max(0, 6 - Math.min(6, effect.text.seconds) * 0.5)
+            : Math.min(6, effect.text.seconds) * 0.45;
   if (effect.depth) return effect.depth.seconds * 0.35;
   if (
     effect.text &&
@@ -14,6 +26,12 @@ export function effectPosterTime(effect: Effect) {
     return effect.text.motion?.direction === "out"
       ? Math.max(0, 6 - Math.min(6, effect.text.seconds) * 0.5)
       : Math.min(6, effect.text.seconds);
+  // Span-timed channels (spring and 3D card moves) read best mid-move.
+  const span = effect.channels.find((c) => c.seconds !== undefined);
+  if (span && !effect.passes?.length)
+    return span.align === "end"
+      ? Math.max(0, 6 - Math.min(6, span.seconds!) * 0.5)
+      : Math.min(6, span.seconds!) * 0.35;
   const transition = effect.passes?.find(
     (p) => p.timing === "in" || p.timing === "out",
   );
@@ -52,11 +70,25 @@ export function EffectSample({
   time: number;
 }) {
   const title = isTextEffectPreview(effect);
+  // Counters need digits; a circle needs a full ring of letters at thumbnail size.
+  const sampleText =
+    effect.text?.kind === "count"
+      ? "1,250"
+      : effect.text?.kind === "circle"
+        ? "KAMI·KAMI·"
+        : effect.text?.kind === "retype"
+          ? "Draft\nTitle"
+          : ["rotate", "typeloop", "morph"].includes(effect.text?.kind ?? "")
+            ? "Title\nMotion\nStory"
+            : effect.text?.kind === "odometer"
+              ? "1,250"
+              : "Title";
+  const fontSize = effect.text?.kind === "circle" ? 12 : 34;
   const layer = {
     ...sample,
     type: title ? ("title" as const) : ("scene" as const),
-    text: "Title",
-    fontSize: 34,
+    text: sampleText,
+    fontSize,
     color: "#fff7e9",
     effects: [{ effectId: effect.id, amount: 1, enabled: true }],
   };
@@ -86,6 +118,7 @@ export function EffectSample({
               justifyContent: "center",
               transform: `translate(${(v.x * 180) / 1920}px,${(v.y * 96) / 1080}px) rotate(${v.rotation}deg) scale(${v.scale}) perspective(${(v.perspective * 180) / 1920}px) rotateX(${v.rotateX}deg) rotateY(${v.rotateY}deg) scale(${v.scaleX},${v.scaleY}) skewX(${v.skewX}deg)`,
               opacity: v.opacity,
+              transformOrigin: `${50 + v.originX * 50}% ${50 + v.originY * 50}%`,
               filter: `brightness(${v.brightness}) contrast(${v.contrast}) saturate(${v.saturation}) blur(${(v.blur * 180) / 1920}px)`,
             }}
           >
@@ -100,7 +133,7 @@ export function EffectSample({
                 <span
                   style={{
                     color: "#fff7e9",
-                    font: "bold 34px Georgia, serif",
+                    font: `bold ${fontSize}px Georgia, serif`,
                     letterSpacing: (v.letterSpacing * 180) / 1920,
                     whiteSpace: "nowrap",
                     lineHeight: 1.15,

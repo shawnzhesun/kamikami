@@ -5,6 +5,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import {
   builtinEffects,
   styleEffects,
+  titleEffects,
+  packEffects,
   videoPlaybackEffects,
   remotionSceneEffects,
   motionEffects,
@@ -66,7 +68,9 @@ test("video adds four distinct operations and extends existing cards without dup
     34 +
       remotionSceneEffects.length +
       motionEffects.length +
-      styleEffects.length,
+      styleEffects.length +
+      titleEffects.length +
+      packEffects.length,
   );
   assert.equal(
     new Set(builtinEffects.map((e) => e.id)).size,

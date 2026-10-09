@@ -13,8 +13,11 @@ import {
   effectSearchText,
 } from "./builtin-effects";
 import { type TextEffect, textEffectNames } from "./text-effects";
+import { isTitleKind } from "./title-effects";
+import { TitleEffectControls } from "./editor/TitleEffectControls";
 import { visualNames, type VisualPass } from "./visual-effects";
 import { isStyleKind, styleControls } from "./StyleGraphicEffects";
+import { isRevealKind, revealControls } from "./TransitionGraphicEffects";
 import { FontPicker } from "./editor/FontPicker";
 import { EffectSettingsDialog } from "./editor/EffectSettingsDialog";
 import { EffectPresetPicker } from "./editor/EffectPresetPicker";
@@ -1441,146 +1444,156 @@ export function App() {
               return (
                 <section className="effect-settings-section">
                   <h3>{textEffectNames[text.kind]}</h3>
-                  <div className="visual-pass-fields">
-                    {entrance && (
-                      <NumberField
-                        label="Duration (seconds)"
-                        value={text.seconds}
-                        min={0.05}
-                        max={30}
-                        step={0.05}
-                        onChange={(seconds) => change({ seconds })}
-                      />
-                    )}
-                    {!["gradient", "neon"].includes(text.kind) && (
-                      <label>
-                        Animate by
-                        <Dropdown
-                          label="Text animation unit"
-                          value={text.unit}
-                          options={[
-                            { value: "character", label: "Character" },
-                            { value: "word", label: "Word" },
-                            ...(text.kind === "glitch"
-                              ? [{ value: "title", label: "Whole title" }]
-                              : []),
-                          ]}
-                          onChange={(unit) =>
-                            change({ unit: unit as TextEffect["unit"] })
-                          }
+                  {isTitleKind(text.kind) ? (
+                    <div className="visual-pass-fields">
+                      <TitleEffectControls text={text} onChange={change} />
+                    </div>
+                  ) : (
+                    <div className="visual-pass-fields">
+                      {entrance && (
+                        <NumberField
+                          label="Duration (seconds)"
+                          value={text.seconds}
+                          min={0.05}
+                          max={30}
+                          step={0.05}
+                          onChange={(seconds) => change({ seconds })}
                         />
-                      </label>
-                    )}
-                    {text.kind === "stagger" && (
-                      <label>
-                        Entrance style
-                        <Dropdown
-                          label="Text entrance style"
-                          value={text.style}
-                          options={[
-                            { value: "rise", label: "Rise" },
-                            { value: "flip", label: "3D flip" },
-                            { value: "pop", label: "Pop" },
-                            { value: "depth", label: "Depth fly" },
-                            { value: "scatter", label: "Scatter assembly" },
-                            { value: "spiral", label: "Spiral assembly" },
-                          ]}
-                          onChange={(style) =>
-                            change({ style: style as TextEffect["style"] })
-                          }
-                        />
-                      </label>
-                    )}
-                    {motion && (
-                      <NumberField
-                        label={
-                          text.kind === "wave" ? "Wave spacing" : "Stagger"
-                        }
-                        value={text.stagger}
-                        min={0}
-                        max={0.95}
-                        step={0.01}
-                        onChange={(stagger) => change({ stagger })}
-                      />
-                    )}
-                    {(text.kind === "wave" ||
-                      text.kind === "neon" ||
-                      (text.kind === "stagger" && text.style === "rise")) && (
-                      <NumberField
-                        label={
-                          text.kind === "neon" ? "Glow size" : "Height (em)"
-                        }
-                        value={text.distance}
-                        min={0}
-                        max={3}
-                        step={0.05}
-                        onChange={(distance) => change({ distance })}
-                      />
-                    )}
-                    {[
-                      "scramble",
-                      "wave",
-                      "gradient",
-                      "neon",
-                      "glitch",
-                    ].includes(text.kind) && (
-                      <NumberField
-                        label="Speed"
-                        value={text.speed}
-                        min={0}
-                        max={10}
-                        step={0.1}
-                        onChange={(speed) => change({ speed })}
-                      />
-                    )}
-                    {["scramble", "glitch", "stagger"].includes(text.kind) && (
-                      <NumberField
-                        label="Text random seed"
-                        value={text.seed}
-                        min={0}
-                        max={65535}
-                        step={1}
-                        onChange={(seed) => change({ seed: Math.round(seed) })}
-                      />
-                    )}
-                    <TextMotionControls text={text} onChange={change} />
-                    {text.kind === "typewriter" && (
-                      <label className="settings-checkbox">
-                        <input
-                          type="checkbox"
-                          checked={text.cursor}
-                          onChange={(event) =>
-                            change({ cursor: event.target.checked })
-                          }
-                        />
-                        Show cursor
-                      </label>
-                    )}
-                    {colored && (
-                      <>
+                      )}
+                      {!["gradient", "neon"].includes(text.kind) && (
                         <label>
-                          Primary color
-                          <input
-                            type="color"
-                            value={text.color}
-                            onChange={(event) =>
-                              change({ color: event.target.value })
+                          Animate by
+                          <Dropdown
+                            label="Text animation unit"
+                            value={text.unit}
+                            options={[
+                              { value: "character", label: "Character" },
+                              { value: "word", label: "Word" },
+                              ...(text.kind === "glitch"
+                                ? [{ value: "title", label: "Whole title" }]
+                                : []),
+                            ]}
+                            onChange={(unit) =>
+                              change({ unit: unit as TextEffect["unit"] })
                             }
                           />
                         </label>
+                      )}
+                      {text.kind === "stagger" && (
                         <label>
-                          Secondary color
-                          <input
-                            type="color"
-                            value={text.secondary}
-                            onChange={(event) =>
-                              change({ secondary: event.target.value })
+                          Entrance style
+                          <Dropdown
+                            label="Text entrance style"
+                            value={text.style}
+                            options={[
+                              { value: "rise", label: "Rise" },
+                              { value: "flip", label: "3D flip" },
+                              { value: "pop", label: "Pop" },
+                              { value: "depth", label: "Depth fly" },
+                              { value: "scatter", label: "Scatter assembly" },
+                              { value: "spiral", label: "Spiral assembly" },
+                            ]}
+                            onChange={(style) =>
+                              change({ style: style as TextEffect["style"] })
                             }
                           />
                         </label>
-                      </>
-                    )}
-                  </div>
+                      )}
+                      {motion && (
+                        <NumberField
+                          label={
+                            text.kind === "wave" ? "Wave spacing" : "Stagger"
+                          }
+                          value={text.stagger}
+                          min={0}
+                          max={0.95}
+                          step={0.01}
+                          onChange={(stagger) => change({ stagger })}
+                        />
+                      )}
+                      {(text.kind === "wave" ||
+                        text.kind === "neon" ||
+                        (text.kind === "stagger" && text.style === "rise")) && (
+                        <NumberField
+                          label={
+                            text.kind === "neon" ? "Glow size" : "Height (em)"
+                          }
+                          value={text.distance}
+                          min={0}
+                          max={3}
+                          step={0.05}
+                          onChange={(distance) => change({ distance })}
+                        />
+                      )}
+                      {[
+                        "scramble",
+                        "wave",
+                        "gradient",
+                        "neon",
+                        "glitch",
+                      ].includes(text.kind) && (
+                        <NumberField
+                          label="Speed"
+                          value={text.speed}
+                          min={0}
+                          max={10}
+                          step={0.1}
+                          onChange={(speed) => change({ speed })}
+                        />
+                      )}
+                      {["scramble", "glitch", "stagger"].includes(
+                        text.kind,
+                      ) && (
+                        <NumberField
+                          label="Text random seed"
+                          value={text.seed}
+                          min={0}
+                          max={65535}
+                          step={1}
+                          onChange={(seed) =>
+                            change({ seed: Math.round(seed) })
+                          }
+                        />
+                      )}
+                      <TextMotionControls text={text} onChange={change} />
+                      {text.kind === "typewriter" && (
+                        <label className="settings-checkbox">
+                          <input
+                            type="checkbox"
+                            checked={text.cursor}
+                            onChange={(event) =>
+                              change({ cursor: event.target.checked })
+                            }
+                          />
+                          Show cursor
+                        </label>
+                      )}
+                      {colored && (
+                        <>
+                          <label>
+                            Primary color
+                            <input
+                              type="color"
+                              value={text.color}
+                              onChange={(event) =>
+                                change({ color: event.target.value })
+                              }
+                            />
+                          </label>
+                          <label>
+                            Secondary color
+                            <input
+                              type="color"
+                              value={text.secondary}
+                              onChange={(event) =>
+                                change({ secondary: event.target.value })
+                              }
+                            />
+                          </label>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </section>
               );
             })()}
@@ -1776,9 +1789,14 @@ export function App() {
                       i === index ? { ...p, ...patch } : p,
                     ),
                   });
-                const style = isStyleKind(pass.kind)
+                const style:
+                  | (typeof styleControls)[keyof typeof styleControls]
+                  | (typeof revealControls)[keyof typeof revealControls]
+                  | undefined = isStyleKind(pass.kind)
                   ? styleControls[pass.kind]
-                  : undefined;
+                  : isRevealKind(pass.kind)
+                    ? revealControls[pass.kind]
+                    : undefined;
                 const hasColor = style
                   ? !!style.color
                   : ![
@@ -2077,12 +2095,14 @@ export function App() {
                           (pass.kind === "repeat" &&
                             pass.repeatMode !== "mirror") ||
                           (pass.kind === "particles" &&
-                            pass.particleStyle === "burst")) && (
+                            pass.particleStyle === "burst") ||
+                          (pass.kind === "clock" &&
+                            pass.clockMode === "pinwheel")) && (
                           <NumberField
-                            label="Count"
+                            label={pass.kind === "clock" ? "Blades" : "Count"}
                             value={
                               pass.count ??
-                              (pass.kind === "blinds"
+                              (pass.kind === "blinds" || pass.kind === "clock"
                                 ? 8
                                 : pass.kind === "repeat"
                                   ? 6

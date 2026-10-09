@@ -467,7 +467,7 @@ export const legacyBuiltinEffects: Effect[] = [
 
 type EffectParameters = Pick<
   Effect,
-  "channels" | "passes" | "color" | "tint" | "text" | "depth"
+  "channels" | "passes" | "color" | "tint" | "text" | "depth" | "origin"
 >;
 type EffectVariation = {
   id: string;
@@ -487,6 +487,7 @@ const parameters = (effect: Effect): EffectParameters => ({
   passes: effect.passes ?? [],
   ...(effect.text ? { text: effect.text } : {}),
   ...(effect.depth ? { depth: effect.depth } : {}),
+  ...(effect.origin ? { origin: effect.origin } : {}),
   color: effect.color,
   tint: effect.tint,
 });
@@ -1759,6 +1760,929 @@ export const styleEffectFamilies: EffectFamily[] = styleCards
   }));
 const styleCategories = new Map(styleCards.map((c) => [c.id, c.category]));
 
+/** Title-pack text animations (kamikami-visual-v7): kinetic, minimal and graphic titles. */
+const title = (patch: Record<string, unknown>) => ({
+  text: TextEffectSchema.parse(patch),
+});
+const titleCards: StyleCard[] = [
+  {
+    id: "title-mask-reveal",
+    name: "Mask reveal",
+    category: "Typography",
+    description:
+      "Keynote-style kinetic type: words rise or slide out from behind an invisible baseline mask, one after another. The clip edge stays fixed while the letters travel. Text elements only.",
+    variations: [
+      [
+        "mask-rise",
+        "Rise",
+        title({
+          kind: "mask",
+          unit: "word",
+          direction: "up",
+          seconds: 1,
+          stagger: 0.35,
+        }),
+      ],
+      [
+        "mask-slide",
+        "Slide",
+        title({
+          kind: "mask",
+          unit: "word",
+          direction: "left",
+          seconds: 0.9,
+          stagger: 0.3,
+        }),
+      ],
+    ],
+  },
+  {
+    id: "title-focus-in",
+    name: "Focus in",
+    category: "Typography",
+    description:
+      "Letters resolve from soft, oversized blur into crisp type, or slam into place from a huge scale like a stamp. Text elements only.",
+    variations: [
+      [
+        "focus-soft",
+        "Soft focus",
+        title({ kind: "focus", variant: "soft", seconds: 1.4, stagger: 0.6 }),
+      ],
+      [
+        "focus-slam",
+        "Zoom slam",
+        title({
+          kind: "focus",
+          variant: "slam",
+          unit: "word",
+          seconds: 0.8,
+          stagger: 0.4,
+        }),
+      ],
+    ],
+  },
+  {
+    id: "title-stretch-in",
+    name: "Stretch in",
+    category: "Typography",
+    description:
+      "Each letter arrives smeared wide and snaps back to its natural width, the elastic 'hype' title look. Text elements only.",
+    variations: [
+      [
+        "stretch-snap",
+        "Stretch snap",
+        title({ kind: "stretch", seconds: 0.9, stagger: 0.5 }),
+      ],
+    ],
+  },
+  {
+    id: "title-swipe-in",
+    name: "Swipe in",
+    category: "Typography",
+    description:
+      "Words whip in from the side with motion blur and a skew that straightens on arrival. Text elements only.",
+    variations: [
+      [
+        "swipe-whip",
+        "Whip",
+        title({
+          kind: "swipe",
+          unit: "word",
+          direction: "left",
+          seconds: 0.7,
+          stagger: 0.3,
+        }),
+      ],
+    ],
+  },
+  {
+    id: "title-slot-roll",
+    name: "Slot roll",
+    category: "Typography",
+    description:
+      "Each character rolls through a reel of glyphs and clicks into place with a slight overshoot; digits roll through digits. Text elements only.",
+    variations: [
+      [
+        "slot-reel",
+        "Reel",
+        title({ kind: "slot", seconds: 1.4, stagger: 0.5 }),
+      ],
+    ],
+  },
+  {
+    id: "title-bouncy",
+    name: "Bouncy letters",
+    category: "Typography",
+    description:
+      "Playful letters that drop and bounce with squash on impact, or pop up with an elastic wobble. Text elements only.",
+    variations: [
+      [
+        "bouncy-drop",
+        "Bounce drop",
+        title({
+          kind: "bounce",
+          variant: "bounce",
+          seconds: 1.6,
+          stagger: 0.5,
+          distance: 0.4,
+        }),
+      ],
+      [
+        "bouncy-elastic",
+        "Elastic pop",
+        title({
+          kind: "bounce",
+          variant: "elastic",
+          seconds: 1.2,
+          stagger: 0.45,
+        }),
+      ],
+    ],
+  },
+  {
+    id: "title-turn-in",
+    name: "Turn in",
+    category: "Typography",
+    description:
+      "Letters turn into view around their vertical axis like cards, in perspective. Text elements only.",
+    variations: [
+      [
+        "turn-cards",
+        "Card turn",
+        title({ kind: "turn", direction: "left", seconds: 1.1, stagger: 0.55 }),
+      ],
+    ],
+  },
+  {
+    id: "title-highlight",
+    name: "Highlight",
+    category: "Typography",
+    description:
+      "A colored box sweeps across the title: a marker highlight behind the words, or a block that covers the line and wipes away to reveal it. Text elements only.",
+    variations: [
+      [
+        "highlight-marker",
+        "Marker swipe",
+        title({
+          kind: "highlight",
+          variant: "marker",
+          seconds: 0.9,
+          stagger: 0.85,
+          color: "#f2c94c",
+        }),
+      ],
+      [
+        "highlight-block",
+        "Block wipe",
+        title({
+          kind: "highlight",
+          variant: "block",
+          seconds: 1.2,
+          stagger: 0.85,
+          color: "#f2765e",
+        }),
+      ],
+    ],
+  },
+  {
+    id: "title-underline",
+    name: "Underline reveal",
+    category: "Typography",
+    description:
+      "A minimal line draws under the title, then the letters rise out of it. Text elements only.",
+    variations: [
+      [
+        "underline-rise",
+        "Line and rise",
+        title({
+          kind: "underline",
+          seconds: 1.6,
+          stagger: 0.85,
+          color: "#f2765e",
+        }),
+      ],
+    ],
+  },
+  {
+    id: "title-outline-fill",
+    name: "Outline fill",
+    category: "Typography",
+    description:
+      "Letters appear as hollow outlines in the text color and fill in one after another. Text elements only.",
+    variations: [
+      [
+        "outline-to-fill",
+        "Outline to fill",
+        title({ kind: "outline", seconds: 1.4, stagger: 0.6 }),
+      ],
+    ],
+  },
+  {
+    id: "title-echo-stack",
+    name: "Echo stack",
+    category: "Typography",
+    description:
+      "Outlined copies of the title stacked above and below collapse into the solid line, a repeat-style hype title. Text elements only.",
+    variations: [
+      [
+        "echo-collapse",
+        "Collapse",
+        title({ kind: "echo", unit: "title", seconds: 1, color: "#f2765e" }),
+      ],
+    ],
+  },
+  {
+    id: "title-split-slice",
+    name: "Split slice",
+    category: "Typography",
+    description:
+      "The title is sliced through the middle; the halves slide in from opposite sides and lock together. Text elements only.",
+    variations: [
+      [
+        "split-lock",
+        "Lock together",
+        title({ kind: "split", unit: "title", seconds: 0.9, distance: 0.5 }),
+      ],
+    ],
+  },
+  {
+    id: "title-stroke-draw",
+    name: "Stroke draw",
+    category: "Typography",
+    description:
+      "Letter outlines draw on like a pen stroke, then the fill fades in, for a handwritten signature feel. Text elements only.",
+    variations: [
+      [
+        "draw-pen",
+        "Pen draw",
+        title({ kind: "draw", seconds: 2.4, stagger: 0.7, color: "#fff7e9" }),
+      ],
+    ],
+  },
+  {
+    id: "title-flicker-on",
+    name: "Flicker on",
+    category: "Typography",
+    description:
+      "Letters buzz on in random order like neon tubes warming up, then stay lit. Combine with Neon text for a sign. Text elements only.",
+    variations: [
+      [
+        "flicker-tubes",
+        "Neon tubes",
+        title({
+          kind: "flicker",
+          seconds: 1.6,
+          stagger: 0.4,
+          motion: { order: "random" },
+        }),
+      ],
+    ],
+  },
+  {
+    id: "title-number-count",
+    name: "Number count",
+    category: "Typography",
+    description:
+      "Every number in the title counts up from zero to its value, keeping decimals and thousands separators, for stats and infographics. Text elements only.",
+    variations: [
+      ["count-up", "Count up", title({ kind: "count", seconds: 2 })],
+      ["count-odometer", "Odometer", title({ kind: "odometer", seconds: 2.2 })],
+    ],
+  },
+  {
+    id: "title-circle",
+    name: "Circle text",
+    category: "Typography",
+    description:
+      "Lays a single line of text around a rotating circle, like a badge or stamp. Letter spacing sets the circle size. Text elements only.",
+    variations: [
+      [
+        "circle-badge",
+        "Spinning badge",
+        title({ kind: "circle", distance: 0.3, speed: 1 }),
+      ],
+    ],
+  },
+  {
+    id: "title-blur-rise",
+    name: "Blur rise",
+    category: "Typography",
+    description:
+      "Words or letters float up out of a blur, overshoot the baseline slightly and settle, the most common modern title entrance. Text elements only.",
+    variations: [
+      [
+        "blur-rise-words",
+        "Words",
+        title({
+          kind: "blurrise",
+          unit: "word",
+          seconds: 1.2,
+          stagger: 0.45,
+          distance: 0.5,
+        }),
+      ],
+      [
+        "blur-rise-letters",
+        "Letters",
+        title({ kind: "blurrise", seconds: 1.3, stagger: 0.6, distance: 0.4 }),
+      ],
+    ],
+  },
+  {
+    id: "title-karaoke",
+    name: "Karaoke",
+    category: "Typography",
+    description:
+      "The line sits ghosted while words light up and take the highlight color one after another, for lyrics and read-along captions. Duration is the reading time. Text elements only.",
+    variations: [
+      [
+        "karaoke-read",
+        "Read along",
+        title({
+          kind: "karaoke",
+          unit: "word",
+          seconds: 4,
+          stagger: 0.9,
+          color: "#f2c94c",
+        }),
+      ],
+    ],
+  },
+  {
+    id: "title-shimmer",
+    name: "Shimmer",
+    category: "Typography",
+    description:
+      "A bright band sweeps across muted lettering on a loop, the 'loading / premium' shine used in product titles. Text elements only.",
+    variations: [
+      [
+        "shimmer-silver",
+        "Silver",
+        title({
+          kind: "shimmer",
+          speed: 1,
+          distance: 0.4,
+          color: "#ffffff",
+          secondary: "#7d8590",
+        }),
+      ],
+    ],
+  },
+  {
+    id: "title-prism",
+    name: "Prism reveal",
+    category: "Typography",
+    description:
+      "A rainbow front sweeps through the title: letters appear in spectral colors at the front and settle to the text color behind it. Text elements only.",
+    variations: [
+      [
+        "prism-sweep",
+        "Spectrum sweep",
+        title({ kind: "prism", seconds: 1.6, stagger: 0.55 }),
+      ],
+    ],
+  },
+  {
+    id: "title-bubbles",
+    name: "Letter bubbles",
+    category: "Typography",
+    description:
+      "Each letter pops in on its own glossy circle, playful and bold. Text elements only.",
+    variations: [
+      [
+        "bubbles-pop",
+        "Pop",
+        title({
+          kind: "bubbles",
+          seconds: 1.2,
+          stagger: 0.6,
+          color: "#ff8a6b",
+          secondary: "#c2362b",
+        }),
+      ],
+    ],
+  },
+  {
+    id: "title-split-flap",
+    name: "Split-flap board",
+    category: "Typography",
+    description:
+      "Letters sit on dark tiles and flip through random characters before landing, like an airport departure board. Text elements only.",
+    variations: [
+      [
+        "flap-departures",
+        "Departures",
+        title({ kind: "flap", seconds: 2, stagger: 0.5, secondary: "#1b1d22" }),
+      ],
+    ],
+  },
+  {
+    id: "title-cube-roll",
+    name: "Cube roll",
+    category: "Typography",
+    description:
+      "Each letter rolls like a cube from a colored face onto its final face. Text elements only.",
+    variations: [
+      [
+        "roll-cube",
+        "Roll up",
+        title({ kind: "roll", seconds: 1.2, stagger: 0.55, color: "#f2765e" }),
+      ],
+    ],
+  },
+  {
+    id: "title-retype",
+    name: "Retype",
+    category: "Typography",
+    description:
+      "Write two lines: the first is overwritten letter by letter into the second, ideal for before/after and correction gags. Text elements only.",
+    variations: [
+      [
+        "retype-overwrite",
+        "Overwrite",
+        title({ kind: "retype", seconds: 1.5 }),
+      ],
+    ],
+  },
+  {
+    id: "title-word-rotator",
+    name: "Word rotator",
+    category: "Typography",
+    description:
+      "Cycles through the lines of the text: the current word lifts away while the next rises into place letter by letter. Write one word or phrase per line. Text elements only.",
+    variations: [
+      [
+        "rotator-rise",
+        "Rise",
+        title({ kind: "rotate", seconds: 0.6, stagger: 0.4 }),
+      ],
+    ],
+  },
+  {
+    id: "title-type-delete",
+    name: "Type and delete",
+    category: "Typography",
+    description:
+      "Types each line, holds it, backspaces and types the next, with a blinking caret; the last line stays. Write one phrase per line. Text elements only.",
+    variations: [
+      ["typeloop-caret", "Caret", title({ kind: "typeloop", speed: 1 })],
+    ],
+  },
+  {
+    id: "title-gooey-morph",
+    name: "Gooey word morph",
+    category: "Typography",
+    description:
+      "Each line melts into the next through a liquid blur, then re-forms crisp. Write one word per line. Text elements only.",
+    variations: [
+      ["morph-liquid", "Liquid", title({ kind: "morph", seconds: 0.9 })],
+    ],
+  },
+];
+export const titleEffects: Effect[] = titleCards.map((card) =>
+  EffectSchema.parse({
+    id: card.id,
+    name: card.name,
+    description: card.description,
+    channels: [],
+    color: "#f2765e",
+    tint: 0,
+    ...card.variations[0][2],
+  }),
+);
+export const titleEffectFamilies: EffectFamily[] = titleCards
+  .filter((card) => card.variations.length > 1)
+  .map((card) => ({
+    id: card.id,
+    name: card.name,
+    category: card.category,
+    description: card.description,
+    variations: card.variations.map(([id, name, patch]) => ({
+      id,
+      name,
+      parameters: parameters(
+        EffectSchema.parse({
+          ...titleEffects.find((e) => e.id === card.id)!,
+          ...patch,
+        }),
+      ),
+    })),
+  }));
+for (const card of titleCards) styleCategories.set(card.id, card.category);
+
+/** Shaped reveals, 3D card moves, lens and film looks inspired by open transition/filter catalogs. */
+const reveal = (kind: VisualPass["kind"], patch: Partial<VisualPass> = {}) =>
+  pass(kind, {
+    strength: 1,
+    size: 0.05,
+    speed: 0,
+    timing: "in",
+    seconds: 1,
+    ...patch,
+  });
+const packCards: StyleCard[] = [
+  {
+    id: "shape-iris",
+    name: "Shape iris",
+    category: "Transitions",
+    description:
+      "Reveal through a growing star, heart, flower, diamond or rectangle with a colored rim. Use At clip end timing to close the shape instead.",
+    variations: [
+      [
+        "iris-star",
+        "Star",
+        { passes: [reveal("shape", { shapeMode: "star", color: "#ffd36b" })] },
+      ],
+      [
+        "iris-heart",
+        "Heart",
+        { passes: [reveal("shape", { shapeMode: "heart", color: "#ff6b8b" })] },
+      ],
+      [
+        "iris-flower",
+        "Flower",
+        {
+          passes: [reveal("shape", { shapeMode: "flower", color: "#f2a65e" })],
+        },
+      ],
+      [
+        "iris-diamond",
+        "Diamond",
+        {
+          passes: [reveal("shape", { shapeMode: "diamond", color: "#7fd4ff" })],
+        },
+      ],
+      [
+        "iris-rect",
+        "Rectangle",
+        {
+          passes: [
+            reveal("shape", { shapeMode: "rect", color: "#ffffff", size: 0 }),
+          ],
+        },
+      ],
+    ],
+  },
+  {
+    id: "barn-doors",
+    name: "Barn doors",
+    category: "Transitions",
+    description:
+      "Opens from a central slit, horizontally or vertically, or through bow-tie wedges from both sides.",
+    variations: [
+      [
+        "doors-horizontal",
+        "Horizontal",
+        { passes: [reveal("doors", { doorMode: "horizontal", seconds: 0.8 })] },
+      ],
+      [
+        "doors-vertical",
+        "Vertical",
+        { passes: [reveal("doors", { doorMode: "vertical", seconds: 0.8 })] },
+      ],
+      [
+        "doors-bowtie",
+        "Bow-tie",
+        { passes: [reveal("doors", { doorMode: "bowtie", seconds: 0.9 })] },
+      ],
+    ],
+  },
+  {
+    id: "clock-wipe",
+    name: "Clock wipe",
+    category: "Transitions",
+    description:
+      "A clock hand sweeps the element into view, or a rotating pinwheel of blades opens it.",
+    variations: [
+      [
+        "clock-hand",
+        "Clock hand",
+        { passes: [reveal("clock", { clockMode: "clock", size: 0.02 })] },
+      ],
+      [
+        "clock-pinwheel",
+        "Pinwheel",
+        {
+          passes: [
+            reveal("clock", {
+              clockMode: "pinwheel",
+              count: 8,
+              speed: 1,
+              seconds: 1.2,
+              size: 0.02,
+            }),
+          ],
+        },
+      ],
+    ],
+  },
+  {
+    id: "feathered-wipe",
+    name: "Feathered wipe",
+    category: "Transitions",
+    description:
+      "A soft-edged wipe in any direction, from a gentle gradient to a crisp diagonal.",
+    variations: [
+      [
+        "feather-soft",
+        "Soft left to right",
+        { passes: [reveal("feather", { angle: 0, size: 0.35 })] },
+      ],
+      [
+        "feather-diagonal",
+        "Diagonal",
+        { passes: [reveal("feather", { angle: 45, size: 0.12 })] },
+      ],
+      [
+        "feather-rise",
+        "Rise",
+        { passes: [reveal("feather", { angle: -90, size: 0.25 })] },
+      ],
+    ],
+  },
+  {
+    id: "luma-wipe",
+    name: "Luma wipe",
+    category: "Transitions",
+    description:
+      "The picture appears or burns away in order of its own brightness, with a glowing edge. Best on photos and video.",
+    variations: [
+      [
+        "luma-shadows",
+        "Shadows first",
+        {
+          passes: [
+            reveal("lumawipe", {
+              lumaOrder: "dark",
+              seconds: 1.4,
+              size: 0.4,
+              color: "#ffb46b",
+            }),
+          ],
+        },
+      ],
+      [
+        "luma-highlights",
+        "Highlights first",
+        {
+          passes: [
+            reveal("lumawipe", {
+              lumaOrder: "bright",
+              seconds: 1.4,
+              size: 0.4,
+              color: "#9fd8ff",
+            }),
+          ],
+        },
+      ],
+    ],
+  },
+  {
+    id: "floor-reflection",
+    name: "Reflection",
+    category: "3D & material",
+    description:
+      "Mirrors the element onto a glossy floor below it, with gentle ripples and a fade. Ideal for titles and product shots with transparency.",
+    variations: [
+      [
+        "reflection-floor",
+        "Glossy floor",
+        {
+          passes: [
+            pass("reflection", { strength: 0.9, size: 0.3, speed: 0.6 }),
+          ],
+        },
+      ],
+    ],
+  },
+  {
+    id: "tilt-shift",
+    name: "Tilt-shift",
+    category: "Camera & motion",
+    description:
+      "Miniature-model look: a sharp band with progressively blurred foreground and background, plus a saturation lift.",
+    variations: [
+      [
+        "tilt-miniature",
+        "Miniature",
+        {
+          passes: [
+            pass("tiltshift", { strength: 1, size: 0.15, angle: 0, speed: 0 }),
+          ],
+        },
+      ],
+    ],
+  },
+  {
+    id: "old-film",
+    name: "Old film",
+    category: "Texture & signal",
+    description:
+      "Silent-era projection: sepia tone, exposure flicker, vertical scratches and dust that change twelve times a second.",
+    variations: [
+      [
+        "oldfilm-silent",
+        "Silent era",
+        {
+          passes: [
+            pass("oldfilm", { strength: 0.9, speed: 1 }),
+            pass("grain", { strength: 0.25, size: 0.4, speed: 1 }),
+            pass("vignette", { strength: 0.6, color: "#140c06" }),
+          ],
+        },
+      ],
+    ],
+  },
+  {
+    id: "card-3d",
+    name: "3D card moves",
+    category: "Camera & motion",
+    description:
+      "The element moves like a physical card: turns in like a cube face, turns away like a page, rolls in from a corner, swings on a hinge, or swaps back into depth. Best on full-frame clips.",
+    variations: [
+      [
+        "card-cube-turn",
+        "Cube turn in",
+        {
+          channels: [
+            spring("rotateY", 88, 0, "ease-out", 0.9),
+            spring("scale", 0.92, 1, "ease-out", 0.9),
+          ],
+          origin: { x: -1, y: 0 },
+        },
+      ],
+      [
+        "card-page-turn",
+        "Page turn out",
+        {
+          channels: [
+            spring("rotateY", 0, 90, "ease", 1, 1, 0, "end"),
+            spring("brightness", 1, 0.55, "ease", 1, 1, 0, "end"),
+          ],
+          origin: { x: -1, y: 0 },
+        },
+      ],
+      [
+        "card-corner-roll",
+        "Corner roll in",
+        {
+          channels: [spring("rotation", -90, 0, "back", 0.9, 1, 0.3)],
+          origin: { x: -1, y: 1 },
+        },
+      ],
+      [
+        "card-hinge",
+        "Hinge swing in",
+        {
+          channels: [spring("rotateX", 75, 0, "damped", 2.2, 1.3)],
+          origin: { x: 0, y: -1 },
+        },
+      ],
+      [
+        "card-swap-back",
+        "Swap back out",
+        {
+          channels: [
+            spring("scale", 1, 0.6, "ease", 0.8, 1, 0, "end"),
+            spring("rotateY", 0, 30, "ease", 0.8, 1, 0, "end"),
+            spring("opacity", 1, 0, "ease", 0.8, 1, 0, "end"),
+          ],
+        },
+      ],
+    ],
+  },
+  {
+    id: "ripple",
+    name: "Ripple",
+    category: "Texture & signal",
+    description:
+      "Concentric water ripples, a single expanding shockwave ring, or a water drop whose waves spread and settle.",
+    variations: [
+      [
+        "ripple-waves",
+        "Ripples",
+        {
+          passes: [
+            pass("ripple", {
+              strength: 0.5,
+              size: 0.3,
+              speed: 1,
+              rippleMode: "ripple",
+            }),
+          ],
+        },
+      ],
+      [
+        "ripple-shockwave",
+        "Shockwave",
+        {
+          passes: [
+            pass("ripple", {
+              strength: 0.8,
+              size: 0.25,
+              speed: 1,
+              rippleMode: "shockwave",
+            }),
+          ],
+        },
+      ],
+      [
+        "ripple-drop",
+        "Water drop",
+        {
+          passes: [
+            pass("ripple", {
+              strength: 0.7,
+              size: 0.3,
+              speed: 1,
+              rippleMode: "drop",
+            }),
+          ],
+        },
+      ],
+    ],
+  },
+  {
+    id: "cell-reveal",
+    name: "Cell reveal",
+    category: "Transitions",
+    description:
+      "The element appears through a grid: squares grow along a diagonal wavefront, tiles pop in at random, a checkerboard fills in two beats, or polka dots open from the center.",
+    variations: [
+      [
+        "cells-squares",
+        "Growing squares",
+        {
+          passes: [
+            reveal("cells", { cellMode: "squares", size: 0.35, seconds: 1.2 }),
+          ],
+        },
+      ],
+      [
+        "cells-random",
+        "Random tiles",
+        {
+          passes: [
+            reveal("cells", { cellMode: "random", size: 0.5, seconds: 1.2 }),
+          ],
+        },
+      ],
+      [
+        "cells-checker",
+        "Checkerboard",
+        {
+          passes: [
+            reveal("cells", { cellMode: "checker", size: 0.25, seconds: 1 }),
+          ],
+        },
+      ],
+      [
+        "cells-dots",
+        "Polka dots",
+        {
+          passes: [
+            reveal("cells", { cellMode: "dots", size: 0.4, seconds: 1.3 }),
+          ],
+        },
+      ],
+    ],
+  },
+];
+export const packEffects: Effect[] = packCards.map((card) =>
+  EffectSchema.parse({
+    id: card.id,
+    name: card.name,
+    description: card.description,
+    channels: [],
+    passes: [],
+    color: "#f2765e",
+    tint: 0,
+    ...card.variations[0][2],
+  }),
+);
+export const packEffectFamilies: EffectFamily[] = packCards
+  .filter((card) => card.variations.length > 1)
+  .map((card) => ({
+    id: card.id,
+    name: card.name,
+    category: card.category,
+    description: card.description,
+    variations: card.variations.map(([id, name, patch]) => ({
+      id,
+      name,
+      parameters: parameters(
+        EffectSchema.parse({
+          ...packEffects.find((e) => e.id === card.id)!,
+          channels: [],
+          passes: [],
+          origin: undefined,
+          ...patch,
+        }),
+      ),
+    })),
+  }));
+for (const card of packCards) styleCategories.set(card.id, card.category);
+
 /** Gallery contains one card per family; legacy definitions remain resolvable. */
 export const builtinEffects: Effect[] = [
   ...legacyBuiltinEffects.flatMap((effect) => {
@@ -1772,6 +2696,8 @@ export const builtinEffects: Effect[] = [
   ...remotionSceneEffects,
   ...motionEffects,
   ...styleEffects,
+  ...titleEffects,
+  ...packEffects,
 ];
 export const allBuiltinEffects: Effect[] = [
   ...builtinEffects,
@@ -1783,6 +2709,8 @@ export function getEffectFamily(id: string) {
     ...effectFamilies,
     ...motionEffectFamilies,
     ...styleEffectFamilies,
+    ...titleEffectFamilies,
+    ...packEffectFamilies,
   ].find((f) => f.id === id || f.variations.some((v) => v.id === id));
 }
 
@@ -1793,6 +2721,7 @@ const parameterSchema = EffectSchema.pick({
   tint: true,
   text: true,
   depth: true,
+  origin: true,
 });
 const parameterKey = (value: EffectParameters) =>
   JSON.stringify(parameterSchema.parse(value));
@@ -1828,6 +2757,9 @@ export function effectVariationPatch(
           : {}),
         ...(effect.depth && !variation.parameters.depth
           ? { depth: undefined }
+          : {}),
+        ...(effect.origin && !variation.parameters.origin
+          ? { origin: undefined }
           : {}),
       })
     : undefined;

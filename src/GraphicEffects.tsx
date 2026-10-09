@@ -6,6 +6,11 @@ import { GraphicMapEffects } from "./GraphicMapEffects";
 import { svgImage } from "./graphic-maps";
 import { ObjectField, depthParticleSvg } from "./SpatialGraphicEffects";
 import {
+  isRevealKind,
+  revealFilterNodes,
+  revealMarginKinds,
+} from "./TransitionGraphicEffects";
+import {
   isStyleKind,
   styleFilterNodes,
   styleMarginKinds,
@@ -84,6 +89,19 @@ function Pass({
       tick: f.tick,
       image,
       overlay,
+      merge,
+    });
+  else if (s > 0 && isRevealKind(pass.kind))
+    nodes = revealFilterNodes({
+      pass,
+      w,
+      h,
+      unit,
+      s,
+      z,
+      time: f.time,
+      tick: f.tick,
+      image,
       merge,
     });
   else if (s > 0)
@@ -634,7 +652,8 @@ function Pass({
     }
   const margin =
     ["bloom", "echo", "shatter", "iris"].includes(pass.kind) ||
-    (styleMarginKinds as string[]).includes(pass.kind)
+    (styleMarginKinds as string[]).includes(pass.kind) ||
+    (revealMarginKinds as string[]).includes(pass.kind)
       ? 0.5
       : 0;
   return (

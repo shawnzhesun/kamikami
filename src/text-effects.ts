@@ -3,6 +3,7 @@ import { clamp01, effectRandom } from "./visual-effects";
 import { instanceAmountAt, resolveEffectInstanceAt } from "./effect-instance";
 import type { Effect, Layer } from "./model";
 import { projectDepth, seeded, unit, ease } from "./motion";
+import { titleKinds, titleNames } from "./title-effects";
 
 export const textEffectKinds = [
   "typewriter",
@@ -13,8 +14,10 @@ export const textEffectKinds = [
   "neon",
   "glitch",
 ] as const;
-export const textEffectNames: Record<(typeof textEffectKinds)[number], string> =
+export const allTextKinds = [...textEffectKinds, ...titleKinds] as const;
+export const textEffectNames: Record<(typeof allTextKinds)[number], string> =
   {
+    ...titleNames,
     typewriter: "Typewriter",
     scramble: "Text scramble",
     stagger: "Staggered text",
@@ -25,7 +28,7 @@ export const textEffectNames: Record<(typeof textEffectKinds)[number], string> =
   };
 export const TextEffectSchema = z
   .object({
-    kind: z.enum(textEffectKinds),
+    kind: z.enum(allTextKinds),
     seconds: z.number().min(0.05).max(30).default(1.5),
     stagger: z.number().min(0).max(0.95).default(0.6),
     distance: z.number().min(0).max(3).default(0.6),
@@ -63,6 +66,12 @@ export const TextEffectSchema = z
           .default("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#$%&"),
       })
       .strict()
+      .optional(),
+    /** Title kinds: mask/swipe/turn travel direction. */
+    direction: z.enum(["up", "down", "left", "right"]).optional(),
+    /** Title kinds: named look within a kind (focus, bounce, highlight). */
+    variant: z
+      .enum(["soft", "slam", "bounce", "elastic", "marker", "block"])
       .optional(),
     cursor: z.boolean().default(true),
     color: z

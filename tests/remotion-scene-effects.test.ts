@@ -56,7 +56,7 @@ const renderText = (
 
 test("scene-inspired recipes add seven distinct cards without changing old definitions", () => {
   assert.equal(remotionSceneEffects.length, 7);
-  assert.equal(builtinEffects.length, 57);
+  assert.equal(builtinEffects.length, 95);
   assert.equal(
     new Set(builtinEffects.map((effect) => effect.id)).size,
     builtinEffects.length,
@@ -206,7 +206,14 @@ test("title thumbnails use Title, and transition masks keep one source and neutr
         time: effectPosterTime(effect),
       }),
     );
-    assert.ok(html.includes("Title"));
+    // Counters and circle badges preview with digits and a full ring of letters.
+    const sample =
+      effect.text?.kind === "count" || effect.text?.kind === "odometer"
+        ? "1,250"
+        : effect.text?.kind === "circle"
+          ? "KAMI·KAMI·"
+          : "Title";
+    assert.ok(html.includes(sample), effect.id);
     assert.doesNotMatch(html, /MEMORY/);
   }
   const blinds = remotionSceneEffects.find(
