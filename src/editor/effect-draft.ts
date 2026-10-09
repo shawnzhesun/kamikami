@@ -4,9 +4,28 @@ import {
   resolveEffectInstance,
   validateProject,
   type Effect,
+  type EffectInstance,
   type Project,
 } from "../model";
 import { getEffectFamily } from "../builtin-effects";
+import { getPath } from "../keyframes";
+
+/** Drop parameter animation whose setting no longer exists, e.g. after a variation change. */
+function pruneParameterKeys(instance: EffectInstance): EffectInstance {
+  const parameters = instance.keyframes?.parameters;
+  if (!parameters) return instance;
+  const kept = Object.fromEntries(
+    Object.entries(parameters).filter(
+      ([path]) => typeof getPath(instance.settings, path) === "number",
+    ),
+  );
+  const { parameters: _p, ...rest } = instance.keyframes!;
+  const keyframes = Object.keys(kept).length
+    ? { ...rest, parameters: kept }
+    : rest;
+  const { keyframes: _k, ...base } = instance;
+  return Object.keys(keyframes).length ? { ...base, keyframes } : base;
+}
 
 /** Forks own their recipe and retain access to their source's named presets. */
 export function forkEffect(effect: Effect, id: string): Effect {
@@ -78,7 +97,10 @@ export function applyInstanceEffectDraft(
             effects: layer.effects.map((item) =>
               item.effectId !== draft.id
                 ? item
-                : { ...item, settings: effectSettings(effect) },
+                : pruneParameterKeys({
+                    ...item,
+                    settings: effectSettings(effect),
+                  }),
             ),
           },
     ),

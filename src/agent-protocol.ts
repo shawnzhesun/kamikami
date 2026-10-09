@@ -1,4 +1,12 @@
 import {
+  KeyframeSchema,
+  elementKeyframeProperties,
+  parameterPathPattern,
+  setTrack,
+  snapTime,
+  type KeyframeTarget,
+} from "./keyframes";
+import {
   addTrack,
   updateTrack,
   deleteTrack,
@@ -88,6 +96,17 @@ export const AgentCommandSchema = z.discriminatedUnion("action", [
     trackId: z.string().optional(),
     layerIds: z.array(z.string()).min(1),
     delta: z.number(),
+    ...revision,
+  }),
+  z.object({
+    action: z.literal("set_keyframes"),
+    layerId: z.string(),
+    /** An element property, or an applied effect's strength / numeric setting path. */
+    property: z.enum(elementKeyframeProperties).optional(),
+    effectId: z.string().optional(),
+    parameter: z.string().max(80).regex(parameterPathPattern).optional(),
+    /** Times are clip-local seconds (0 = clip start). Empty or null removes animation. */
+    keyframes: z.array(KeyframeSchema).max(240).nullable(),
     ...revision,
   }),
   z.object({
@@ -280,6 +299,39 @@ export function applyAgentEdit(
         command.layerIds[0],
         command.trackId,
       );
+  }
+  if (command.action === "set_keyframes") {
+    const layer = project.layers.find((l) => l.id === command.layerId);
+    if (!layer) throw new Error("Layer not found. Read the project again.");
+    if (!!command.property === !!command.effectId)
+      throw new Error("Provide either property or effectId.");
+    if (command.parameter && !command.effectId)
+      throw new Error("parameter requires effectId.");
+    if (
+      command.effectId &&
+      !layer.effects.some((i) => i.effectId === command.effectId)
+    )
+      throw new Error("That effect is not applied to this element.");
+    const target: KeyframeTarget = command.property
+      ? { kind: "property", property: command.property }
+      : command.parameter
+        ? {
+            kind: "parameter",
+            effectId: command.effectId!,
+            path: command.parameter,
+          }
+        : { kind: "amount", effectId: command.effectId! };
+    // Agent times are clip-local; storage uses the trim-stable animation clock.
+    const track = command.keyframes?.map((k) => ({
+      ...k,
+      time: snapTime(k.time + layer.effectOffset, project.fps),
+    }));
+    next = {
+      ...project,
+      layers: project.layers.map((l) =>
+        l.id === layer.id ? setTrack(l, target, track) : l,
+      ),
+    };
   }
   if (command.action === "trim_clip") {
     const layer = project.layers.find((l) => l.id === command.layerId);

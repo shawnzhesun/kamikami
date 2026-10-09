@@ -667,7 +667,7 @@ h2 {
   margin-bottom: 10px;
   background: var(--cream);
 }
-.instance > div {
+.instance > div:not(.keyframe-field):not(.effect-parameter-keys) {
   display: flex;
   justify-content: space-between;
 }
@@ -2656,4 +2656,64 @@ button[aria-pressed="true"] {
 }
 .effects-grid .effect-sample.is-text .effect-sample-art {
   width: min(100%, 160px);
+}
+
+/* Keyframes: stopwatch rows in Inspector, diamonds on timeline clips. */
+.keyframe-field {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: end;
+  column-gap: 6px;
+  margin-bottom: 4px;
+}
+.keyframe-field > label {
+  margin-bottom: 0;
+}
+.keyframe-controls {
+  display: flex;
+  gap: 2px;
+  padding-bottom: 3px;
+}
+.keyframe-controls button {
+  width: 24px;
+  height: 26px;
+  min-height: 0;
+  padding: 0;
+  justify-content: center;
+  color: var(--muted);
+}
+.keyframe-field.animated .stopwatch,
+.keyframe-controls .keyframe-toggle.on {
+  color: var(--coral);
+}
+.keyframe-controls .keyframe-toggle.on svg {
+  fill: currentColor;
+}
+.keyframe-easing {
+  grid-column: 1 / -1;
+  margin-top: 4px;
+}
+.keyframe-hint {
+  margin: 2px 0 8px;
+}
+.effect-parameter-keys {
+  margin-top: 6px;
+}
+.clip-keyframe {
+  position: absolute;
+  bottom: 2px;
+  width: 9px;
+  height: 9px;
+  min-height: 0;
+  padding: 0;
+  margin-left: -4.5px;
+  transform: rotate(45deg);
+  background: var(--cream);
+  border: 1px solid var(--chrome);
+  border-radius: 1px;
+  cursor: ew-resize;
+  z-index: 2;
+}
+.clip-keyframe:hover {
+  background: var(--coral);
 }

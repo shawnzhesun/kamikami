@@ -177,6 +177,39 @@ definitions.push(
     false,
   ],
   [
+    "set_keyframes",
+    "Animate one element property (x, y, scale, rotation, opacity, volume) or an applied effect's strength (effectId) or numeric setting (effectId + parameter path such as passes.0.size, channels.0.to, text.distance, depth.from). Times are clip-local seconds, snapped to frames. easing (linear, ease-in, ease-out, ease-in-out, hold, bezier with bezier:[x1,y1,x2,y2]) shapes the segment leaving each keyframe. Animated values replace the static value; effects still layer on top. Pass keyframes: null to stop animating.",
+    {
+      layerId: z.string(),
+      property: z
+        .enum(["x", "y", "scale", "rotation", "opacity", "volume"])
+        .optional(),
+      effectId: z.string().optional(),
+      parameter: z.string().optional(),
+      keyframes: z
+        .array(
+          z.object({
+            time: z.number(),
+            value: z.number(),
+            easing: z
+              .enum([
+                "linear",
+                "ease-in",
+                "ease-out",
+                "ease-in-out",
+                "hold",
+                "bezier",
+              ])
+              .optional(),
+            bezier: z.array(z.number()).length(4).optional(),
+          }),
+        )
+        .nullable(),
+      ...rev,
+    },
+    false,
+  ],
+  [
     "trim_clip",
     "Trim a clip edge to a position in composition seconds, preserving source/effect offsets.",
     {

@@ -26,6 +26,17 @@ export const visualKinds = [
   "repeat",
   "rings",
   "blinds",
+  "warp",
+  "bevel",
+  "extrude",
+  "sheen",
+  "paper",
+  "ink",
+  "pixel",
+  "dissolve",
+  "goo",
+  "glow",
+  "lens",
 ] as const;
 export const visualNames: Record<(typeof visualKinds)[number], string> = {
   vignette: "Vignette",
@@ -52,7 +63,32 @@ export const visualNames: Record<(typeof visualKinds)[number], string> = {
   repeat: "Image repetition",
   rings: "Graphic rings",
   blinds: "Blinds reveal",
+  warp: "Organic warp",
+  bevel: "Bevel & emboss",
+  extrude: "Solid extrusion",
+  sheen: "Light sweep",
+  paper: "Paper cutout",
+  ink: "Comic ink",
+  pixel: "Pixel art",
+  dissolve: "Noise dissolve",
+  goo: "Gooey morph",
+  glow: "Energy edge",
+  lens: "Lens bulge",
 };
+/** Kinds and mode fields added with kamikami-visual-v6. */
+export const v6Kinds: readonly string[] = [
+  "warp",
+  "bevel",
+  "extrude",
+  "sheen",
+  "paper",
+  "ink",
+  "pixel",
+  "dissolve",
+  "goo",
+  "glow",
+  "lens",
+];
 export const VisualPassSchema = z.object({
   field: FieldSchema.optional(),
   particles: ParticleSchema.optional(),
@@ -75,6 +111,9 @@ export const VisualPassSchema = z.object({
   particleStyle: z.enum(["paper", "burst"]).optional(),
   silhouetteStyle: z.enum(["fill", "outline"]).optional(),
   count: z.number().int().min(2).max(12).optional(),
+  warpMode: z.enum(["boil", "liquid", "melt"]).optional(),
+  sheenStyle: z.enum(["gloss", "foil"]).optional(),
+  pixelMode: z.enum(["pixelate", "dither", "gameboy"]).optional(),
 });
 export type VisualPass = z.infer<typeof VisualPassSchema>;
 export const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
@@ -109,4 +148,36 @@ export function visualFrame(
     tick: Math.floor(t * pass.speed * 12),
     progress: clamp01(t / Math.max(duration, 0.05)),
   };
+}
+
+const v6Channels = ["scaleX", "scaleY", "skewX", "rotateX"];
+const v6Curves = ["back", "elastic", "bounce", "damped", "anticipate"];
+/** Dependency-free capability check used before writing to a possibly stale service. */
+export function usesV6Features(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const effect = value as {
+    passes?: Record<string, unknown>[];
+    channels?: {
+      property?: string;
+      curve?: string;
+      seconds?: number;
+      align?: string;
+    }[];
+  };
+  return (
+    !!effect.passes?.some(
+      (p) =>
+        v6Kinds.includes(String(p.kind)) ||
+        p.warpMode !== undefined ||
+        p.sheenStyle !== undefined ||
+        p.pixelMode !== undefined,
+    ) ||
+    !!effect.channels?.some(
+      (c) =>
+        v6Channels.includes(c.property ?? "") ||
+        v6Curves.includes(c.curve ?? "") ||
+        c.seconds !== undefined ||
+        c.align !== undefined,
+    )
+  );
 }

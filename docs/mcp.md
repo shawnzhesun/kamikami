@@ -18,7 +18,7 @@ Try: “Inspect the project, add a title saying Hello KamiKami for the first thr
 
 ## Controls and effect authoring
 
-The server exposes 37 tools for project/layer editing, media import and recovery, timeline operations, playback, effects, actual rendered-frame inspection, reusable effect bundles, history, saving and MP4 export. Read `get_capabilities` for exact schemas and limits. See the [full capability audit](mcp-audit.md) for the tool-to-editor mapping and verification scope.
+The server exposes 43 tools for project/layer editing, media import and recovery, timeline operations, playback, effects, actual rendered-frame inspection, reusable effect bundles, history, saving and MP4 export. Read `get_capabilities` for exact schemas and limits. See the [full capability audit](mcp-audit.md) for the tool-to-editor mapping and verification scope.
 
 For a new effect: read the effect schema, use `create_effect`, apply it to a visual element, inspect `render_frame` images at meaningful times, then refine the applied instance with `update_effect_instance`. Creation automatically saves the preset to **My effects**. Use `update_effect` to revise your own preset for future applications; existing instances keep their own settings. `save_user_effect` can copy an effect into My effects. `export_effect_bundle` returns shareable `.kamikami-effect.json`; another user imports it into the **Effect Library** through the Effects tab or `import_effect_bundle`. Imported bundles get independent IDs; applying them does not duplicate the gallery card. Bundles contain declarative settings and an engine version, without executable code or external dependencies.
 

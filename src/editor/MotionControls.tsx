@@ -111,12 +111,15 @@ export function DepthControls({
           ]}
           onChange={(mode) => change({ mode })}
         />
-        <Choice
-          label="Easing"
-          value={value.easing}
-          options={easing}
-          onChange={(easing) => change({ easing })}
-        />
+        {/* Float always breathes on a cosine; easing only shapes Travel. */}
+        {value.mode !== "float" && (
+          <Choice
+            label="Easing"
+            value={value.easing}
+            options={easing}
+            onChange={(easing) => change({ easing })}
+          />
+        )}
         <Numbers
           value={value}
           change={change}

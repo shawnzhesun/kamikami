@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { clamp01, effectRandom } from "./visual-effects";
-import { resolveEffectInstance } from "./effect-instance";
+import { instanceAmountAt, resolveEffectInstanceAt } from "./effect-instance";
 import type { Effect, Layer } from "./model";
 import { projectDepth, seeded, unit, ease } from "./motion";
 
@@ -110,15 +110,19 @@ export const builtinTextSettings: Record<string, TextEffect> = {
 
 export type ActiveTextEffect = { effect: TextEffect; amount: number };
 
+/** `time` is clip-local seconds; keyframed strength and parameters are evaluated there. */
 export function activeTextEffects(
   layer: Layer,
   effects: Effect[],
+  time = 0,
 ): ActiveTextEffect[] {
   if (layer.type !== "title") return [];
+  const animation = textEffectTime(layer, time);
   return layer.effects.flatMap((instance) => {
-    const effect = resolveEffectInstance(instance, effects)?.text;
-    return effect && instance.enabled && instance.amount > 0
-      ? [{ effect, amount: clamp01(instance.amount) }]
+    const effect = resolveEffectInstanceAt(instance, effects, animation)?.text;
+    const amount = instanceAmountAt(instance, animation);
+    return effect && instance.enabled && amount > 0
+      ? [{ effect, amount: clamp01(amount) }]
       : [];
   });
 }

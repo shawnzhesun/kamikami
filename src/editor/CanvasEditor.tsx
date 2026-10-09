@@ -8,6 +8,8 @@ import {
   hitBounds,
   layerBounds,
   snapValue,
+  layerPropertyAt,
+  setLayerProperty,
   translateLayers,
   visibleAt,
   type Bounds,
@@ -142,6 +144,8 @@ export function CanvasEditor({
       bounds = box(layer);
     const radius = Math.hypot(origin.x - bounds.cx, origin.y - bounds.cy);
     const angle = Math.atan2(origin.y - bounds.cy, origin.x - bounds.cx);
+    const baseScale = layerPropertyAt(layer, "scale", frame, project.fps);
+    const baseRotation = layerPropertyAt(layer, "rotation", frame, project.fps);
     let latest = base,
       moved = false;
     cleanup.current = startGesture(
@@ -172,19 +176,19 @@ export function CanvasEditor({
             }
           }
           setGuides(guide);
-          latest = translateLayers(base, ids, x, y);
+          latest = translateLayers(base, ids, x, y, frame);
         } else {
           const scale =
             mode === "scale"
               ? clamp(
-                  (layer.scale * Math.hypot(p.x - bounds.cx, p.y - bounds.cy)) /
+                  (baseScale * Math.hypot(p.x - bounds.cx, p.y - bounds.cy)) /
                     Math.max(radius, 1),
                   0.05,
                   5,
                 )
-              : layer.scale;
+              : baseScale;
           let rotation =
-            layer.rotation +
+            baseRotation +
             ((Math.atan2(p.y - bounds.cy, p.x - bounds.cx) - angle) * 180) /
               Math.PI;
           if (event.shiftKey) rotation = Math.round(rotation / 15) * 15;
@@ -192,13 +196,17 @@ export function CanvasEditor({
           latest = {
             ...base,
             layers: base.layers.map((l) =>
-              l.id === layer.id
-                ? {
-                    ...l,
-                    scale,
-                    rotation: mode === "rotate" ? rotation : l.rotation,
-                  }
-                : l,
+              l.id !== layer.id
+                ? l
+                : mode === "rotate"
+                  ? setLayerProperty(
+                      l,
+                      "rotation",
+                      rotation,
+                      frame,
+                      project.fps,
+                    )
+                  : setLayerProperty(l, "scale", scale, frame, project.fps),
             ),
           };
         }
@@ -219,14 +227,18 @@ export function CanvasEditor({
       layers: project.layers.map((l) => {
         if (!selected.includes(l.id) || !visible.includes(l)) return l;
         const b = box(l);
-        return {
-          ...l,
-          [axis]: clamp(
-            l[axis] + (axis === "x" ? 960 - b.cx : 540 - b.cy),
+        return setLayerProperty(
+          l,
+          axis,
+          clamp(
+            layerPropertyAt(l, axis, frame, project.fps) +
+              (axis === "x" ? 960 - b.cx : 540 - b.cy),
             axis === "x" ? -1920 : -1080,
             axis === "x" ? 1920 : 1080,
           ),
-        };
+          frame,
+          project.fps,
+        );
       }),
     });
   }
@@ -294,7 +306,9 @@ export function CanvasEditor({
           if (delta) {
             e.preventDefault();
             e.stopPropagation();
-            onCommit(translateLayers(project, selected, delta[0], delta[1]));
+            onCommit(
+              translateLayers(project, selected, delta[0], delta[1], frame),
+            );
           }
         }}
       >

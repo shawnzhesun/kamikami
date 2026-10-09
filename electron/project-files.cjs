@@ -15,7 +15,7 @@ function checkJson(text) {
     throw new Error("Project JSON must be smaller than 2 MB.");
   const value = JSON.parse(text);
   if (
-    ![1, 2].includes(value?.version) ||
+    ![1, 2, 3].includes(value?.version) ||
     !Array.isArray(value.layers) ||
     typeof value.name !== "string"
   )

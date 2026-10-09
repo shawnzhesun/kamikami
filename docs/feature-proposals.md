@@ -17,7 +17,7 @@ Shawn approved these four additions, now implemented:
 - Resizable Media/Effects library, persistent width, responsive media/effects grids, and consolidated import/project controls.
 - Removed the timeline shortcut bar; mouse grip dragging and keyboard arrows reorder the stack in one Undo step.
 - Replaced built-in chat with Codex/Claude Code MCP setup, repository skills, and real session status.
-- MCP now exposes 37 tools for editing, media lifecycle, rendered frame review, reusable effect authoring, export, and history with revision checks.
+- MCP now exposes 43 tools (37 at the original audit; later additions include layer/track tools and `set_keyframes`) for editing, media lifecycle, rendered frame review, reusable effect authoring, export, and history with revision checks.
 
 ## Compact libraries and effect authoring — completed
 
@@ -32,7 +32,7 @@ Shawn approved these four additions, now implemented:
 | Feature | Proposed scope |
 | --- | --- |
 | Project management | New/open/recent projects, Save As, named versions, portable bundles with media. |
-| Keyframes and motion presets | Transform/opacity keyframes, easing controls, reusable presets. |
+| Keyframes and motion presets | Shipped October 9, 2026: transform, opacity, volume, effect-strength and effect-parameter keyframes with easing. Next: a graph editor and reusable keyframe presets. |
 | Agent motion review | Multi-frame contact sheets, motion comparisons, audio review and stronger automated visual evaluations. Single-frame rendering and independent effect snapshots are implemented. |
 | Export controls | Size/frame-rate presets, destinations, cancellation, queue/history, reveal in folder. |
 

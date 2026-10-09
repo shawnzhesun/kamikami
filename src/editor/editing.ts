@@ -1,4 +1,5 @@
 import { layerAtTime, type Layer, type Project } from "../model";
+import { propertyAt, setValueAt, type KeyframeProperty } from "../keyframes";
 
 export const clamp = (n: number, min: number, max: number) =>
   Math.max(min, Math.min(max, n));
@@ -98,10 +99,15 @@ export function trimClip(
         l.start + minLength,
         Math.max(l.start + minLength, Math.min(project.duration, sourceEnd)),
       );
+      // A whole clip's exit animations (fade out, "out" timing) follow its end.
+      // Split or left-trimmed pieces keep their shared timeline for continuity.
+      const whole =
+        l.effectOffset === 0 &&
+        Math.abs((l.effectDuration || l.duration) - l.duration) < 1e-6;
       return {
         ...l,
         duration: newEnd - l.start,
-        effectDuration: l.effectDuration || l.duration,
+        effectDuration: whole ? 0 : l.effectDuration || l.duration,
       };
     }),
   };
@@ -150,31 +156,75 @@ export function splitClips(
   });
   return { project: { ...project, layers }, selected };
 }
+/** Clip-local seconds for a project frame, clamped inside the clip. */
+export function localTimeAt(layer: Layer, frame: number, fps: number) {
+  return clamp(
+    (frame - Math.round(layer.start * fps)) / fps,
+    0,
+    Math.max(0, layer.duration - 1 / fps),
+  );
+}
+/** Set a transform property at the playhead; animated properties receive a keyframe. */
+export function setLayerProperty(
+  layer: Layer,
+  property: KeyframeProperty,
+  value: number,
+  frame: number | undefined,
+  fps: number,
+) {
+  return frame === undefined
+    ? { ...layer, [property]: value }
+    : setValueAt(
+        layer,
+        { kind: "property", property },
+        value,
+        localTimeAt(layer, frame, fps),
+      );
+}
+export function layerPropertyAt(
+  layer: Layer,
+  property: KeyframeProperty,
+  frame: number | undefined,
+  fps: number,
+) {
+  return frame === undefined
+    ? layer[property]
+    : propertyAt(layer, property, localTimeAt(layer, frame, fps));
+}
 export function translateLayers(
   project: Project,
   ids: string[],
   dx: number,
   dy: number,
+  frame?: number,
 ) {
   const selected = project.layers.filter(
     (l) => ids.includes(l.id) && l.type !== "audio",
   );
   if (!selected.length) return project;
+  const at = (l: Layer, p: "x" | "y") =>
+    layerPropertyAt(l, p, frame, project.fps);
   const x = clamp(
     dx,
-    Math.max(...selected.map((l) => -1920 - l.x)),
-    Math.min(...selected.map((l) => 1920 - l.x)),
+    Math.max(...selected.map((l) => -1920 - at(l, "x"))),
+    Math.min(...selected.map((l) => 1920 - at(l, "x"))),
   );
   const y = clamp(
     dy,
-    Math.max(...selected.map((l) => -1080 - l.y)),
-    Math.min(...selected.map((l) => 1080 - l.y)),
+    Math.max(...selected.map((l) => -1080 - at(l, "y"))),
+    Math.min(...selected.map((l) => 1080 - at(l, "y"))),
   );
   return {
     ...project,
-    layers: project.layers.map((l) =>
-      selected.includes(l) ? { ...l, x: l.x + x, y: l.y + y } : l,
-    ),
+    layers: project.layers.map((l) => {
+      if (!selected.includes(l)) return l;
+      let next = l;
+      if (x)
+        next = setLayerProperty(next, "x", at(l, "x") + x, frame, project.fps);
+      if (y)
+        next = setLayerProperty(next, "y", at(l, "y") + y, frame, project.fps);
+      return next;
+    }),
   };
 }
 export function visibleAt(layer: Layer, frame: number, fps: number) {

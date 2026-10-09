@@ -105,7 +105,9 @@ export function fieldFrames(field: Field, time: number, seed: number) {
     let x = signed(seed, i * 5 + 1) * field.spread;
     let y = signed(seed, i * 5 + 2) * field.spread;
     if (field.mode === "tunnel") {
-      z = fract(seeded(seed, i * 5) - time * 0.12) * (field.depth + 0.8) - 0.8;
+      // Wrap at the zero-opacity near plane so copies never pop while visible.
+      z =
+        fract(seeded(seed, i * 5) - time * 0.12) * (field.depth + 0.85) - 0.85;
       x = Math.cos(angle) * field.spread;
       y = Math.sin(angle) * field.spread;
     } else if (field.mode === "orbit") {

@@ -1,6 +1,6 @@
 import React from "react";
 import type { Layer, Effect } from "./model";
-import { resolveEffectInstance } from "./effect-instance";
+import { instanceAmountAt, resolveEffectInstanceAt } from "./effect-instance";
 import { fieldFrames } from "./motion";
 import { visualFrame } from "./visual-effects";
 import {
@@ -22,18 +22,19 @@ export function AnimatedText({
   effects: Effect[];
   time: number;
 }) {
+  const animation = Math.max(0, time + layer.effectOffset);
   const fieldInstance = layer.effects.find(
     (instance) =>
       instance.enabled &&
-      instance.amount > 0 &&
-      resolveEffectInstance(instance, effects)?.passes?.some(
+      instanceAmountAt(instance, animation) > 0 &&
+      resolveEffectInstanceAt(instance, effects, animation)?.passes?.some(
         (pass) =>
           pass.kind === "repeat" && pass.field && pass.field.unit !== "whole",
       ),
   );
   const pass =
     fieldInstance &&
-    resolveEffectInstance(fieldInstance, effects)?.passes?.find(
+    resolveEffectInstanceAt(fieldInstance, effects, animation)?.passes?.find(
       (pass) =>
         pass.kind === "repeat" && pass.field && pass.field.unit !== "whole",
     );
@@ -44,9 +45,9 @@ export function AnimatedText({
     ).filter((v) => !/^\s+$/u.test(v));
     const { strength, time: fieldTime } = visualFrame(
       pass,
-      time + layer.effectOffset,
+      animation,
       layer.effectDuration || layer.duration,
-      fieldInstance.amount,
+      instanceAmountAt(fieldInstance, animation),
     );
     return (
       <span
@@ -96,7 +97,7 @@ function TextRun({
   effects: Effect[];
   time: number;
 }) {
-  const active = activeTextEffects(layer, effects);
+  const active = activeTextEffects(layer, effects, time);
   if (!active.length) return <>{layer.text}</>;
   const t = textEffectTime(layer, time);
   const duration = layer.effectDuration || layer.duration;
@@ -116,7 +117,8 @@ function TextRun({
       paint.backgroundClip = "text";
       paint.WebkitBackgroundClip = "text";
       paint.color = "transparent";
-      paint.textShadow = "none";
+      // Keep a glow set by an earlier neon effect.
+      paint.textShadow ??= "none";
     }
     if (effect.kind === "neon") {
       const flicker =

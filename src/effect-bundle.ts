@@ -8,7 +8,9 @@ import {
   type Project,
 } from "./model";
 import { builtinEffects, allBuiltinEffects } from "./builtin-effects";
+import { usesV6Features } from "./visual-effects";
 export function effectEngine(effect: Effect) {
+  if (usesV6Features(effect)) return "kamikami-visual-v6" as const;
   if (usesSpatialMotion(effect)) return "kamikami-visual-v5" as const;
   if (
     effect.text ||
@@ -61,6 +63,7 @@ export const EffectBundleSchema = z
       "kamikami-visual-v3",
       "kamikami-visual-v4",
       "kamikami-visual-v5",
+      "kamikami-visual-v6",
     ]),
     name: z.string().min(1).max(80),
     author: z.string().max(100).default(""),
@@ -77,6 +80,7 @@ export const EffectBundleSchema = z
         "kamikami-visual-v3",
         "kamikami-visual-v4",
         "kamikami-visual-v5",
+        "kamikami-visual-v6",
       ].indexOf(bundle.engine) >=
       [
         "frameforge-curves-v1",
@@ -84,14 +88,28 @@ export const EffectBundleSchema = z
         "kamikami-visual-v3",
         "kamikami-visual-v4",
         "kamikami-visual-v5",
+        "kamikami-visual-v6",
       ].indexOf(effectEngine(bundle.effect)),
     {
       message:
-        "Effect parameters require a newer engine: visual passes use kamikami-visual-v2; remap, repetition, smear and pattern modes use kamikami-visual-v3; text animation and blinds require kamikami-visual-v4; spatial motion and text glitches require kamikami-visual-v5.",
+        "Effect parameters require a newer engine: visual passes use kamikami-visual-v2; remap, repetition, smear and pattern modes use kamikami-visual-v3; text animation and blinds require kamikami-visual-v4; spatial motion and text glitches require kamikami-visual-v5; spring curves, stretch/skew/tilt channels and the illustration, 3D-look and organic passes require kamikami-visual-v6.",
       path: ["engine"],
     },
   );
 export type EffectBundle = z.infer<typeof EffectBundleSchema>;
+/**
+ * presetFamilyId postdates the first v4 readers, whose strict schema rejects
+ * it. Only v5 readers are guaranteed to know it, so older engines omit it.
+ */
+export function portableBundle(bundle: EffectBundle): EffectBundle {
+  if (
+    ["kamikami-visual-v5", "kamikami-visual-v6"].includes(bundle.engine) ||
+    !bundle.effect.presetFamilyId
+  )
+    return bundle;
+  const { presetFamilyId: _family, ...effect } = bundle.effect;
+  return { ...bundle, effect };
+}
 export type UserEffect = {
   id: string;
   savedAt: string;

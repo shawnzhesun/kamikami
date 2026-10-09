@@ -10,7 +10,7 @@ A flattened video cannot reveal its original layers, masks, keyframes, fonts, or
 
 ## Current library organization
 
-The catalog below records the original 33 video-derived recipes. Related recipes are now variations of five shared cards: Color flash, Color silhouette, Color grade, Scene light, and Camera zoom. Together with the retained presets, that consolidation produced 30 built-in cards. The subsequent [second video study](videoplayback-effects.md) adds four unique operations for a total of 34. Search by an original name to find its family, then select that look in the Variation dropdown. See [the full consolidation audit](effect-library-audit.md). Existing project recipes remain unchanged.
+The catalog below records the original 33 video-derived recipes. Related recipes are now variations of five shared cards: Color flash, Color silhouette, Color grade, Scene light, and Camera zoom. Together with the retained presets, that consolidation produced 30 built-in cards. The subsequent [second video study](videoplayback-effects.md) adds four unique operations for a total of 34; the gallery now has 57 cards. Search by an original name to find its family, then select that look in the Variation dropdown. See [the full consolidation audit](effect-library-audit.md). Existing project recipes remain unchanged.
 
 ## Preset catalog
 

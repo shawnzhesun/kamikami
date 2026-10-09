@@ -1,4 +1,5 @@
 import { usesSpatialMotion } from "./motion";
+import { usesV6Features } from "./visual-effects";
 import { z } from "zod";
 
 export const mediaPath =
@@ -51,7 +52,8 @@ export async function api(url: string, method = "GET", body?: unknown) {
       }
     | undefined;
   const project = payload?.project ?? payload;
-  const needsInstanceSupport = project?.version === 2;
+  const needsInstanceSupport = project?.version === 2 || project?.version === 3;
+  const needsKeyframes = project?.version === 3;
   const definitions = Array.isArray(body)
     ? body
     : (project?.effects ?? (payload?.effect ? [payload.effect] : []));
@@ -60,36 +62,64 @@ export async function api(url: string, method = "GET", body?: unknown) {
     project?.layers?.some((layer) =>
       layer.effects?.some((instance) => usesSpatialMotion(instance.settings)),
     );
-  const needsTextEngine = definitions.some((definition) => {
-    const effect = definition as {
-      text?: unknown;
-      passes?: { kind?: string }[];
-    } | null;
-    return (
-      !!effect?.text || effect?.passes?.some((pass) => pass.kind === "blinds")
-    );
-  });
+  const instanceSettings =
+    project?.layers?.flatMap((layer) =>
+      (layer.effects ?? []).map((instance) => instance.settings),
+    ) ?? [];
+  const needsV6Engine = [...definitions, ...instanceSettings].some(
+    usesV6Features,
+  );
+  const needsTextEngine = [...definitions, ...instanceSettings].some(
+    (definition) => {
+      const effect = definition as {
+        text?: unknown;
+        passes?: { kind?: string }[];
+      } | null;
+      return (
+        !!effect?.text || effect?.passes?.some((pass) => pass.kind === "blinds")
+      );
+    },
+  );
   if (
     needsEffectLibrary ||
     (method !== "GET" &&
-      (needsTextEngine || needsInstanceSupport || needsMotionEngine))
+      (needsTextEngine ||
+        needsInstanceSupport ||
+        needsKeyframes ||
+        needsV6Engine ||
+        needsMotionEngine))
   ) {
     const health = await api("/api/health");
     if (needsEffectLibrary && health.effectLibraryVersion !== 2)
       throw new Error(effectsRestartMessage);
-    if (needsInstanceSupport && health.projectVersion !== 2)
+    if (needsInstanceSupport && !(health.projectVersion >= 2))
       throw new Error(
         "The local service is outdated. Restart KamiKami's development process before saving independent effect settings.",
       );
-    if (needsMotionEngine && health.effectEngine !== "kamikami-visual-v5")
+    if (needsV6Engine && health.effectEngine !== "kamikami-visual-v6")
+      throw new Error(
+        "The local service is outdated. Restart KamiKami with npm run desktop before saving or rendering spring, illustration and 3D-look effects.",
+      );
+    if (needsKeyframes && !(health.projectVersion >= 3))
+      throw new Error(
+        "The local service is outdated. Restart KamiKami with npm run desktop before saving keyframed animation.",
+      );
+    if (
+      needsMotionEngine &&
+      !["kamikami-visual-v5", "kamikami-visual-v6"].includes(
+        health.effectEngine,
+      )
+    )
       throw new Error(
         "The local service is outdated. Restart KamiKami with npm run desktop before saving or rendering spatial motion and text glitch effects.",
       );
     if (
       needsTextEngine &&
-      !["kamikami-visual-v4", "kamikami-visual-v5"].includes(
-        health.effectEngine,
-      )
+      ![
+        "kamikami-visual-v4",
+        "kamikami-visual-v5",
+        "kamikami-visual-v6",
+      ].includes(health.effectEngine)
     ) {
       throw new Error(
         "The local service is outdated. Restart KamiKami's development process before saving or exporting text effects.",

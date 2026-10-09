@@ -11,6 +11,18 @@ import { z } from "zod";
 import { DepthSchema, depthFrame } from "./motion";
 import { TextEffectSchema, builtinTextSettings } from "./text-effects";
 import { VisualPassSchema, effectRandom } from "./visual-effects";
+import {
+  ElementKeyframesSchema,
+  InstanceKeyframesSchema,
+  allTracks,
+  animationTime,
+  normalizeTrack,
+  numberRangeAt,
+  propertyAt,
+  propertyRanges,
+  getPath,
+} from "./keyframes";
+import { instanceAmountAt, resolveEffectInstanceAt } from "./effect-instance";
 
 export const ChannelSchema = z.object({
   property: z.enum([
@@ -25,6 +37,10 @@ export const ChannelSchema = z.object({
     "saturation",
     "letterSpacing",
     "rotateY",
+    "rotateX",
+    "scaleX",
+    "scaleY",
+    "skewX",
   ]),
   curve: z.enum([
     "linear",
@@ -34,11 +50,20 @@ export const ChannelSchema = z.object({
     "ease-out",
     "shake",
     "steps",
+    "back",
+    "elastic",
+    "bounce",
+    "damped",
+    "anticipate",
   ]),
   from: z.number().min(-2000).max(2000),
   to: z.number().min(-2000).max(2000),
   frequency: z.number().min(0).max(20),
   phase: z.number().min(-100).max(100),
+  /** Optional span: the curve runs over these seconds instead of the whole clip. */
+  seconds: z.number().min(0.05).max(30).optional(),
+  /** With `seconds`, `end` places the span at the clip end (exits). */
+  align: z.enum(["start", "end"]).optional(),
 });
 export const EffectSchema = z.object({
   depth: DepthSchema.optional(),
@@ -61,6 +86,7 @@ export const InstanceSchema = z.object({
   amount: z.number().min(0).max(2),
   enabled: z.boolean(),
   settings: EffectSettingsSchema.optional(),
+  keyframes: InstanceKeyframesSchema.optional(),
 });
 // `layers` and Layer remain legacy wire/API aliases for timeline elements.
 export const LayerSchema = z.object({
@@ -91,6 +117,7 @@ export const LayerSchema = z.object({
   fontStyle: z.enum(["normal", "italic"]).optional(),
   visible: z.boolean(),
   effects: z.array(InstanceSchema).max(8),
+  keyframes: ElementKeyframesSchema.optional(),
 });
 export const TimelineLayerSchema = z.object({
   id: z.string().min(1).max(100),
@@ -100,7 +127,9 @@ export type TimelineLayer = z.infer<typeof TimelineLayerSchema>;
 export const ProjectSchema = z.object({
   fonts: z.array(FontAssetSchema).max(100).optional(),
   tracks: z.array(TimelineLayerSchema).max(40).optional(),
-  version: z.literal(2),
+  // Version 3 is written only when keyframes exist, so older readers reject
+  // animated projects instead of silently discarding their keyframes.
+  version: z.union([z.literal(2), z.literal(3)]),
   name: z.string().min(1).max(100),
   width: z.literal(1920),
   height: z.literal(1080),
@@ -216,6 +245,8 @@ export function validateProject(input: unknown): Project {
         ),
     }));
   }
+  for (const l of p.layers) validateKeyframes(l);
+  p.version = p.layers.some((l) => allTracks(l).length) ? 3 : 2;
   const tracks = p.tracks ? [...p.tracks] : [];
   if (new Set(tracks.map((t) => t.id)).size !== tracks.length)
     throw new Error("Layer IDs must be unique");
@@ -249,6 +280,53 @@ export function validateProject(input: unknown): Project {
   }
   return p;
 }
+function validateKeyframes(l: Layer) {
+  const check = (
+    label: string,
+    track: { value: number }[],
+    range: { min: number; max: number },
+  ) => {
+    if (track.some((k) => k.value < range.min || k.value > range.max))
+      throw new Error(
+        `Keyframes for ${label} on “${l.name}” must stay between ${range.min} and ${range.max}`,
+      );
+  };
+  if (l.keyframes) {
+    for (const [property, track] of Object.entries(l.keyframes)) {
+      if (!track) continue;
+      if (
+        property === "volume"
+          ? l.type !== "audio" && l.type !== "video"
+          : l.type === "audio"
+      )
+        throw new Error(`“${l.name}” cannot animate ${property}`);
+      check(
+        property,
+        track,
+        propertyRanges[property as keyof typeof propertyRanges],
+      );
+      l.keyframes[property as keyof typeof l.keyframes] = normalizeTrack(track);
+    }
+  }
+  for (const instance of l.effects) {
+    if (!instance.keyframes) continue;
+    if (instance.keyframes.amount) {
+      check("effect strength", instance.keyframes.amount, { min: 0, max: 2 });
+      instance.keyframes.amount = normalizeTrack(instance.keyframes.amount);
+    }
+    for (const [path, track] of Object.entries(
+      instance.keyframes.parameters ?? {},
+    )) {
+      const range = numberRangeAt(EffectSettingsSchema, path);
+      if (!range || typeof getPath(instance.settings, path) !== "number")
+        throw new Error(
+          `“${path}” is not a numeric setting of ${instance.effectId} on “${l.name}”`,
+        );
+      check(path, track, range);
+      instance.keyframes.parameters![path] = normalizeTrack(track);
+    }
+  }
+}
 export function projectTracks(project: Project): TimelineLayer[] {
   return (
     project.tracks ??
@@ -269,7 +347,35 @@ export function orderedElements(project: Project): Layer[] {
       (order.get(elementTrackId(a)) ?? 0) - (order.get(elementTrackId(b)) ?? 0),
   );
 }
+/** Bounces with geometrically shrinking heights; `count` impacts, ending at rest. */
+export function bounceOut(u: number, count = 3) {
+  if (u >= 1) return 1;
+  // Durations shrink by half per bounce; the first segment is the fall.
+  // Height ratio 1/4 per bounce gives each bounce half the previous airtime.
+  const segments = [
+    1,
+    ...Array.from({ length: count }, (_, i) => 2 * Math.pow(0.5, i + 1)),
+  ];
+  const total = segments.reduce((a, b) => a + b, 0);
+  let x = u * total;
+  for (let i = 0; i < segments.length; i++) {
+    const d = segments[i];
+    if (x <= d || i === segments.length - 1) {
+      if (i === 0) return (x / d) ** 2;
+      const height = Math.pow(0.25, i);
+      const p = Math.min(1, x / d) * 2 - 1;
+      return 1 - height * (1 - p * p);
+    }
+    x -= d;
+  }
+  return 1;
+}
 export function channelValue(c: Channel, t: number, duration: number) {
+  if (c.seconds !== undefined) {
+    const span = Math.min(c.seconds, Math.max(duration, 0.001));
+    if (c.align === "end") t -= duration - span;
+    duration = span;
+  }
   const u = Math.max(0, Math.min(1, t / Math.max(duration, 0.001)));
   let f = u;
   if (c.curve === "ease") f = u * u * (3 - 2 * u);
@@ -283,6 +389,31 @@ export function channelValue(c: Channel, t: number, duration: number) {
       Math.round((c.phase + 100) * 100),
       Math.floor(Math.max(0, t) * c.frequency),
     );
+  // Spring curves settle exactly on `to`; overshoot is part of the motion.
+  if (c.curve === "back") {
+    const k = 1.70158 * (1 + Math.max(0, c.phase));
+    f = 1 + (k + 1) * Math.pow(u - 1, 3) + k * Math.pow(u - 1, 2);
+  }
+  // Ease-in back: pulls the opposite way first, then commits (exits, throws).
+  if (c.curve === "anticipate") {
+    const k = 1.70158 * (1 + Math.max(0, c.phase));
+    f = (k + 1) * u * u * u - k * u * u;
+  }
+  if (c.curve === "elastic")
+    f =
+      u >= 1
+        ? 1
+        : 1 -
+          Math.pow(2, -10 * u) *
+            Math.cos(2 * Math.PI * Math.max(1, c.frequency) * u);
+  if (c.curve === "bounce")
+    f = bounceOut(u, Math.max(1, Math.round(c.frequency)));
+  if (c.curve === "damped")
+    f =
+      1 -
+      Math.exp(-(3 + Math.max(0, c.phase)) * u) *
+        Math.cos(2 * Math.PI * c.frequency * Math.max(0, t)) *
+        (1 - u);
   if (c.curve === "sine")
     f = (1 - Math.cos(2 * Math.PI * (t * c.frequency + c.phase))) / 2;
   if (c.curve === "pulse")
@@ -294,11 +425,11 @@ export function channelValue(c: Channel, t: number, duration: number) {
 }
 export function layerAtTime(layer: Layer, effects: Effect[], t: number) {
   const v = {
-    x: layer.x,
-    y: layer.y,
-    scale: layer.scale,
-    rotation: layer.rotation,
-    opacity: layer.opacity,
+    x: propertyAt(layer, "x", t),
+    y: propertyAt(layer, "y", t),
+    scale: propertyAt(layer, "scale", t),
+    rotation: propertyAt(layer, "rotation", t),
+    opacity: propertyAt(layer, "opacity", t),
     blur: 0,
     brightness: 1,
     contrast: 1,
@@ -307,15 +438,20 @@ export function layerAtTime(layer: Layer, effects: Effect[], t: number) {
     rotateY: 0,
     rotateX: 0,
     perspective: 1800,
+    scaleX: 1,
+    scaleY: 1,
+    skewX: 0,
   };
+  const time = animationTime(layer, t);
   for (const instance of layer.effects.filter((e) => e.enabled)) {
-    const definition = resolveEffectInstance(instance, effects);
-    if (definition?.depth && instance.amount > 0) {
+    const definition = resolveEffectInstanceAt(instance, effects, time);
+    const amount = instanceAmountAt(instance, time);
+    if (definition?.depth && amount > 0) {
       const d = depthFrame(
         definition.depth,
-        t + layer.effectOffset,
+        time,
         layer.effectDuration || layer.duration,
-        instance.amount,
+        amount,
       );
       v.x += d.x * 1920;
       v.y += d.y * 1080;
@@ -327,21 +463,24 @@ export function layerAtTime(layer: Layer, effects: Effect[], t: number) {
       v.opacity *= d.opacity;
       v.perspective = d.perspective * 1800;
     }
-    for (const c of resolveEffectInstance(instance, effects)?.channels ?? []) {
+    for (const c of definition?.channels ?? []) {
       const value = channelValue(
         c,
-        t + layer.effectOffset,
+        time,
         layer.effectDuration || layer.duration,
       );
       if (
         c.property === "scale" ||
+        c.property === "scaleX" ||
+        c.property === "scaleY" ||
         c.property === "opacity" ||
         c.property === "brightness" ||
         c.property === "contrast" ||
         c.property === "saturation"
       )
-        v[c.property] *= 1 + (value - 1) * instance.amount;
-      else v[c.property] += value * instance.amount;
+        // Clamp each factor: two negative factors must not multiply back to visible.
+        v[c.property] *= Math.max(0, 1 + (value - 1) * amount);
+      else v[c.property] += value * amount;
     }
   }
   v.opacity = Math.max(0, Math.min(1, v.opacity));
@@ -351,6 +490,10 @@ export function layerAtTime(layer: Layer, effects: Effect[], t: number) {
   v.contrast = Math.max(0, Math.min(10, v.contrast));
   v.saturation = Math.max(0, Math.min(10, v.saturation));
   v.rotateY = Math.max(-80, Math.min(80, v.rotateY));
+  v.rotateX = Math.max(-80, Math.min(80, v.rotateX));
+  v.scaleX = Math.max(0.001, v.scaleX);
+  v.scaleY = Math.max(0.001, v.scaleY);
+  v.skewX = Math.max(-80, Math.min(80, v.skewX));
   return v;
 }
 export function makeLayer(type: Layer["type"], name: string): Layer {
@@ -380,11 +523,15 @@ export function makeLayer(type: Layer["type"], name: string): Layer {
     effects: [],
   };
 }
-export function layerVolume(layer: Layer, layers: Layer[]) {
+/** `localTime` is clip-local seconds; omit it for the static (unkeyed) level. */
+export function layerVolume(layer: Layer, layers: Layer[], localTime?: number) {
   const soloing = layers.some(
     (l) => l.visible && ["audio", "video"].includes(l.type) && l.solo,
   );
-  return layer.muted || (soloing && !layer.solo) ? 0 : layer.volume;
+  if (layer.muted || (soloing && !layer.solo)) return 0;
+  return localTime === undefined
+    ? layer.volume
+    : Math.max(0, Math.min(1, propertyAt(layer, "volume", localTime)));
 }
 export const initialProject: Project = validateProject({
   version: 2,

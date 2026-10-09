@@ -1,6 +1,8 @@
 import { FontText } from "./FontText";
 import { GraphicEffects } from "./GraphicEffects";
-import { orderedElements, resolveEffectInstance } from "./model";
+import { orderedElements } from "./model";
+import { instanceAmountAt, resolveEffectInstanceAt } from "./effect-instance";
+import { animationTime } from "./keyframes";
 import React from "react";
 import {
   AbsoluteFill,
@@ -175,7 +177,7 @@ function VisualLayer({
     return src ? (
       <Audio
         src={src}
-        volume={layerVolume(layer, project.layers)}
+        volume={(f) => layerVolume(layer, project.layers, f / fps)}
         startFrom={Math.round(layer.offset * fps)}
       />
     ) : null;
@@ -184,7 +186,7 @@ function VisualLayer({
       style={{
         justifyContent: "center",
         alignItems: "center",
-        transform: `translate(${v.x}px,${v.y}px) scale(${v.scale}) rotate(${v.rotation}deg) perspective(${v.perspective}px) rotateX(${v.rotateX}deg) rotateY(${v.rotateY}deg)`,
+        transform: `translate(${v.x}px,${v.y}px) scale(${v.scale}) rotate(${v.rotation}deg) perspective(${v.perspective}px) rotateX(${v.rotateX}deg) rotateY(${v.rotateY}deg) scale(${v.scaleX},${v.scaleY}) skewX(${v.skewX}deg)`,
         opacity: v.opacity,
         filter: `blur(${v.blur}px) brightness(${v.brightness}) contrast(${v.contrast}) saturate(${v.saturation})`,
       }}
@@ -210,7 +212,7 @@ function VisualLayer({
           <Video
             src={src}
             startFrom={Math.round(layer.offset * fps)}
-            volume={layerVolume(layer, project.layers)}
+            volume={(f) => layerVolume(layer, project.layers, f / fps)}
             style={{ width: "100%", height: "100%", objectFit: "contain" }}
           />
         )}
@@ -218,13 +220,15 @@ function VisualLayer({
           layer.effects
             .filter((i) => i.enabled)
             .map((i) => {
-              const e = resolveEffectInstance(i, project.effects);
-              return e && e.tint > 0 ? (
+              const time = animationTime(layer, t);
+              const e = resolveEffectInstanceAt(i, project.effects, time);
+              const amount = instanceAmountAt(i, time);
+              return e && e.tint > 0 && amount > 0 ? (
                 <AbsoluteFill
                   key={i.effectId}
                   style={{
                     background: e.color,
-                    opacity: Math.min(1, e.tint * i.amount),
+                    opacity: Math.min(1, e.tint * amount),
                     mixBlendMode: "screen",
                     pointerEvents: "none",
                   }}

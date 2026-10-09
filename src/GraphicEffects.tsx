@@ -1,9 +1,15 @@
 import React, { useId } from "react";
 import { effectRandom, visualFrame, type VisualPass } from "./visual-effects";
-import { resolveEffectInstance, type Effect, type Layer } from "./model";
+import { type Effect, type Layer } from "./model";
+import { instanceAmountAt, resolveEffectInstanceAt } from "./effect-instance";
 import { GraphicMapEffects } from "./GraphicMapEffects";
 import { svgImage } from "./graphic-maps";
 import { ObjectField, depthParticleSvg } from "./SpatialGraphicEffects";
+import {
+  isStyleKind,
+  styleFilterNodes,
+  styleMarginKinds,
+} from "./StyleGraphicEffects";
 
 const rgb = (color: string) =>
   [1, 3, 5].map((i) => parseInt(color.slice(i, i + 2), 16) / 255);
@@ -66,7 +72,21 @@ function Pass({
   const radial = (inner: string, outer: string, x = 50, y = 50, radius = 65) =>
     `<defs><radialGradient id="g" cx="${x}%" cy="${y}%" r="${radius}%"><stop stop-color="${inner}"/><stop offset="1" stop-color="${outer}"/></radialGradient></defs><rect width="100%" height="100%" fill="url(#g)"/>`;
   let nodes: React.ReactNode = null;
-  if (s > 0)
+  if (s > 0 && isStyleKind(pass.kind))
+    nodes = styleFilterNodes({
+      pass,
+      w,
+      h,
+      unit,
+      s,
+      z,
+      time: f.time,
+      tick: f.tick,
+      image,
+      overlay,
+      merge,
+    });
+  else if (s > 0)
     switch (pass.kind) {
       case "smear":
       case "repeat":
@@ -227,7 +247,8 @@ function Pass({
               operator="in"
               result="clipped"
             />
-            <feBlend in="SourceGraphic" in2="clipped" mode="soft-light" />
+            {/* Noise is the top layer; the image is the soft-light backdrop. */}
+            <feBlend in="clipped" in2="SourceGraphic" mode="soft-light" />
           </>
         );
         break;
@@ -317,16 +338,17 @@ function Pass({
             {pass.kind === "silhouette" &&
               pass.silhouetteStyle === "outline" && (
                 <>
+                  {/* Sub-pixel radii round to zero on thumbnails; keep at least 1px. */}
                   <feMorphology
                     in="SourceAlpha"
                     operator="dilate"
-                    radius={(1 + z * 12) * unit}
+                    radius={Math.max(1, (1 + z * 12) * unit)}
                     result="expanded"
                   />
                   <feMorphology
                     in="SourceAlpha"
                     operator="erode"
-                    radius={(1 + z * 12) * unit}
+                    radius={Math.max(1, (1 + z * 12) * unit)}
                     result="contracted"
                   />
                   <feComposite
@@ -394,7 +416,10 @@ function Pass({
           dx = r * 1.5,
           dy = Math.sqrt(3) * r;
         let body = "";
-        const shift = (f.time * r * 0.18) % (dx * 2);
+        const travel = f.time * r * 0.18;
+        const shift = travel % (dx * 2);
+        // Seed cells by pattern column, not screen column, so fills don't jump on wrap.
+        const wrapped = Math.floor(travel / (dx * 2)) * 2;
         for (let c = -2; c < w / dx + 2; c++)
           for (let row = -1; row < h / dy + 1; row++) {
             const x = c * dx + shift,
@@ -404,7 +429,7 @@ function Pass({
               (_, i) =>
                 `${x + r * Math.cos((i * Math.PI) / 3)},${y + r * Math.sin((i * Math.PI) / 3)}`,
             ).join(" ");
-            const index = (c + 2) * 100 + row + 1;
+            const index = (c - wrapped + 2) * 100 + row + 1;
             const pulse =
               (1 + Math.sin(f.time * 2 + effectRandom(pass.seed, index) * 12)) /
               2;
@@ -485,7 +510,7 @@ function Pass({
               result="revealed"
             />
             {image(
-              `<rect x="${Math.max(0, x - w * z * 0.18)}" width="${w * z * 0.18}" height="${h}" fill="${pass.color}" opacity="${Math.min(1, s * 10)}"/>`,
+              `<rect x="${x - Math.min(x, w * z * 0.18)}" width="${Math.min(x, w * z * 0.18)}" height="${h}" fill="${pass.color}" opacity="${Math.min(1, s * 10)}"/>`,
               "edge",
             )}
             <feComposite
@@ -503,10 +528,19 @@ function Pass({
         const radius = Math.hypot(w, h) * (1 - s) * 0.55;
         nodes = (
           <>
-            {image(
-              `<circle cx="${w / 2}" cy="${h / 2}" r="${radius}" fill="white"/>`,
-              "mask",
-            )}
+            {/* Oversized mask so the blur doesn't pull transparency in from the frame edge. */}
+            <feImage
+              href={svgImage(
+                `<circle cx="${w}" cy="${h}" r="${radius}" fill="white"/>`,
+                w * 2,
+                h * 2,
+              )}
+              x={-w / 2}
+              y={-h / 2}
+              width={w * 2}
+              height={h * 2}
+              result="mask"
+            />
             <feGaussianBlur
               in="mask"
               stdDeviation={(5 + z * 35) * unit}
@@ -525,7 +559,7 @@ function Pass({
               <React.Fragment key={i}>
                 <feOffset
                   in="SourceGraphic"
-                  dx={dx * i}
+                  dx={Math.cos((pass.angle * Math.PI) / 180) * dx * i}
                   dy={Math.sin((pass.angle * Math.PI) / 180) * dx * i}
                   result={`shift${i}`}
                 />
@@ -598,7 +632,11 @@ function Pass({
         break;
       }
     }
-  const margin = ["bloom", "echo", "shatter"].includes(pass.kind) ? 0.5 : 0;
+  const margin =
+    ["bloom", "echo", "shatter", "iris"].includes(pass.kind) ||
+    (styleMarginKinds as string[]).includes(pass.kind)
+      ? 0.5
+      : 0;
   return (
     <div style={{ position: "absolute", inset: 0 }}>
       <svg
@@ -629,7 +667,7 @@ function Pass({
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          filter: s > 0 ? `url(#${id})` : undefined,
+          filter: s > 0 && nodes ? `url(#${id})` : undefined,
         }}
       >
         {children}
@@ -656,9 +694,11 @@ export function GraphicEffects({
 }) {
   let result = children;
   let glyphFieldRendered = false;
+  const animation = Math.max(0, time + layer.effectOffset);
   for (const instance of layer.effects) {
-    if (!instance.enabled || instance.amount === 0) continue;
-    const effect = resolveEffectInstance(instance, effects);
+    const amount = instanceAmountAt(instance, animation);
+    if (!instance.enabled || amount === 0) continue;
+    const effect = resolveEffectInstanceAt(instance, effects, animation);
     for (const [index, pass] of (effect?.passes ?? []).entries()) {
       // Glyph/word fields are drawn by the shared text renderer.
       if (
@@ -675,9 +715,9 @@ export function GraphicEffects({
         <Pass
           key={`${instance.effectId}-${index}`}
           pass={pass}
-          time={time + layer.effectOffset}
+          time={animation}
           duration={layer.effectDuration || layer.duration}
-          amount={instance.amount}
+          amount={amount}
           width={width}
           height={height}
         >

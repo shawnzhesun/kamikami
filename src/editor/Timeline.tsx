@@ -22,6 +22,7 @@ import { clamp, moveClips, snapValue, splitClips, trimClip } from "./editing";
 import { startGesture } from "./gesture";
 import { Waveform } from "./Waveform";
 import { EFFECT_DRAG_TYPE } from "../effect-bundle";
+import { retimeKeyframes, visibleKeyframeTimes } from "../keyframes";
 
 type Props = {
   project: Project;
@@ -170,6 +171,59 @@ export function Timeline({
     if (next < 0 || next >= ids.length) return;
     [ids[index], ids[next]] = [ids[next], ids[index]];
     onCommit(reorderTracks(project, ids));
+  }
+  /** Click a clip keyframe to seek; drag it to retime every key at that frame. */
+  function beginKeyframe(
+    e: React.PointerEvent<HTMLElement>,
+    layer: Layer,
+    time: number,
+  ) {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    onPause();
+    cleanup.current?.();
+    const base = project,
+      origin = e.clientX;
+    const clip = e.currentTarget.closest<HTMLElement>(".clip")!;
+    const perSecond = clip.getBoundingClientRect().width / layer.duration;
+    let latest = base,
+      moved = false;
+    cleanup.current = startGesture(
+      e,
+      (event) => {
+        const dx = event.clientX - origin;
+        if (!moved && Math.abs(dx) < 3) return;
+        moved = true;
+        const to = clamp(
+          Math.round((time + dx / perSecond) * project.fps) / project.fps,
+          0,
+          layer.duration,
+        );
+        setDrag({ id: layer.id, label: `Keyframe ${to.toFixed(2)}s` });
+        latest = {
+          ...base,
+          layers: base.layers.map((l) =>
+            l.id === layer.id ? retimeKeyframes(l, time, to) : l,
+          ),
+        };
+        onPreview(latest);
+      },
+      (cancelled) => {
+        onPreview(null);
+        setDrag(null);
+        if (moved) ignoreClickUntil.current = Date.now() + 200;
+        if (!cancelled && moved) onCommit(latest, base);
+        if (!moved && !cancelled) {
+          onSelect([layer.id]);
+          onSeek(
+            Math.round(layer.start * project.fps) +
+              Math.round(time * project.fps),
+          );
+        }
+        cleanup.current = null;
+      },
+    );
   }
   function begin(
     e: React.PointerEvent<HTMLElement>,
@@ -609,6 +663,21 @@ export function Timeline({
                             />
                           ) : null}
                           <span className="clip-name">{layer.name}</span>
+                          {visibleKeyframeTimes(layer).map((time) => (
+                            <button
+                              key={time}
+                              className="clip-keyframe"
+                              style={{
+                                left: `${(time / layer.duration) * 100}%`,
+                              }}
+                              title={`Keyframe at ${time.toFixed(2)}s. Click to seek; drag to retime.`}
+                              aria-label={`${layer.name} keyframe at ${time.toFixed(2)} seconds`}
+                              onPointerDown={(e) =>
+                                beginKeyframe(e, layer, time)
+                              }
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                          ))}
                           <button
                             className="trim-handle left"
                             aria-label={`Trim start of ${layer.name}`}

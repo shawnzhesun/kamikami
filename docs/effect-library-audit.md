@@ -1,6 +1,6 @@
 # Effect library consolidation
 
-Reviewed October 7, 2026: all 36 built-in recipes and the three saved recipes in the local library. This consolidation reduced the gallery to **30 built-in cards**, plus the existing saved recipes. The subsequent [videoplayback.mp4 study](videoplayback-effects.md) adds four new operations for a current total of **34**.
+Reviewed October 7, 2026: all 36 built-in recipes and the three saved recipes in the local library. This consolidation reduced the gallery to **30 built-in cards**, plus the existing saved recipes. The subsequent [videoplayback.mp4 study](videoplayback-effects.md) adds four new operations for a total of **34**. Later additions brought the gallery to 41 (scene recipes), 43 (motion) and 57 ([spring, illustration and 3D-look cards](style-effects.md)).
 
 ## Consolidated families
 

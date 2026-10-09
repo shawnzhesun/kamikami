@@ -4,6 +4,9 @@ import {
   SpatialPassControls,
 } from "./editor/MotionControls";
 import { NumberField } from "./editor/NumberField";
+import { KeyframeField } from "./editor/KeyframeField";
+import { EffectParameterKeys } from "./editor/EffectParameterKeys";
+import { propertyRanges, type KeyframeProperty } from "./keyframes";
 import {
   allBuiltinEffects,
   builtinEffectCategory,
@@ -11,6 +14,7 @@ import {
 } from "./builtin-effects";
 import { type TextEffect, textEffectNames } from "./text-effects";
 import { visualNames, type VisualPass } from "./visual-effects";
+import { isStyleKind, styleControls } from "./StyleGraphicEffects";
 import { FontPicker } from "./editor/FontPicker";
 import { EffectSettingsDialog } from "./editor/EffectSettingsDialog";
 import { EffectPresetPicker } from "./editor/EffectPresetPicker";
@@ -73,6 +77,7 @@ import {
   effectForApplication,
   EffectBundleSchema,
   effectEngine,
+  portableBundle,
   type UserEffect,
   type EffectBundle,
 } from "./effect-bundle";
@@ -385,7 +390,7 @@ export function App() {
         (e) => e.id === command.userEffectId,
       );
       if (!entry) throw new Error("User effect not found.");
-      return entry.bundle;
+      return portableBundle(entry.bundle);
     }
     if (editing())
       throw new Error(
@@ -670,6 +675,34 @@ export function App() {
       group,
     );
   }
+  /** Replace the selected element with a keyframe-aware edit of itself. */
+  function replaceSelected(next: Layer) {
+    return commit({
+      ...current.current,
+      layers: current.current.layers.map((l) => (l.id === next.id ? next : l)),
+    });
+  }
+  function seekPlayhead(f: number) {
+    player.current?.pause();
+    player.current?.seekTo(f);
+    setFrame(f);
+  }
+  const animatedField = (property: KeyframeProperty, step = 1) =>
+    selected && (
+      <KeyframeField
+        key={property}
+        layer={selected}
+        target={{ kind: "property", property }}
+        label={propertyRanges[property].label}
+        min={propertyRanges[property].min}
+        max={propertyRanges[property].max}
+        step={step}
+        frame={frame}
+        fps={project.fps}
+        onChange={replaceSelected}
+        onSeek={seekPlayhead}
+      />
+    );
   function updateEffect(patch: Partial<Effect>) {
     if (effectReadOnly) return;
     setEffectDraft((draft) => (draft ? { ...draft, ...patch } : draft));
@@ -1581,6 +1614,11 @@ export function App() {
                         "pulse",
                         "shake",
                         "steps",
+                        "back",
+                        "anticipate",
+                        "elastic",
+                        "bounce",
+                        "damped",
                       ].map((c) => ({
                         value: c,
                         label: c,
@@ -1606,22 +1644,124 @@ export function App() {
                       />
                     ))}
                   </div>
-                  {["sine", "pulse", "shake", "steps"].includes(c.curve) && (
+                  <div className="field-row">
                     <NumberField
-                      label={c.curve === "steps" ? "Steps" : "Frequency (Hz)"}
-                      value={c.frequency}
+                      label="Duration (s, 0 = clip)"
+                      value={c.seconds ?? 0}
                       min={0}
-                      max={20}
-                      step={0.1}
+                      max={30}
+                      step={0.05}
                       onChange={(n) =>
                         updateEffect({
-                          channels: editingEffect.channels.map((v, j) =>
-                            j === i ? { ...v, frequency: n } : v,
-                          ),
+                          channels: editingEffect.channels.map((v, j) => {
+                            if (j !== i) return v;
+                            const { seconds: _s, align: _a, ...rest } = v;
+                            return n >= 0.05
+                              ? {
+                                  ...rest,
+                                  seconds: n,
+                                  ...(v.align ? { align: v.align } : {}),
+                                }
+                              : rest;
+                          }),
                         })
                       }
                     />
-                  )}
+                    {c.seconds !== undefined && (
+                      <label>
+                        Align
+                        <Dropdown
+                          label="Channel span alignment"
+                          value={c.align ?? "start"}
+                          options={[
+                            { value: "start", label: "Clip start" },
+                            { value: "end", label: "Clip end" },
+                          ]}
+                          onChange={(align) =>
+                            updateEffect({
+                              channels: editingEffect.channels.map((v, j) =>
+                                j === i
+                                  ? { ...v, align: align as "start" | "end" }
+                                  : v,
+                              ),
+                            })
+                          }
+                        />
+                      </label>
+                    )}
+                  </div>
+                  <div className="field-row">
+                    {[
+                      "sine",
+                      "pulse",
+                      "shake",
+                      "steps",
+                      "elastic",
+                      "bounce",
+                      "damped",
+                    ].includes(c.curve) && (
+                      <NumberField
+                        label={
+                          c.curve === "steps"
+                            ? "Steps"
+                            : c.curve === "bounce"
+                              ? "Bounces"
+                              : c.curve === "elastic"
+                                ? "Oscillations"
+                                : "Frequency (Hz)"
+                        }
+                        value={c.frequency}
+                        min={c.curve === "steps" ? 1 : 0}
+                        max={20}
+                        step={c.curve === "steps" ? 1 : 0.1}
+                        onChange={(n) =>
+                          updateEffect({
+                            channels: editingEffect.channels.map((v, j) =>
+                              j === i
+                                ? {
+                                    ...v,
+                                    frequency:
+                                      c.curve === "steps" ? Math.round(n) : n,
+                                  }
+                                : v,
+                            ),
+                          })
+                        }
+                      />
+                    )}
+                    {/* Phase offsets sine/pulse cycles and reseeds shake. */}
+                    {[
+                      "sine",
+                      "pulse",
+                      "shake",
+                      "back",
+                      "anticipate",
+                      "damped",
+                    ].includes(c.curve) && (
+                      <NumberField
+                        label={
+                          c.curve === "shake"
+                            ? "Shake seed"
+                            : c.curve === "damped"
+                              ? "Extra damping"
+                              : ["back", "anticipate"].includes(c.curve)
+                                ? "Extra overshoot"
+                                : "Phase (cycles)"
+                        }
+                        value={c.phase}
+                        min={-100}
+                        max={100}
+                        step={c.curve === "shake" ? 1 : 0.05}
+                        onChange={(n) =>
+                          updateEffect({
+                            channels: editingEffect.channels.map((v, j) =>
+                              j === i ? { ...v, phase: n } : v,
+                            ),
+                          })
+                        }
+                      />
+                    )}
+                  </div>
                 </div>
               ))}
             </section>
@@ -1636,117 +1776,159 @@ export function App() {
                       i === index ? { ...p, ...patch } : p,
                     ),
                   });
-                const hasColor = ![
-                  "blinds",
-                  "bloom",
-                  "grain",
-                  "scanlines",
-                  "chromatic",
-                  "distortion",
-                  "iris",
-                  "shatter",
-                  "echo",
-                  "palette",
-                  "smear",
-                  "repeat",
-                ].includes(pass.kind);
-                const numeric = [
-                  {
-                    key: "strength" as const,
-                    label: "Strength",
-                    min: 0,
-                    max: 1,
-                    step: 0.01,
-                  },
-                  ...((![
-                    "silhouette",
-                    "duotone",
-                    "flash",
-                    "palette",
-                    "blinds",
-                  ].includes(pass.kind) &&
-                    !(
-                      pass.kind === "repeat" &&
-                      (pass.repeatMode === "grid" || !!pass.field)
-                    )) ||
-                  (pass.kind === "silhouette" &&
-                    pass.silhouetteStyle === "outline")
-                    ? [
-                        {
-                          key: "size" as const,
-                          label:
-                            pass.kind === "smear"
-                              ? "Spread"
-                              : pass.kind === "rings"
-                                ? "Radius"
-                                : "Size",
-                          min: 0,
-                          max: 1,
-                          step: 0.01,
-                        },
-                      ]
-                    : []),
-                  ...([
-                    "spotlight",
-                    "flare",
-                    "grain",
-                    "scanlines",
-                    "hatch",
-                    "chromatic",
-                    "distortion",
-                    "hexagons",
-                    "particles",
-                    "echo",
-                    "palette",
-                    "rings",
-                  ].includes(pass.kind) ||
-                  (pass.kind === "repeat" &&
-                    (pass.repeatMode === "kaleidoscope" || !!pass.field)) ||
-                  pass.timing === "pulse"
-                    ? [
-                        {
-                          key: "speed" as const,
-                          label: "Speed",
-                          min: 0,
-                          max: 10,
-                          step: 0.1,
-                        },
-                      ]
-                    : []),
-                  ...(["hatch", "flare", "echo", "palette", "rings"].includes(
-                    pass.kind,
-                  ) ||
-                  (pass.kind === "smear" && pass.smearMode !== "zoom") ||
-                  (pass.kind === "repeat" && pass.repeatMode === "kaleidoscope")
-                    ? [
-                        {
-                          key: "angle" as const,
-                          label: "Angle",
-                          min: -180,
-                          max: 180,
-                          step: 1,
-                        },
-                      ]
-                    : []),
-                  ...([
-                    "grain",
-                    "distortion",
-                    "hexagons",
-                    "particles",
-                    "shatter",
-                    "repeat",
-                  ].includes(pass.kind)
-                    ? [
-                        {
-                          key: "seed" as const,
-                          label: "Pattern seed",
-                          min: 0,
-                          max: 65535,
-                          step: 1,
-                        },
-                      ]
-                    : []),
-                ];
+                const style = isStyleKind(pass.kind)
+                  ? styleControls[pass.kind]
+                  : undefined;
+                const hasColor = style
+                  ? !!style.color
+                  : ![
+                      "blinds",
+                      "bloom",
+                      "grain",
+                      "scanlines",
+                      "chromatic",
+                      "distortion",
+                      "iris",
+                      "shatter",
+                      "echo",
+                      "palette",
+                      "smear",
+                      "repeat",
+                    ].includes(pass.kind);
+                const numeric = style
+                  ? [
+                      {
+                        key: "strength" as const,
+                        label: "Strength",
+                        min: 0,
+                        max: 1,
+                        step: 0.01,
+                      },
+                      ...(
+                        [
+                          ["size", style.size, 0, 1, 0.01],
+                          ["speed", style.speed, 0, 10, 0.1],
+                          ["angle", style.angle, -180, 180, 1],
+                          [
+                            "seed",
+                            style.seed ? "Pattern seed" : undefined,
+                            0,
+                            65535,
+                            1,
+                          ],
+                        ] as const
+                      )
+                        .filter(([, label]) => label)
+                        .map(([key, label, min, max, step]) => ({
+                          key,
+                          label: label as string,
+                          min,
+                          max,
+                          step,
+                        })),
+                    ]
+                  : [
+                      {
+                        key: "strength" as const,
+                        label: "Strength",
+                        min: 0,
+                        max: 1,
+                        step: 0.01,
+                      },
+                      ...((![
+                        "silhouette",
+                        "duotone",
+                        "flash",
+                        "palette",
+                        "blinds",
+                      ].includes(pass.kind) &&
+                        !(
+                          pass.kind === "repeat" &&
+                          (pass.repeatMode === "grid" || !!pass.field)
+                        )) ||
+                      (pass.kind === "silhouette" &&
+                        pass.silhouetteStyle === "outline")
+                        ? [
+                            {
+                              key: "size" as const,
+                              label:
+                                pass.kind === "smear"
+                                  ? "Spread"
+                                  : pass.kind === "rings"
+                                    ? "Radius"
+                                    : "Size",
+                              min: 0,
+                              max: 1,
+                              step: 0.01,
+                            },
+                          ]
+                        : []),
+                      ...([
+                        "spotlight",
+                        "flare",
+                        "grain",
+                        "scanlines",
+                        "hatch",
+                        "chromatic",
+                        "distortion",
+                        "hexagons",
+                        "particles",
+                        "echo",
+                        "palette",
+                        "rings",
+                      ].includes(pass.kind) ||
+                      (pass.kind === "repeat" &&
+                        (pass.repeatMode === "kaleidoscope" || !!pass.field)) ||
+                      pass.timing === "pulse"
+                        ? [
+                            {
+                              key: "speed" as const,
+                              label: "Speed",
+                              min: 0,
+                              max: 10,
+                              step: 0.1,
+                            },
+                          ]
+                        : []),
+                      ...([
+                        "hatch",
+                        "flare",
+                        "echo",
+                        "palette",
+                        "rings",
+                      ].includes(pass.kind) ||
+                      (pass.kind === "smear" && pass.smearMode !== "zoom") ||
+                      (pass.kind === "repeat" &&
+                        pass.repeatMode === "kaleidoscope")
+                        ? [
+                            {
+                              key: "angle" as const,
+                              label: "Angle",
+                              min: -180,
+                              max: 180,
+                              step: 1,
+                            },
+                          ]
+                        : []),
+                      ...([
+                        "grain",
+                        "distortion",
+                        "hexagons",
+                        "particles",
+                        "shatter",
+                        "repeat",
+                      ].includes(pass.kind)
+                        ? [
+                            {
+                              key: "seed" as const,
+                              label: "Pattern seed",
+                              min: 0,
+                              max: 65535,
+                              step: 1,
+                            },
+                          ]
+                        : []),
+                    ];
                 return (
                   <div className="channel" key={index}>
                     <div className="section-line">
@@ -1866,6 +2048,27 @@ export function App() {
                             />
                           </label>
                         ))}
+                      {style?.mode && (
+                        <label>
+                          {style.mode.label}
+                          <Dropdown
+                            label={style.mode.label}
+                            value={pass[style.mode.key] ?? style.mode.fallback}
+                            options={style.mode.options.map(
+                              ([value, label]) => ({
+                                value,
+                                label,
+                              }),
+                            )}
+                            onChange={(value) =>
+                              change({ [style.mode!.key]: value })
+                            }
+                          />
+                        </label>
+                      )}
+                      {style?.note && (
+                        <small className="muted">{style.note}</small>
+                      )}
                       <SpatialPassControls pass={pass} onChange={change} />
                       {!pass.field &&
                         !pass.particles &&
@@ -1935,7 +2138,7 @@ export function App() {
                       ))}
                       {hasColor && (
                         <label>
-                          Color
+                          {style?.color ?? "Color"}
                           <input
                             type="color"
                             value={pass.color}
@@ -1943,11 +2146,12 @@ export function App() {
                           />
                         </label>
                       )}
-                      {(["duotone", "hexagons", "rings"].includes(pass.kind) ||
+                      {(!!style?.secondary ||
+                        ["duotone", "hexagons", "rings"].includes(pass.kind) ||
                         (pass.kind === "particles" &&
                           pass.particleStyle === "burst")) && (
                         <label>
-                          Secondary color
+                          {style?.secondary ?? "Secondary color"}
                           <input
                             type="color"
                             value={pass.secondary}
@@ -2694,14 +2898,7 @@ export function App() {
                           Solo
                         </button>
                       </div>
-                      <NumberField
-                        label="Volume"
-                        value={selected.volume}
-                        min={0}
-                        max={1}
-                        step={0.05}
-                        onChange={(n) => updateLayer({ volume: n })}
-                      />
+                      {animatedField("volume", 0.05)}
                     </>
                   )}
                   {selected.type === "title" && (
@@ -2767,47 +2964,15 @@ export function App() {
                       <div className="section-line">
                         <span>TRANSFORM</span>
                       </div>
-                      <div className="field-row">
-                        <NumberField
-                          label="X position"
-                          value={selected.x}
-                          min={-1920}
-                          max={1920}
-                          onChange={(n) => updateLayer({ x: n })}
-                        />
-                        <NumberField
-                          label="Y position"
-                          value={selected.y}
-                          min={-1080}
-                          max={1080}
-                          onChange={(n) => updateLayer({ y: n })}
-                        />
-                      </div>
-                      <div className="field-row">
-                        <NumberField
-                          label="Scale"
-                          value={selected.scale}
-                          min={0.05}
-                          max={5}
-                          step={0.05}
-                          onChange={(n) => updateLayer({ scale: n })}
-                        />
-                        <NumberField
-                          label="Rotation"
-                          value={selected.rotation}
-                          min={-360}
-                          max={360}
-                          onChange={(n) => updateLayer({ rotation: n })}
-                        />
-                      </div>
-                      <NumberField
-                        label="Opacity"
-                        value={selected.opacity}
-                        min={0}
-                        max={1}
-                        step={0.05}
-                        onChange={(n) => updateLayer({ opacity: n })}
-                      />
+                      {animatedField("x")}
+                      {animatedField("y")}
+                      {animatedField("scale", 0.05)}
+                      {animatedField("rotation")}
+                      {animatedField("opacity", 0.05)}
+                      <p className="muted keyframe-hint">
+                        The stopwatch animates a property. Canvas and field
+                        edits at the playhead then add keyframes.
+                      </p>
                     </>
                   )}
                   <label>
@@ -2883,21 +3048,28 @@ export function App() {
                               <X size={13} />
                             </button>
                           </div>
-                          <NumberField
+                          <KeyframeField
+                            layer={selected}
+                            target={{
+                              kind: "amount",
+                              effectId: instance.effectId,
+                            }}
                             label="Strength"
-                            value={instance.amount}
                             min={0}
                             max={2}
                             step={0.1}
-                            onChange={(n) =>
-                              updateLayer({
-                                effects: selected.effects.map((e) =>
-                                  e.effectId === instance.effectId
-                                    ? { ...e, amount: n }
-                                    : e,
-                                ),
-                              })
-                            }
+                            frame={frame}
+                            fps={project.fps}
+                            onChange={replaceSelected}
+                            onSeek={seekPlayhead}
+                          />
+                          <EffectParameterKeys
+                            layer={selected}
+                            effectId={instance.effectId}
+                            frame={frame}
+                            fps={project.fps}
+                            onChange={replaceSelected}
+                            onSeek={seekPlayhead}
                           />
                         </div>
                       ))}

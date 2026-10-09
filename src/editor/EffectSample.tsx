@@ -12,16 +12,24 @@ export function effectPosterTime(effect: Effect) {
     ["typewriter", "scramble", "stagger"].includes(effect.text.kind)
   )
     return effect.text.motion?.direction === "out"
-      ? 6 - effect.text.seconds * 0.5
-      : effect.text.seconds;
+      ? Math.max(0, 6 - Math.min(6, effect.text.seconds) * 0.5)
+      : Math.min(6, effect.text.seconds);
   const transition = effect.passes?.find(
     (p) => p.timing === "in" || p.timing === "out",
   );
-  return transition
-    ? transition.timing === "out"
-      ? 6 - transition.seconds / 2
-      : transition.seconds / 2
-    : 1.5;
+  // Clamp into the six-second preview loop for long transitions.
+  if (transition)
+    return Math.max(
+      0,
+      Math.min(
+        6,
+        transition.timing === "out"
+          ? 6 - Math.min(6, transition.seconds) / 2
+          : Math.min(6, transition.seconds) / 2,
+      ),
+    );
+  // A pulse envelope is zero at many fixed times; t = 0 is always its peak.
+  return effect.passes?.some((p) => p.timing === "pulse") ? 0 : 1.5;
 }
 
 export function isTextEffectPreview(effect: Effect) {
@@ -54,7 +62,10 @@ export function EffectSample({
   };
   const v = layerAtTime(layer, [effect], time);
   const cutout = effect.passes?.some((p) =>
-    ["silhouette", "echo"].includes(p.kind),
+    // Alpha-aware passes read best on isolated artwork.
+    ["silhouette", "echo", "paper", "extrude", "bevel", "glow", "goo"].includes(
+      p.kind,
+    ),
   );
   return (
     <svg
@@ -73,7 +84,7 @@ export function EffectSample({
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              transform: `translate(${(v.x * 180) / 1920}px,${(v.y * 96) / 1080}px) rotate(${v.rotation}deg) scale(${v.scale}) perspective(${(v.perspective * 180) / 1920}px) rotateX(${v.rotateX}deg) rotateY(${v.rotateY}deg)`,
+              transform: `translate(${(v.x * 180) / 1920}px,${(v.y * 96) / 1080}px) rotate(${v.rotation}deg) scale(${v.scale}) perspective(${(v.perspective * 180) / 1920}px) rotateX(${v.rotateX}deg) rotateY(${v.rotateY}deg) scale(${v.scaleX},${v.scaleY}) skewX(${v.skewX}deg)`,
               opacity: v.opacity,
               filter: `brightness(${v.brightness}) contrast(${v.contrast}) saturate(${v.saturation}) blur(${(v.blur * 180) / 1920}px)`,
             }}

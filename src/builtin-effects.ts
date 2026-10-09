@@ -831,6 +831,8 @@ export const motionEffectFamilies: EffectFamily[] = (() => {
   ];
   return [
     build("text-glitch", "Typography", [
+      // The untouched card must match a named look instead of reading as Custom.
+      ["glitch-classic", "Classic", {}],
       [
         "glitch-stutter",
         "Signal stutter",
@@ -859,7 +861,7 @@ export const motionEffectFamilies: EffectFamily[] = (() => {
         },
       ],
     ]),
-    build("depth-motion", "Motion", [
+    build("depth-motion", "Camera & motion", [
       [
         "depth-approach",
         "Approach and settle",
@@ -900,7 +902,7 @@ export const motionEffectFamilies: EffectFamily[] = (() => {
         },
       ],
     ]),
-    build("memory-flecks", "Atmosphere", [
+    build("memory-flecks", "Graphic overlays", [
       ["particles-paper", "Drifting paper", {}],
       [
         "particles-flat-burst",
@@ -961,7 +963,7 @@ export const motionEffectFamilies: EffectFamily[] = (() => {
         },
       ],
     ]),
-    build("image-repetition", "Composition", [
+    build("image-repetition", "Graphic overlays", [
       [
         "repetition-grid",
         "Grid",
@@ -1077,6 +1079,686 @@ export const motionEffectFamilies: EffectFamily[] = (() => {
   ];
 })();
 
+/** Spring, illustration, 3D-look, light and organic-transition recipes (kamikami-visual-v6). */
+const spring = (
+  property: Channel["property"],
+  from: number,
+  to: number,
+  curve: Channel["curve"],
+  seconds: number,
+  frequency = 1,
+  phase = 0,
+  align?: "end",
+): Channel => ({
+  property,
+  from,
+  to,
+  curve,
+  frequency,
+  phase,
+  seconds,
+  ...(align ? { align } : {}),
+});
+type StyleCard = {
+  id: string;
+  name: string;
+  category: string;
+  description: string;
+  variations: [string, string, Partial<EffectParameters>][];
+};
+const styleCards: StyleCard[] = [
+  {
+    id: "spring-motion",
+    name: "Spring motion",
+    category: "Camera & motion",
+    description:
+      "Physically flavored entrances and exits: elastic pops, bouncing drops, jelly wobbles, overshooting slides, 3D flips, pendulum swings and an anticipation exit. Each curve runs for its own duration from the clip start (or end), then rests.",
+    variations: [
+      [
+        "spring-elastic-pop",
+        "Elastic pop",
+        {
+          channels: [
+            spring("scale", 0.2, 1, "elastic", 1.1, 2.5),
+            spring("opacity", 0, 1, "ease-out", 0.25),
+          ],
+        },
+      ],
+      [
+        "spring-bounce-drop",
+        "Bounce drop",
+        {
+          channels: [
+            spring("y", -620, 0, "bounce", 1.5, 3),
+            spring("scaleY", 1.18, 1, "damped", 1.5, 2.4),
+            spring("scaleX", 0.88, 1, "damped", 1.5, 2.4),
+          ],
+        },
+      ],
+      [
+        "spring-jelly",
+        "Jelly wobble",
+        {
+          channels: [
+            spring("scaleX", 1.28, 1, "damped", 1.6, 2.2),
+            spring("scaleY", 0.78, 1, "damped", 1.6, 2.2),
+            spring("skewX", 9, 0, "damped", 1.6, 1.6, 1),
+          ],
+        },
+      ],
+      [
+        "spring-overshoot-slide",
+        "Overshoot slide",
+        {
+          channels: [
+            spring("x", -760, 0, "back", 0.85, 1, 0.6),
+            spring("skewX", -16, 0, "damped", 1.1, 1.8),
+            spring("opacity", 0, 1, "ease-out", 0.3),
+          ],
+        },
+      ],
+      [
+        "spring-flip-in",
+        "3D flip in",
+        {
+          channels: [
+            spring("rotateX", -80, 0, "back", 0.9, 1, 0.4),
+            spring("opacity", 0, 1, "ease-out", 0.3),
+          ],
+        },
+      ],
+      [
+        "spring-pendulum",
+        "Pendulum swing",
+        {
+          channels: [spring("rotation", -28, 0, "damped", 3, 0.9, 0)],
+        },
+      ],
+      [
+        "spring-anticipate-out",
+        "Anticipation exit",
+        {
+          channels: [
+            spring("scale", 1, 0, "anticipate", 0.7, 1, 0.3, "end"),
+            spring("opacity", 1, 0, "ease", 0.7, 1, 0, "end"),
+          ],
+        },
+      ],
+    ],
+  },
+  {
+    id: "line-boil",
+    name: "Line boil",
+    category: "Illustration",
+    description:
+      "Hand-drawn wobble: edges and lines jitter on held frames like traditional animation that was redrawn each frame. Keep strength low for a subtle 'alive' drawing; raise warp scale for a sketchier look.",
+    variations: [
+      [
+        "boil-subtle",
+        "Subtle boil",
+        {
+          passes: [
+            pass("warp", {
+              warpMode: "boil",
+              strength: 0.45,
+              size: 0.35,
+              speed: 0.67,
+            }),
+          ],
+        },
+      ],
+      [
+        "boil-sketchy",
+        "Sketchy",
+        {
+          passes: [
+            pass("warp", {
+              warpMode: "boil",
+              strength: 0.9,
+              size: 0.7,
+              speed: 0.5,
+            }),
+          ],
+        },
+      ],
+    ],
+  },
+  {
+    id: "liquid-warp",
+    name: "Liquid warp",
+    category: "Texture & signal",
+    description:
+      "Smooth, continuously evolving displacement like heat haze or water, or a melt that drips the element downward. Use At clip end timing on Melt to melt an element away.",
+    variations: [
+      [
+        "liquid-flow",
+        "Liquid flow",
+        {
+          passes: [
+            pass("warp", {
+              warpMode: "liquid",
+              strength: 0.6,
+              size: 0.4,
+              speed: 0.5,
+            }),
+          ],
+        },
+      ],
+      [
+        "liquid-heat",
+        "Heat haze",
+        {
+          passes: [
+            pass("warp", {
+              warpMode: "liquid",
+              strength: 0.25,
+              size: 0.05,
+              speed: 2,
+            }),
+          ],
+        },
+      ],
+      [
+        "liquid-melt",
+        "Melt away",
+        {
+          passes: [
+            pass("warp", {
+              warpMode: "melt",
+              strength: 1,
+              size: 0.5,
+              speed: 0.8,
+              timing: "out",
+              seconds: 1.6,
+            }),
+          ],
+        },
+      ],
+    ],
+  },
+  {
+    id: "paper-cutout",
+    name: "Paper cutout",
+    category: "Illustration",
+    description:
+      "Collage look: a torn white paper border with fiber texture and a soft drop shadow around transparent artwork or text. The stop-motion variation re-tears the edge and jitters the cutout a few times per second.",
+    variations: [
+      [
+        "paper-sticker",
+        "Paper sticker",
+        {
+          passes: [
+            pass("paper", {
+              strength: 1,
+              size: 0.45,
+              speed: 0,
+              angle: 60,
+              color: "#fbf7ee",
+              secondary: "#000000",
+            }),
+          ],
+        },
+      ],
+      [
+        "paper-stop-motion",
+        "Stop-motion cutout",
+        {
+          passes: [
+            pass("paper", {
+              strength: 1,
+              size: 0.45,
+              speed: 1,
+              angle: 60,
+              color: "#fbf7ee",
+              secondary: "#000000",
+            }),
+          ],
+          channels: [
+            channel("x", -4, 4, "shake", 6, 11),
+            channel("y", -3, 3, "shake", 6, 23),
+            channel("rotation", -1.2, 1.2, "shake", 6, 37),
+          ],
+        },
+      ],
+    ],
+  },
+  {
+    id: "comic-ink",
+    name: "Comic ink",
+    category: "Illustration",
+    description:
+      "Toon render: flattened color levels with ink contour and detail lines traced from image edges. Works best on photos and painted footage; raise line weight for a bolder cel look.",
+    variations: [
+      [
+        "ink-cel",
+        "Cel shade",
+        {
+          passes: [pass("ink", { strength: 1, size: 0.35, color: "#111111" })],
+        },
+      ],
+      [
+        "ink-bold",
+        "Bold marker",
+        { passes: [pass("ink", { strength: 1, size: 0.9, color: "#1b1030" })] },
+      ],
+    ],
+  },
+  {
+    id: "pixel-art",
+    name: "Pixel art",
+    category: "Illustration",
+    description:
+      "Chunky pixels with optional ordered (Bayer) dithering into a 1-bit or four-tone handheld palette. Pixel-in resolves from big blocks to full resolution at the clip start.",
+    variations: [
+      [
+        "pixel-blocks",
+        "Pixelate",
+        {
+          passes: [
+            pass("pixel", { strength: 1, size: 0.3, pixelMode: "pixelate" }),
+          ],
+        },
+      ],
+      [
+        "pixel-in",
+        "Pixel-in transition",
+        {
+          passes: [
+            pass("pixel", {
+              strength: 1,
+              size: 1,
+              pixelMode: "pixelate",
+              timing: "in",
+              seconds: 0.8,
+            }),
+          ],
+        },
+      ],
+      [
+        "pixel-dither",
+        "1-bit dither",
+        {
+          passes: [
+            pass("pixel", {
+              strength: 1,
+              size: 0.05,
+              pixelMode: "dither",
+              color: "#f4f0e6",
+              secondary: "#1c1b22",
+            }),
+          ],
+        },
+      ],
+      [
+        "pixel-handheld",
+        "Four-tone handheld",
+        {
+          passes: [
+            pass("pixel", { strength: 1, size: 0.12, pixelMode: "gameboy" }),
+          ],
+        },
+      ],
+    ],
+  },
+  {
+    id: "bevel-emboss",
+    name: "Bevel & emboss",
+    category: "3D & material",
+    description:
+      "Raised edges lit by a directional light with a specular highlight, giving flat logos and text a physical, pressed-metal or plastic feel. Orbiting light sweeps the highlight around the edges.",
+    variations: [
+      [
+        "bevel-soft",
+        "Soft bevel",
+        {
+          passes: [
+            pass("bevel", {
+              strength: 1,
+              size: 0.35,
+              speed: 0,
+              angle: -135,
+              color: "#ffffff",
+            }),
+          ],
+        },
+      ],
+      [
+        "bevel-orbit",
+        "Orbiting light",
+        {
+          passes: [
+            pass("bevel", {
+              strength: 1,
+              size: 0.5,
+              speed: 1,
+              angle: -135,
+              color: "#ffe6b0",
+            }),
+          ],
+        },
+      ],
+    ],
+  },
+  {
+    id: "solid-extrusion",
+    name: "Solid extrusion",
+    category: "3D & material",
+    description:
+      "Gives flat artwork or text a continuous solid thickness, from an isometric block to a long flat-design shadow. Keyframe Extrusion depth on the applied effect to grow the solid.",
+    variations: [
+      [
+        "extrude-block",
+        "Isometric block",
+        {
+          passes: [
+            pass("extrude", {
+              strength: 1,
+              size: 0.3,
+              angle: 45,
+              color: "#b8442f",
+              secondary: "#4a1a14",
+            }),
+          ],
+        },
+      ],
+      [
+        "extrude-long-shadow",
+        "Long shadow",
+        {
+          passes: [
+            pass("extrude", {
+              strength: 0.35,
+              size: 1,
+              angle: 45,
+              color: "#000000",
+              secondary: "#000000",
+            }),
+          ],
+        },
+      ],
+    ],
+  },
+  {
+    id: "holo-card",
+    name: "Holo card",
+    category: "3D & material",
+    description:
+      "A trading-card tilt in 3D with a holographic foil and glare that travel across the surface. Apply to a card, poster or logo plate.",
+    variations: [
+      [
+        "holo-foil",
+        "Foil tilt",
+        {
+          channels: [
+            channel("rotateY", -14, 14, "sine", 0.22),
+            channel("rotateX", -8, 8, "sine", 0.17, 0.25),
+          ],
+          passes: [
+            pass("sheen", {
+              strength: 0.85,
+              size: 0.35,
+              speed: 0.4,
+              angle: 30,
+              color: "#ffffff",
+              sheenStyle: "foil",
+            }),
+          ],
+        },
+      ],
+    ],
+  },
+  {
+    id: "lens-bulge",
+    name: "Lens bulge",
+    category: "3D & material",
+    description:
+      "A magnifying glass lens that sweeps across the element with a glassy rim, or stays parked at the center. It refracts only this element, not layers behind it.",
+    variations: [
+      [
+        "lens-sweep",
+        "Magnifier sweep",
+        {
+          passes: [
+            pass("lens", {
+              strength: 0.7,
+              size: 0.45,
+              speed: 0.6,
+              angle: 0,
+              color: "#ffffff",
+            }),
+          ],
+        },
+      ],
+      [
+        "lens-static",
+        "Parked lens",
+        {
+          passes: [
+            pass("lens", {
+              strength: 0.6,
+              size: 0.6,
+              speed: 0,
+              color: "#ffffff",
+            }),
+          ],
+        },
+      ],
+    ],
+  },
+  {
+    id: "light-sweep",
+    name: "Light sweep",
+    category: "Light & color",
+    description:
+      "A glossy band of light glides across the element only, the classic logo shine. The foil style adds a rainbow holographic sheen.",
+    variations: [
+      [
+        "sheen-gloss",
+        "Gloss sweep",
+        {
+          passes: [
+            pass("sheen", {
+              strength: 0.8,
+              size: 0.25,
+              speed: 0.6,
+              angle: 25,
+              color: "#ffffff",
+            }),
+          ],
+        },
+      ],
+      [
+        "sheen-foil",
+        "Holographic foil",
+        {
+          passes: [
+            pass("sheen", {
+              strength: 0.8,
+              size: 0.3,
+              speed: 0.5,
+              angle: 25,
+              color: "#ffffff",
+              sheenStyle: "foil",
+            }),
+          ],
+        },
+      ],
+    ],
+  },
+  {
+    id: "energy-edge",
+    name: "Energy edge",
+    category: "Light & color",
+    description:
+      "An electric, flickering glow wraps the element's outline with a hot core and layered halos, in the style of saber and lightning title treatments. Works on any element with transparency.",
+    variations: [
+      [
+        "energy-electric",
+        "Electric blue",
+        {
+          passes: [
+            pass("glow", {
+              strength: 0.9,
+              size: 0.4,
+              speed: 1,
+              color: "#38a8ff",
+              secondary: "#e8f6ff",
+            }),
+          ],
+        },
+      ],
+      [
+        "energy-saber",
+        "Saber red",
+        {
+          passes: [
+            pass("glow", {
+              strength: 1,
+              size: 0.6,
+              speed: 0.6,
+              color: "#ff2a3c",
+              secondary: "#fff0f0",
+            }),
+          ],
+        },
+      ],
+      [
+        "energy-toxic",
+        "Toxic green",
+        {
+          passes: [
+            pass("glow", {
+              strength: 0.8,
+              size: 0.5,
+              speed: 1.4,
+              color: "#5dff6a",
+              secondary: "#f0fff0",
+            }),
+          ],
+        },
+      ],
+    ],
+  },
+  {
+    id: "noise-dissolve",
+    name: "Noise dissolve",
+    category: "Transitions",
+    description:
+      "The element appears or disappears through organic noise with a glowing burnt edge. Strength 1 is fully dissolved; Dissolve in reveals at the clip start, Burn away consumes it at the clip end.",
+    variations: [
+      [
+        "dissolve-in",
+        "Dissolve in",
+        {
+          passes: [
+            pass("dissolve", {
+              strength: 1,
+              size: 0.5,
+              timing: "in",
+              seconds: 1.2,
+              color: "#ffb46b",
+            }),
+          ],
+        },
+      ],
+      [
+        "dissolve-burn",
+        "Burn away",
+        {
+          passes: [
+            pass("dissolve", {
+              strength: 1,
+              size: 0.6,
+              timing: "out",
+              seconds: 1.4,
+              color: "#ff6a1f",
+            }),
+          ],
+        },
+      ],
+    ],
+  },
+  {
+    id: "gooey-morph",
+    name: "Gooey morph",
+    category: "Transitions",
+    description:
+      "Shapes and letters melt into liquid blobs and re-form, the metaball look of motion-graphics transitions. Use the pulse for a continuously breathing goo.",
+    variations: [
+      [
+        "goo-in",
+        "Goo in",
+        {
+          passes: [
+            pass("goo", { strength: 1, size: 0.6, timing: "in", seconds: 0.9 }),
+          ],
+        },
+      ],
+      [
+        "goo-out",
+        "Goo out",
+        {
+          passes: [
+            pass("goo", {
+              strength: 1,
+              size: 0.6,
+              timing: "out",
+              seconds: 0.9,
+            }),
+          ],
+        },
+      ],
+      [
+        "goo-pulse",
+        "Breathing goo",
+        {
+          passes: [
+            pass("goo", {
+              strength: 0.6,
+              size: 0.4,
+              timing: "pulse",
+              speed: 0.5,
+            }),
+          ],
+        },
+      ],
+    ],
+  },
+];
+export const styleEffects: Effect[] = styleCards.map((card) =>
+  EffectSchema.parse({
+    id: card.id,
+    name: card.name,
+    description: card.description,
+    channels: [],
+    passes: [],
+    color: "#f2765e",
+    tint: 0,
+    ...card.variations[0][2],
+  }),
+);
+export const styleEffectFamilies: EffectFamily[] = styleCards
+  .filter((card) => card.variations.length > 1)
+  .map((card) => ({
+    id: card.id,
+    name: card.name,
+    category: card.category,
+    description: card.description,
+    variations: card.variations.map(([id, name, patch]) => ({
+      id,
+      name,
+      parameters: parameters(
+        EffectSchema.parse({
+          ...styleEffects.find((e) => e.id === card.id)!,
+          channels: [],
+          passes: [],
+          ...patch,
+        }),
+      ),
+    })),
+  }));
+const styleCategories = new Map(styleCards.map((c) => [c.id, c.category]));
+
 /** Gallery contains one card per family; legacy definitions remain resolvable. */
 export const builtinEffects: Effect[] = [
   ...legacyBuiltinEffects.flatMap((effect) => {
@@ -1089,6 +1771,7 @@ export const builtinEffects: Effect[] = [
   ...videoPlaybackEffects,
   ...remotionSceneEffects,
   ...motionEffects,
+  ...styleEffects,
 ];
 export const allBuiltinEffects: Effect[] = [
   ...builtinEffects,
@@ -1096,9 +1779,11 @@ export const allBuiltinEffects: Effect[] = [
 ];
 
 export function getEffectFamily(id: string) {
-  return [...effectFamilies, ...motionEffectFamilies].find(
-    (f) => f.id === id || f.variations.some((v) => v.id === id),
-  );
+  return [
+    ...effectFamilies,
+    ...motionEffectFamilies,
+    ...styleEffectFamilies,
+  ].find((f) => f.id === id || f.variations.some((v) => v.id === id));
 }
 
 const parameterSchema = EffectSchema.pick({
@@ -1155,6 +1840,7 @@ export function builtinEffectCategory(id: string) {
         ? "Transitions"
         : "Typography"
       : undefined) ??
+    styleCategories.get(id) ??
     getEffectFamily(id)?.category ??
     animationEffectCatalog.find((e) => e.id === id)?.category ??
     videoPlaybackEffectCatalog.find((e) => e.id === id)?.category ??

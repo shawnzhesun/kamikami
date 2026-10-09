@@ -4,7 +4,7 @@ Analyzed October 7, 2026. Source: `/Users/shawn.sun/Downloads/videoplayback.mp4`
 
 Reviewed the entire video in one-second samples and four-frame-per-second sequences around 00:00, 00:08, 00:14, 00:22, 00:26, 00:30, 00:44, 00:54, 01:04, 01:12, 01:18, 01:28, 02:16, 02:24, 02:36, and 02:50. Times below identify approximate examples, not frame-exact boundaries. This is a treatment-family study, not recovery of the original project or an inspection of every frame.
 
-Compared against all 30 consolidated built-in cards and the three saved effects: Retro title sway, Memory flicker, and Retro TV Signal. **Four new cards** bring the built-in gallery to **34**. Four existing cards gain modes. No source footage, drawings, captions, or music are added to the app.
+Compared against all 30 consolidated built-in cards and the three saved effects: Retro title sway, Memory flicker, and Retro TV Signal. **Four new cards** brought the built-in gallery to **34** (57 today). Four existing cards gain modes. No source footage, drawings, captions, or music are added to the app.
 
 ## New operations
 
@@ -59,7 +59,7 @@ Drawn characters, scarves, signs, doors, clocks, handwritten marks, comic panels
 
 The new modes use the same declarative graphics pipeline in the library preview, timeline and export. Transform sampling reads SVG SourceGraphic rather than creating extra video/audio players. Noise, block patterns and particles derive from clip time and seed. Split and trim offsets preserve their phase.
 
-New kinds and mode fields export with the **kamikami-visual-v3** effect engine. Existing v1/v2 bundles continue to import. Older engines are explicitly rejected for new modes so an older reader cannot silently discard their settings. Project JSON still uses version 1 and should be opened in this version or newer.
+New kinds and mode fields export with the **kamikami-visual-v3** effect engine. Existing v1/v2 bundles continue to import. Older engines are explicitly rejected for new modes so an older reader cannot silently discard their settings. Project JSON now uses version 2 (version 3 when keyframes are present) and should be opened in this version or newer.
 
 Automated tests cover uniqueness, mode validation, parameter round trips, engine compatibility, tile coordinates, mirror/kaleidoscope symmetry, bounded sampling maps, deterministic output, split continuity, and a single video source per effect stack.
 

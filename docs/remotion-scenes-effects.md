@@ -24,7 +24,7 @@ Counter/data scenes, charts, preset text content and multi-element layouts are c
 
 ## Persistence and timing
 
-The six typography recipes use the optional `Effect.text` schema. Blinds adds a visual-pass kind and an orientation parameter. Both require `kamikami-visual-v4` bundles, while existing v1/v2/v3 bundles remain supported. Project JSON now uses version 2 for independent instance settings; version-1 projects migrate automatically. The per-project limit remains 40 definitions; the gallery now has 41 selectable cards.
+The six typography recipes use the optional `Effect.text` schema. Blinds adds a visual-pass kind and an orientation parameter. Both require `kamikami-visual-v4` bundles, while existing v1/v2/v3 bundles remain supported. Project JSON now uses version 2 for independent instance settings; version-1 projects migrate automatically. The per-project limit remains 40 definitions; the gallery then had 41 selectable cards (57 today).
 
 All motion derives from clip-local seconds plus the element's retained effect offset. Trimming and splitting do not restart animations, and scrambles use a deterministic seed rather than wall-clock randomness. Entry durations clamp to the original clip duration. Disabled effects and zero instance strength bypass text processing. Effect settings use the existing draft modal and commit as one undoable change.
 

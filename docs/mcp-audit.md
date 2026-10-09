@@ -4,7 +4,7 @@ Audit date: October 6, 2026.
 
 ## Coverage
 
-The MCP server exposes 37 tools. Project mutations run in the live editor through its command bridge, validation, revision checks, Undo history and autosave. The server does not silently edit the saved project behind the UI. Imports refresh the visible library; export and rendering requests use the live project snapshot.
+At the time of this audit the MCP server exposed 37 tools; it now exposes 43, including `set_keyframes` (see [mcp.md](mcp.md)). Project mutations run in the live editor through its command bridge, validation, revision checks, Undo history and autosave. The server does not silently edit the saved project behind the UI. Imports refresh the visible library; export and rendering requests use the live project snapshot.
 
 | Editor capability | MCP tools | Verification |
 | --- | --- | --- |
@@ -25,7 +25,7 @@ The MCP server exposes 37 tools. Project mutations run in the live editor throug
 
 ## Boundary of “all editing functionality”
 
-Composition content, media management, effects, playback, frame inspection and video export are covered. Window geometry, library width, panel tabs, timeline zoom and snapping preferences remain UI settings. Agents can directly choose exact values without manipulating those preferences. The editor itself does not yet provide a freeform keyframe graph, arbitrary effect code/shaders, media generation, project collections, export presets or cloud collaboration; MCP does not add those features implicitly.
+Composition content, media management, effects, playback, frame inspection and video export are covered. Window geometry, library width, panel tabs, timeline zoom and snapping preferences remain UI settings. Agents can directly choose exact values without manipulating those preferences. The editor now supports keyframes (`set_keyframes`) but not yet a freeform keyframe graph editor, arbitrary effect code/shaders, media generation, project collections, export presets or cloud collaboration; MCP does not add those features implicitly.
 
 Structured edits are reflected live. A rendered PNG represents its recorded project revision, even if someone makes another edit while rendering. Still frames verify appearance, not smooth motion or audio quality. Listen/watch playback for those checks. Metadata/waveform support depends on source codecs.
 
