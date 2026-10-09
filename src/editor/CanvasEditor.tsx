@@ -42,6 +42,7 @@ export function CanvasEditor({
     Record<string, { width: number; height: number }>
   >({});
   const [snap, setSnap] = useState(true);
+  const [canvasWidth, setCanvasWidth] = useState(1920);
   const [guides, setGuides] = useState<{ x?: number; y?: number }>({});
   const [editing, setEditing] = useState<{ id: string; text: string } | null>(
     null,
@@ -49,6 +50,7 @@ export function CanvasEditor({
   useEffect(() => () => cleanup.current?.(), []);
   useLayoutEffect(() => {
     const measure = () => {
+      setCanvasWidth(root.current?.clientWidth ?? 1920);
       const next: typeof sizes = {};
       for (const l of project.layers) {
         if (l.type === "title") {
@@ -78,6 +80,7 @@ export function CanvasEditor({
     };
     measure();
     const observer = new ResizeObserver(measure);
+    if (root.current) observer.observe(root.current);
     root.current?.parentElement
       ?.querySelectorAll("[data-layer-content]")
       .forEach((node) => observer.observe(node));
@@ -300,6 +303,7 @@ export function CanvasEditor({
             .filter((l) => selected.includes(l.id))
             .map((l) => {
               const b = box(l);
+              if ((b.opacity ?? 1) <= 0.001) return null;
               return (
                 <div
                   key={l.id}
@@ -309,7 +313,7 @@ export function CanvasEditor({
                     top: `${(b.cy / 1080) * 100}%`,
                     width: `${((b.width * b.scale) / 1920) * 100}%`,
                     height: `${((b.height * b.scale) / 1080) * 100}%`,
-                    transform: `translate(-50%,-50%) rotate(${b.rotation}deg)`,
+                    transform: `translate(-50%,-50%) rotate(${b.rotation}deg) perspective(${((b.perspective ?? 1800) * b.scale * canvasWidth) / 1920}px) rotateX(${b.rotateX ?? 0}deg) rotateY(${b.rotateY ?? 0}deg)`,
                   }}
                 >
                   <span className="canvas-layer-name">{l.name}</span>

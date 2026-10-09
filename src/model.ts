@@ -8,6 +8,7 @@ import {
   resolveFont,
 } from "./font-assets";
 import { z } from "zod";
+import { DepthSchema, depthFrame } from "./motion";
 import { TextEffectSchema, builtinTextSettings } from "./text-effects";
 import { VisualPassSchema, effectRandom } from "./visual-effects";
 
@@ -40,6 +41,7 @@ export const ChannelSchema = z.object({
   phase: z.number().min(-100).max(100),
 });
 export const EffectSchema = z.object({
+  depth: DepthSchema.optional(),
   id: z.string().max(100),
   name: z.string().max(80),
   description: z.string().max(400),
@@ -303,8 +305,28 @@ export function layerAtTime(layer: Layer, effects: Effect[], t: number) {
     saturation: 1,
     letterSpacing: 0,
     rotateY: 0,
+    rotateX: 0,
+    perspective: 1800,
   };
   for (const instance of layer.effects.filter((e) => e.enabled)) {
+    const definition = resolveEffectInstance(instance, effects);
+    if (definition?.depth && instance.amount > 0) {
+      const d = depthFrame(
+        definition.depth,
+        t + layer.effectOffset,
+        layer.effectDuration || layer.duration,
+        instance.amount,
+      );
+      v.x += d.x * 1920;
+      v.y += d.y * 1080;
+      v.scale *= d.scale;
+      v.rotation += d.rotation;
+      v.rotateX += d.tiltX;
+      v.rotateY += d.tiltY;
+      v.blur += d.blur;
+      v.opacity *= d.opacity;
+      v.perspective = d.perspective * 1800;
+    }
     for (const c of resolveEffectInstance(instance, effects)?.channels ?? []) {
       const value = channelValue(
         c,

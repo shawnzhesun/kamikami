@@ -192,6 +192,10 @@ export type Bounds = {
   cy: number;
   rotation: number;
   scale: number;
+  rotateX?: number;
+  rotateY?: number;
+  perspective?: number;
+  opacity?: number;
 };
 export function layerBounds(
   layer: Layer,
@@ -210,14 +214,36 @@ export function layerBounds(
     cy: project.height / 2 + v.y,
     rotation: v.rotation,
     scale: v.scale,
+    rotateX: v.rotateX,
+    rotateY: v.rotateY,
+    perspective: v.perspective,
+    opacity: v.opacity,
   };
 }
 export function hitBounds(x: number, y: number, box: Bounds) {
+  if ((box.opacity ?? 1) <= 0.001 || box.scale <= 0) return false;
   const angle = (-box.rotation * Math.PI) / 180;
   const dx = x - box.cx,
     dy = y - box.cy;
-  const localX = (dx * Math.cos(angle) - dy * Math.sin(angle)) / box.scale;
-  const localY = (dx * Math.sin(angle) + dy * Math.cos(angle)) / box.scale;
+  const projectedX = (dx * Math.cos(angle) - dy * Math.sin(angle)) / box.scale;
+  const projectedY = (dx * Math.sin(angle) + dy * Math.cos(angle)) / box.scale;
+  // Invert the same perspective · rotateX · rotateY plane used by Composition.
+  const rx = ((box.rotateX ?? 0) * Math.PI) / 180;
+  const ry = ((box.rotateY ?? 0) * Math.PI) / 180;
+  const cx = Math.cos(rx),
+    sx = Math.sin(rx),
+    cy = Math.cos(ry),
+    sy = Math.sin(ry);
+  const distance = box.perspective ?? 1800;
+  const a = cy - (projectedX * cx * sy) / distance;
+  const b = (projectedX * sx) / distance;
+  const c = sx * sy - (projectedY * cx * sy) / distance;
+  const d = cx + (projectedY * sx) / distance;
+  const determinant = a * d - b * c;
+  if (Math.abs(determinant) < 1e-8) return false;
+  const localX = (projectedX * d - b * projectedY) / determinant;
+  const localY = (a * projectedY - projectedX * c) / determinant;
+  if (-cx * sy * localX + sx * localY >= distance) return false;
   return (
     Math.abs(localX) <= box.width / 2 && Math.abs(localY) <= box.height / 2
   );

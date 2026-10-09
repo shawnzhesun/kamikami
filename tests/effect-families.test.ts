@@ -7,6 +7,7 @@ import {
   allBuiltinEffects,
   videoPlaybackEffects,
   remotionSceneEffects,
+  motionEffects,
   builtinEffects,
   legacyBuiltinEffects,
   effectFamilies,
@@ -34,7 +35,10 @@ test("gallery retains the consolidation and appends only the new video operation
   assert.equal(legacyBuiltinEffects.length, 36);
   assert.equal(
     builtinEffects.length,
-    30 + videoPlaybackEffects.length + remotionSceneEffects.length,
+    30 +
+      videoPlaybackEffects.length +
+      remotionSceneEffects.length +
+      motionEffects.length,
   );
   assert.equal(
     new Set(allBuiltinEffects.map((e) => e.id)).size,

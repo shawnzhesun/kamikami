@@ -4,7 +4,8 @@ import {
   type Channel,
   type Effect,
 } from "./model";
-import { builtinTextSettings } from "./text-effects";
+import { builtinTextSettings, TextEffectSchema } from "./text-effects";
+import { DepthSchema, FieldSchema, ParticleSchema } from "./motion";
 import { type VisualPass } from "./visual-effects";
 
 const pass = (
@@ -466,7 +467,7 @@ export const legacyBuiltinEffects: Effect[] = [
 
 type EffectParameters = Pick<
   Effect,
-  "channels" | "passes" | "color" | "tint" | "text"
+  "channels" | "passes" | "color" | "tint" | "text" | "depth"
 >;
 type EffectVariation = {
   id: string;
@@ -485,6 +486,7 @@ const parameters = (effect: Effect): EffectParameters => ({
   channels: effect.channels,
   passes: effect.passes ?? [],
   ...(effect.text ? { text: effect.text } : {}),
+  ...(effect.depth ? { depth: effect.depth } : {}),
   color: effect.color,
   tint: effect.tint,
 });
@@ -767,6 +769,314 @@ export const remotionSceneEffects: Effect[] = [
   }),
 ];
 
+export const motionEffects: Effect[] = [
+  textRecipe(
+    "text-glitch",
+    "Text glitch",
+    "Short seeded bursts of character jitter, slice displacement, RGB separation and optional glyph corruption. Choose continuous glitches or an entrance that settles into readable text.",
+  ),
+  EffectSchema.parse({
+    id: "depth-motion",
+    name: "Depth motion",
+    description:
+      "Move flat artwork toward or away from the camera with perspective, tilt and focus. Each element moves independently; use object fields for layered depth.",
+    channels: [],
+    color: "#f2765e",
+    tint: 0,
+    depth: DepthSchema.parse({}),
+  }),
+];
+
+/** Named starting points for new motion and existing fields; no duplicate gallery cards. */
+export const motionEffectFamilies: EffectFamily[] = (() => {
+  const find = (id: string) =>
+    [
+      ...motionEffects,
+      ...remotionSceneEffects,
+      ...videoPlaybackEffects,
+      ...legacyBuiltinEffects,
+    ].find((e) => e.id === id)!;
+  const build = (
+    id: string,
+    category: string,
+    variations: [string, string, Partial<Effect>][],
+  ): EffectFamily => {
+    const source = find(id);
+    return {
+      id,
+      name: source.name,
+      description: source.description,
+      category,
+      variations: variations.map(([id, name, patch]) => ({
+        id,
+        name,
+        parameters: parameters(EffectSchema.parse({ ...source, ...patch })),
+      })),
+    };
+  };
+  const glitch = (patch: Record<string, unknown>) =>
+    TextEffectSchema.parse({ kind: "glitch", speed: 3, glitch: patch });
+  const particle = (patch: Record<string, unknown>) => [
+    pass("particles", {
+      strength: 0.9,
+      size: 0.3,
+      speed: 1,
+      color: "#ffc89b",
+      secondary: "#66a3bf",
+      particles: ParticleSchema.parse(patch),
+    }),
+  ];
+  const field = (patch: Record<string, unknown>) => [
+    pass("repeat", { strength: 1, speed: 1, field: FieldSchema.parse(patch) }),
+  ];
+  return [
+    build("text-glitch", "Typography", [
+      [
+        "glitch-stutter",
+        "Signal stutter",
+        { text: glitch({ rgb: 0, slices: 0 }) },
+      ],
+      [
+        "glitch-sliced",
+        "Sliced title",
+        { text: glitch({ slices: 0.5, jitter: 0.05, affected: 0.8 }) },
+      ],
+      [
+        "glitch-rgb",
+        "RGB rupture",
+        { text: glitch({ rgb: 0.12, affected: 1, dropout: 0 }) },
+      ],
+      [
+        "glitch-reveal",
+        "Corrupted reveal",
+        {
+          text: glitch({
+            timing: "entrance",
+            substitute: true,
+            affected: 1,
+            burst: 0.3,
+          }),
+        },
+      ],
+    ]),
+    build("depth-motion", "Motion", [
+      [
+        "depth-approach",
+        "Approach and settle",
+        { depth: DepthSchema.parse({}) },
+      ],
+      [
+        "depth-recede",
+        "Recede",
+        { depth: DepthSchema.parse({ from: 0, to: 4, tiltY: 0 }) },
+      ],
+      [
+        "depth-fly-past",
+        "Fly past camera",
+        {
+          depth: DepthSchema.parse({
+            from: 3,
+            to: -0.98,
+            x: 0.2,
+            tiltY: -30,
+            easing: "linear",
+          }),
+        },
+      ],
+      [
+        "depth-float",
+        "Floating card",
+        {
+          depth: DepthSchema.parse({
+            mode: "float",
+            from: 0.2,
+            to: 1,
+            x: 0.1,
+            y: 0.05,
+            tiltX: 15,
+            seconds: 4,
+            blur: 2,
+          }),
+        },
+      ],
+    ]),
+    build("memory-flecks", "Atmosphere", [
+      ["particles-paper", "Drifting paper", {}],
+      [
+        "particles-flat-burst",
+        "Radial bursts",
+        { passes: [pass("particles", { particleStyle: "burst", count: 3 })] },
+      ],
+      [
+        "particles-dust",
+        "Floating dust",
+        { passes: particle({ mode: "drift", shape: "dot" }) },
+      ],
+      [
+        "particles-confetti",
+        "Confetti drift",
+        { passes: particle({ shape: "paper", gravity: 0.2, spin: 90 }) },
+      ],
+      [
+        "particles-depth-burst",
+        "Depth fireworks",
+        {
+          passes: particle({
+            mode: "burst",
+            emitter: "point",
+            shape: "spark",
+            count: 160,
+            velocity: 1.2,
+            lifetime: 3,
+            gravity: 0.3,
+            trails: 0.8,
+            drag: 0.7,
+          }),
+        },
+      ],
+      [
+        "particles-tunnel",
+        "Star tunnel",
+        {
+          passes: particle({
+            mode: "tunnel",
+            shape: "spark",
+            trails: 0.7,
+            lifetime: 4,
+            turbulence: 0,
+            gravity: 0,
+          }),
+        },
+      ],
+      [
+        "particles-vortex",
+        "Vortex",
+        {
+          passes: particle({
+            mode: "vortex",
+            velocity: 2,
+            gravity: 0,
+            trails: 0.4,
+          }),
+        },
+      ],
+    ]),
+    build("image-repetition", "Composition", [
+      [
+        "repetition-grid",
+        "Grid",
+        {
+          passes: [
+            pass("repeat", { strength: 1, repeatMode: "grid", count: 4 }),
+          ],
+        },
+      ],
+      ["repetition-mirror", "Mirror", {}],
+      [
+        "repetition-kaleidoscope",
+        "Kaleidoscope",
+        {
+          passes: [
+            pass("repeat", {
+              strength: 1,
+              repeatMode: "kaleidoscope",
+              count: 8,
+            }),
+          ],
+        },
+      ],
+      [
+        "repetition-nested",
+        "Nested frames",
+        {
+          passes: [
+            pass("repeat", { strength: 1, repeatMode: "tunnel", count: 6 }),
+          ],
+        },
+      ],
+      ["repetition-volume", "Floating objects", { passes: field({}) }],
+      [
+        "repetition-depth-tunnel",
+        "Depth tunnel",
+        { passes: field({ mode: "tunnel", count: 20, size: 0.3 }) },
+      ],
+      [
+        "repetition-orbit",
+        "Orbital field",
+        { passes: field({ mode: "orbit", count: 16, faceCamera: false }) },
+      ],
+      [
+        "repetition-glyphs",
+        "Glyph field",
+        {
+          passes: field({ unit: "character", count: 36, size: 0.7, depth: 2 }),
+        },
+      ],
+    ]),
+    build("text-stagger", "Typography", [
+      [
+        "stagger-rise",
+        "Rise",
+        { text: TextEffectSchema.parse({ kind: "stagger", style: "rise" }) },
+      ],
+      [
+        "stagger-flip",
+        "Flip",
+        { text: TextEffectSchema.parse({ kind: "stagger", style: "flip" }) },
+      ],
+      [
+        "stagger-pop",
+        "Pop",
+        { text: TextEffectSchema.parse({ kind: "stagger", style: "pop" }) },
+      ],
+      [
+        "stagger-depth",
+        "Depth fly in",
+        {
+          text: TextEffectSchema.parse({
+            kind: "stagger",
+            style: "depth",
+            motion: {},
+          }),
+        },
+      ],
+      [
+        "stagger-depth-out",
+        "Depth fly out",
+        {
+          text: TextEffectSchema.parse({
+            kind: "stagger",
+            style: "depth",
+            motion: { direction: "out" },
+          }),
+        },
+      ],
+      [
+        "stagger-scatter",
+        "Scatter assembly",
+        {
+          text: TextEffectSchema.parse({
+            kind: "stagger",
+            style: "scatter",
+            motion: { order: "random", spread: 4 },
+          }),
+        },
+      ],
+      [
+        "stagger-spiral",
+        "Spiral assembly",
+        {
+          text: TextEffectSchema.parse({
+            kind: "stagger",
+            style: "spiral",
+            motion: { spread: 3 },
+          }),
+        },
+      ],
+    ]),
+  ];
+})();
+
 /** Gallery contains one card per family; legacy definitions remain resolvable. */
 export const builtinEffects: Effect[] = [
   ...legacyBuiltinEffects.flatMap((effect) => {
@@ -778,6 +1088,7 @@ export const builtinEffects: Effect[] = [
   }),
   ...videoPlaybackEffects,
   ...remotionSceneEffects,
+  ...motionEffects,
 ];
 export const allBuiltinEffects: Effect[] = [
   ...builtinEffects,
@@ -785,7 +1096,7 @@ export const allBuiltinEffects: Effect[] = [
 ];
 
 export function getEffectFamily(id: string) {
-  return effectFamilies.find(
+  return [...effectFamilies, ...motionEffectFamilies].find(
     (f) => f.id === id || f.variations.some((v) => v.id === id),
   );
 }
@@ -796,20 +1107,22 @@ const parameterSchema = EffectSchema.pick({
   color: true,
   tint: true,
   text: true,
+  depth: true,
 });
 const parameterKey = (value: EffectParameters) =>
   JSON.stringify(parameterSchema.parse(value));
 
 export function effectVariationId(effect: Effect): string {
-  const f = getEffectFamily(effect.id);
+  const f = getEffectFamily(effect.presetFamilyId ?? effect.id);
   const current = parameterKey(parameters(effect));
   return (
     f?.variations.find(
       (v) =>
         parameterKey(v.parameters) === current ||
-        parameterKey(
-          parameters(legacyBuiltinEffects.find((e) => e.id === v.id)!),
-        ) === current,
+        (legacyBuiltinEffects.some((e) => e.id === v.id) &&
+          parameterKey(
+            parameters(legacyBuiltinEffects.find((e) => e.id === v.id)!),
+          ) === current),
     )?.id ?? "custom"
   );
 }
@@ -827,6 +1140,9 @@ export function effectVariationPatch(
         ...variation.parameters,
         ...(effect.text && !variation.parameters.text
           ? { text: undefined }
+          : {}),
+        ...(effect.depth && !variation.parameters.depth
+          ? { depth: undefined }
           : {}),
       })
     : undefined;
@@ -850,7 +1166,9 @@ export function effectSearchText(effect: Effect) {
   const f = getEffectFamily(effect.id);
   const aliases =
     f?.variations
-      .map((v) => legacyBuiltinEffects.find((e) => e.id === v.id)!.name)
+      .map(
+        (v) => legacyBuiltinEffects.find((e) => e.id === v.id)?.name ?? v.name,
+      )
       .join(" ") ?? "";
   const extra =
     effect.id === "memory-flecks"

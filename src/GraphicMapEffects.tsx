@@ -7,7 +7,7 @@ import {
 } from "./graphic-maps";
 import type { VisualPass } from "./visual-effects";
 
-function MappedSample({
+export function MappedSample({
   maps,
   name,
   width,

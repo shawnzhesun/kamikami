@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { FieldSchema, ParticleSchema } from "./motion";
 
 export const visualKinds = [
   "vignette",
@@ -53,6 +54,8 @@ export const visualNames: Record<(typeof visualKinds)[number], string> = {
   blinds: "Blinds reveal",
 };
 export const VisualPassSchema = z.object({
+  field: FieldSchema.optional(),
+  particles: ParticleSchema.optional(),
   kind: z.enum(visualKinds),
   strength: z.number().min(0).max(1),
   size: z.number().min(0).max(1),

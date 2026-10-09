@@ -6,6 +6,7 @@ import {
   builtinEffects,
   videoPlaybackEffects,
   remotionSceneEffects,
+  motionEffects,
   effectSearchText,
 } from "../src/builtin-effects";
 import {
@@ -59,7 +60,10 @@ const variants = modes.flatMap(([id, key, choices]) =>
 
 test("video adds four distinct operations and extends existing cards without duplicates", () => {
   assert.equal(videoPlaybackEffects.length, 4);
-  assert.equal(builtinEffects.length, 34 + remotionSceneEffects.length);
+  assert.equal(
+    builtinEffects.length,
+    34 + remotionSceneEffects.length + motionEffects.length,
+  );
   assert.equal(
     new Set(builtinEffects.map((e) => e.id)).size,
     builtinEffects.length,

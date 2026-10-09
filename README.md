@@ -82,6 +82,8 @@ Keep the entire `.kamikami` directory to preserve media when moving this prototy
 
 Effects use a declarative SDK: additive x/y/rotation/blur/letterSpacing/rotateY channels; multiplicative scale/opacity/brightness/contrast/saturation; linear/ease/ease-out/sine/pulse/shake/steps curves; an optional legacy color wash; and up to six SVG visual passes per effect. Passes provide light, texture, graphic overlays, alpha-aware cutout treatments, and reveals. Timing derives from the local clip frame and preserved trim offsets. No `eval`, arbitrary agent code, filesystem plugins, or custom GPU shaders. The legacy color wash still covers the layer rectangle on non-text layers; new graphic overlays use the element’s alpha. Artwork and multi-element compositions remain separate from effects.
 
+Text Glitch and Depth Motion add configurable text corruption and projected depth travel. Particles, Image Repetition and Staggered Text now include depth, tunnel, orbit, glyph-field and assembly presets. Settings remain independent per applied instance. See [motion effects](docs/motion-effects.md) for controls, compatibility and rendering limits. New recipes use `kamikami-visual-v5`; restart the local service after updating.
+
 ## Deliberate limits and next iterations
 
 - No arbitrary TypeScript effect compilation yet. First prove the schema-based create/preview/tweak/export loop; then add an isolated plugin worker with explicit capabilities.

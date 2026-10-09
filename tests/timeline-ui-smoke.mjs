@@ -68,7 +68,7 @@ const fixture = {
       if (req.url === "/api/health")
         result = {
           ok: true,
-          effectEngine: "kamikami-visual-v4",
+          effectEngine: "kamikami-visual-v5",
           projectVersion: 2,
           effectLibraryVersion: 2,
         };

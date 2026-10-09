@@ -1,4 +1,10 @@
 import {
+  DepthControls,
+  TextMotionControls,
+  SpatialPassControls,
+} from "./editor/MotionControls";
+import { NumberField } from "./editor/NumberField";
+import {
   allBuiltinEffects,
   builtinEffectCategory,
   effectSearchText,
@@ -60,7 +66,6 @@ import {
   type Effect,
 } from "./model";
 
-import { validateNumericDraft } from "./editor-utils";
 import {
   applyEffectToLayers,
   effectCollections,
@@ -1381,14 +1386,23 @@ export function App() {
       </section>
       {!effectReadOnly && (
         <>
+          {editingEffect.depth && (
+            <DepthControls
+              value={editingEffect.depth}
+              onChange={(depth) => updateEffect({ depth })}
+            />
+          )}
           {editingEffect.text &&
             (() => {
               const text = editingEffect.text;
               const change = (patch: Partial<TextEffect>) =>
                 updateEffect({ text: { ...text, ...patch } });
-              const entrance = ["typewriter", "scramble", "stagger"].includes(
-                text.kind,
-              );
+              const entrance = [
+                "typewriter",
+                "scramble",
+                "stagger",
+                "glitch",
+              ].includes(text.kind);
               const motion = ["stagger", "wave"].includes(text.kind);
               const colored = ["gradient", "neon"].includes(text.kind);
               return (
@@ -1414,6 +1428,9 @@ export function App() {
                           options={[
                             { value: "character", label: "Character" },
                             { value: "word", label: "Word" },
+                            ...(text.kind === "glitch"
+                              ? [{ value: "title", label: "Whole title" }]
+                              : []),
                           ]}
                           onChange={(unit) =>
                             change({ unit: unit as TextEffect["unit"] })
@@ -1431,6 +1448,9 @@ export function App() {
                             { value: "rise", label: "Rise" },
                             { value: "flip", label: "3D flip" },
                             { value: "pop", label: "Pop" },
+                            { value: "depth", label: "Depth fly" },
+                            { value: "scatter", label: "Scatter assembly" },
+                            { value: "spiral", label: "Spiral assembly" },
                           ]}
                           onChange={(style) =>
                             change({ style: style as TextEffect["style"] })
@@ -1464,9 +1484,13 @@ export function App() {
                         onChange={(distance) => change({ distance })}
                       />
                     )}
-                    {["scramble", "wave", "gradient", "neon"].includes(
-                      text.kind,
-                    ) && (
+                    {[
+                      "scramble",
+                      "wave",
+                      "gradient",
+                      "neon",
+                      "glitch",
+                    ].includes(text.kind) && (
                       <NumberField
                         label="Speed"
                         value={text.speed}
@@ -1476,9 +1500,9 @@ export function App() {
                         onChange={(speed) => change({ speed })}
                       />
                     )}
-                    {text.kind === "scramble" && (
+                    {["scramble", "glitch", "stagger"].includes(text.kind) && (
                       <NumberField
-                        label="Scramble seed"
+                        label="Text random seed"
                         value={text.seed}
                         min={0}
                         max={65535}
@@ -1486,6 +1510,7 @@ export function App() {
                         onChange={(seed) => change({ seed: Math.round(seed) })}
                       />
                     )}
+                    <TextMotionControls text={text} onChange={change} />
                     {text.kind === "typewriter" && (
                       <label className="settings-checkbox">
                         <input
@@ -1640,7 +1665,10 @@ export function App() {
                     "palette",
                     "blinds",
                   ].includes(pass.kind) &&
-                    !(pass.kind === "repeat" && pass.repeatMode === "grid")) ||
+                    !(
+                      pass.kind === "repeat" &&
+                      (pass.repeatMode === "grid" || !!pass.field)
+                    )) ||
                   (pass.kind === "silhouette" &&
                     pass.silhouetteStyle === "outline")
                     ? [
@@ -1673,7 +1701,7 @@ export function App() {
                     "rings",
                   ].includes(pass.kind) ||
                   (pass.kind === "repeat" &&
-                    pass.repeatMode === "kaleidoscope") ||
+                    (pass.repeatMode === "kaleidoscope" || !!pass.field)) ||
                   pass.timing === "pulse"
                     ? [
                         {
@@ -1706,6 +1734,7 @@ export function App() {
                     "hexagons",
                     "particles",
                     "shatter",
+                    "repeat",
                   ].includes(pass.kind)
                     ? [
                         {
@@ -1813,7 +1842,12 @@ export function App() {
                           },
                         ] as const
                       )
-                        .filter((control) => control.kind === pass.kind)
+                        .filter(
+                          (control) =>
+                            control.kind === pass.kind &&
+                            !(control.kind === "particles" && pass.particles) &&
+                            !(control.kind === "repeat" && pass.field),
+                        )
                         .map((control) => (
                           <label key={control.key}>
                             {control.label}
@@ -1832,32 +1866,35 @@ export function App() {
                             />
                           </label>
                         ))}
-                      {(pass.kind === "blinds" ||
-                        pass.kind === "rings" ||
-                        (pass.kind === "repeat" &&
-                          pass.repeatMode !== "mirror") ||
-                        (pass.kind === "particles" &&
-                          pass.particleStyle === "burst")) && (
-                        <NumberField
-                          label="Count"
-                          value={
-                            pass.count ??
-                            (pass.kind === "blinds"
-                              ? 8
-                              : pass.kind === "repeat"
-                                ? 6
-                                : pass.kind === "rings"
-                                  ? 4
-                                  : 3)
-                          }
-                          min={2}
-                          max={12}
-                          step={1}
-                          onChange={(count) =>
-                            change({ count: Math.round(count) })
-                          }
-                        />
-                      )}
+                      <SpatialPassControls pass={pass} onChange={change} />
+                      {!pass.field &&
+                        !pass.particles &&
+                        (pass.kind === "blinds" ||
+                          pass.kind === "rings" ||
+                          (pass.kind === "repeat" &&
+                            pass.repeatMode !== "mirror") ||
+                          (pass.kind === "particles" &&
+                            pass.particleStyle === "burst")) && (
+                          <NumberField
+                            label="Count"
+                            value={
+                              pass.count ??
+                              (pass.kind === "blinds"
+                                ? 8
+                                : pass.kind === "repeat"
+                                  ? 6
+                                  : pass.kind === "rings"
+                                    ? 4
+                                    : 3)
+                            }
+                            min={2}
+                            max={12}
+                            step={1}
+                            onChange={(count) =>
+                              change({ count: Math.round(count) })
+                            }
+                          />
+                        )}
                       {pass.kind === "repeat" && (
                         <small className="muted">
                           Mirror uses two panels; size ≥ 0.5 adds vertical
@@ -2921,86 +2958,6 @@ export function App() {
     </div>
   );
 }
-function NumberField({
-  label,
-  value,
-  min,
-  max,
-  step = 1,
-  onChange,
-}: {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  step?: number;
-  onChange: (n: number) => void | boolean;
-}) {
-  const errorId = useId();
-  const format = (n: number) => String(Number(n.toFixed(3)));
-  const [draft, setDraft] = useState(format(value));
-  const [error, setError] = useState("");
-  const dirty = useRef(false);
-  useEffect(() => {
-    setDraft(format(value));
-    setError("");
-    dirty.current = false;
-  }, [value]);
-  const apply = () => {
-    // Display rounding must never change an untouched, frame-aligned value.
-    if (!dirty.current) return;
-    const result = validateNumericDraft(draft, min, max);
-    if (result.error) {
-      setError(result.error);
-      return;
-    }
-    setError("");
-    dirty.current = false;
-    const n = result.value!;
-    if (n !== value && onChange(n) === false) setDraft(format(value));
-    else setDraft(format(n));
-  };
-  return (
-    <label>
-      {label}
-      <input
-        type="number"
-        min={min}
-        max={max}
-        step={step}
-        value={draft}
-        aria-invalid={!!error}
-        aria-describedby={error ? errorId : undefined}
-        onChange={(e) => {
-          dirty.current = true;
-          setDraft(e.target.value);
-          setError("");
-        }}
-        onBlur={apply}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            const result = validateNumericDraft(draft, min, max);
-            if (result.error) setError(result.error);
-            else e.currentTarget.blur();
-          }
-          if (e.key === "Escape") {
-            e.preventDefault();
-            dirty.current = false;
-            setDraft(format(value));
-            setError("");
-          }
-        }}
-      />
-      {error && (
-        <span className="field-error" id={errorId} role="alert">
-          {error} Escape restores {format(value)}.
-        </span>
-      )}
-    </label>
-  );
-}
-
 function TextField({
   label,
   value,

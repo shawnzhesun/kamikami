@@ -3,6 +3,7 @@ import { effectRandom, visualFrame, type VisualPass } from "./visual-effects";
 import { resolveEffectInstance, type Effect, type Layer } from "./model";
 import { GraphicMapEffects } from "./GraphicMapEffects";
 import { svgImage } from "./graphic-maps";
+import { ObjectField, depthParticleSvg } from "./SpatialGraphicEffects";
 
 const rgb = (color: string) =>
   [1, 3, 5].map((i) => parseInt(color.slice(i, i + 2), 16) / 255);
@@ -69,15 +70,24 @@ function Pass({
     switch (pass.kind) {
       case "smear":
       case "repeat":
-        nodes = (
-          <GraphicMapEffects
-            pass={pass}
-            strength={s}
-            time={f.time}
-            width={w}
-            height={h}
-          />
-        );
+        nodes =
+          pass.kind === "repeat" && pass.field ? (
+            <ObjectField
+              pass={pass}
+              strength={s}
+              time={f.time}
+              width={w}
+              height={h}
+            />
+          ) : (
+            <GraphicMapEffects
+              pass={pass}
+              strength={s}
+              time={f.time}
+              width={w}
+              height={h}
+            />
+          );
         break;
       case "palette": {
         const mode = pass.paletteMode ?? "negative";
@@ -404,6 +414,18 @@ function Pass({
         break;
       }
       case "particles": {
+        if (pass.particles) {
+          const body = depthParticleSvg(pass, f.time, s, w, h);
+          nodes = pass.particles.clipToSource ? (
+            overlay(body, "screen")
+          ) : (
+            <>
+              {image(body)}
+              <feBlend in="paint" in2="SourceGraphic" mode="screen" />
+            </>
+          );
+          break;
+        }
         if (pass.particleStyle === "burst") {
           const bursts = pass.count ?? 3;
           let body = "";
@@ -633,10 +655,22 @@ export function GraphicEffects({
   children: React.ReactNode;
 }) {
   let result = children;
+  let glyphFieldRendered = false;
   for (const instance of layer.effects) {
     if (!instance.enabled || instance.amount === 0) continue;
     const effect = resolveEffectInstance(instance, effects);
     for (const [index, pass] of (effect?.passes ?? []).entries()) {
+      // Glyph/word fields are drawn by the shared text renderer.
+      if (
+        layer.type === "title" &&
+        pass.kind === "repeat" &&
+        pass.field &&
+        pass.field.unit !== "whole" &&
+        !glyphFieldRendered
+      ) {
+        glyphFieldRendered = true;
+        continue;
+      }
       result = (
         <Pass
           key={`${instance.effectId}-${index}`}

@@ -7,11 +7,32 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { openBrowser } from "@remotion/renderer";
 import { AnimatedText } from "../src/AnimatedText.tsx";
-import { EffectSample, effectPosterTime } from "../src/editor/EffectSample.tsx";
-import { remotionSceneEffects } from "../src/builtin-effects.ts";
-import { makeLayer } from "../src/model.ts";
+import {
+  EffectSample,
+  effectPosterTime,
+  isTextEffectPreview,
+} from "../src/editor/EffectSample.tsx";
+import {
+  remotionSceneEffects,
+  builtinEffects,
+  motionEffectFamilies,
+  effectVariationPatch,
+} from "../src/builtin-effects.ts";
+import { EffectSchema, makeLayer } from "../src/model.ts";
 
-const effects = remotionSceneEffects.filter((effect) => effect.text);
+const motionPresets = motionEffectFamilies.flatMap((family) => {
+  const base = builtinEffects.find((effect) => effect.id === family.id);
+  return family.variations.map((preset) =>
+    EffectSchema.parse({
+      ...base,
+      ...effectVariationPatch(base, preset.id),
+      id: preset.id,
+    }),
+  );
+});
+const effects = [...remotionSceneEffects, ...motionPresets].filter(
+  (effect) => effect.text,
+);
 const gradient = effects.find((effect) => effect.text.kind === "gradient");
 const output = await mkdtemp(path.join(tmpdir(), "kamikami-text-render-"));
 const browser = await openBrowser("chrome", { logLevel: "error" });
@@ -83,8 +104,61 @@ try {
       assert.ok(pixels > 150, `${name}: only ${pixels} text pixels rendered`);
     }
   const css = await readFile("src/style.css", "utf8");
+  // Exercise the shared sample renderer too: whole-element depth, SVG object
+  // fields, particle alpha/trails, and glyph fields at their poster times.
+  const sampleMarkup = (effect, time) =>
+    renderToStaticMarkup(React.createElement(EffectSample, { effect, time }));
+  const screenshotSample = async (effect, time) => {
+    await page.goto({
+      url:
+        "data:text/html," +
+        encodeURIComponent(
+          `<html><style>${css}</style><body style="margin:0;background:#000"><div class="effect-sample ${effect.text || effect.passes?.some((p) => p.field?.unit !== undefined && p.field.unit !== "whole") ? "is-text" : ""}" style="width:320px;height:180px"><div class="effect-sample-art">${sampleMarkup(effect, time)}</div></div></body></html>`,
+        ),
+      timeout: 10000,
+    });
+    await page.evaluate(() => document.fonts.ready);
+    return (
+      await page._client().send("Page.captureScreenshot", { format: "png" })
+    ).value.data;
+  };
+  for (const effect of motionPresets) {
+    const time = effectPosterTime(effect);
+    const baseline = await screenshotSample(
+      {
+        ...effect,
+        depth: undefined,
+        text: undefined,
+        passes: [],
+        channels: [],
+      },
+      time,
+    );
+    const active = await screenshotSample(effect, time);
+    if (!isTextEffectPreview(effect))
+      assert.notEqual(
+        active,
+        baseline,
+        `${effect.id}: preset did not change rendered pixels`,
+      );
+    await screenshotSample(effect, time + 2);
+    assert.equal(
+      await screenshotSample(effect, time),
+      active,
+      `${effect.id}: seeking changed the frame`,
+    );
+    await writeFile(
+      path.join(output, `motion-${effect.id}.png`),
+      Buffer.from(active, "base64"),
+    );
+  }
   for (const theme of ["original", "coastal", "daylight", "dusk"]) {
-    const cards = effects
+    const cards = [
+      ...effects,
+      ...motionPresets.filter((effect) =>
+        effect.passes?.some((pass) => pass.field?.unit === "character"),
+      ),
+    ]
       .map(
         (effect) =>
           `<div class="effect-card"><div class="effect-sample is-text"><div class="effect-sample-art">${renderToStaticMarkup(React.createElement(EffectSample, { effect, time: effectPosterTime(effect) }))}</div></div></div>`,

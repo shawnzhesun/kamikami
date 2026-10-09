@@ -1,3 +1,4 @@
+import { usesSpatialMotion } from "./motion";
 import { z } from "zod";
 
 export const mediaPath =
@@ -39,7 +40,12 @@ export async function api(url: string, method = "GET", body?: unknown) {
   const payload = body as
     | {
         version?: number;
-        project?: { version?: number; effects?: unknown[] };
+        project?: {
+          version?: number;
+          effects?: unknown[];
+          layers?: { effects?: { settings?: unknown }[] }[];
+        };
+        layers?: { effects?: { settings?: unknown }[] }[];
         effects?: unknown[];
         effect?: unknown;
       }
@@ -49,6 +55,11 @@ export async function api(url: string, method = "GET", body?: unknown) {
   const definitions = Array.isArray(body)
     ? body
     : (project?.effects ?? (payload?.effect ? [payload.effect] : []));
+  const needsMotionEngine =
+    definitions.some(usesSpatialMotion) ||
+    project?.layers?.some((layer) =>
+      layer.effects?.some((instance) => usesSpatialMotion(instance.settings)),
+    );
   const needsTextEngine = definitions.some((definition) => {
     const effect = definition as {
       text?: unknown;
@@ -60,7 +71,8 @@ export async function api(url: string, method = "GET", body?: unknown) {
   });
   if (
     needsEffectLibrary ||
-    (method !== "GET" && (needsTextEngine || needsInstanceSupport))
+    (method !== "GET" &&
+      (needsTextEngine || needsInstanceSupport || needsMotionEngine))
   ) {
     const health = await api("/api/health");
     if (needsEffectLibrary && health.effectLibraryVersion !== 2)
@@ -69,7 +81,16 @@ export async function api(url: string, method = "GET", body?: unknown) {
       throw new Error(
         "The local service is outdated. Restart KamiKami's development process before saving independent effect settings.",
       );
-    if (needsTextEngine && health.effectEngine !== "kamikami-visual-v4") {
+    if (needsMotionEngine && health.effectEngine !== "kamikami-visual-v5")
+      throw new Error(
+        "The local service is outdated. Restart KamiKami with npm run desktop before saving or rendering spatial motion and text glitch effects.",
+      );
+    if (
+      needsTextEngine &&
+      !["kamikami-visual-v4", "kamikami-visual-v5"].includes(
+        health.effectEngine,
+      )
+    ) {
       throw new Error(
         "The local service is outdated. Restart KamiKami's development process before saving or exporting text effects.",
       );

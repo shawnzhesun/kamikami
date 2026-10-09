@@ -184,7 +184,7 @@ function VisualLayer({
       style={{
         justifyContent: "center",
         alignItems: "center",
-        transform: `translate(${v.x}px,${v.y}px) scale(${v.scale}) rotate(${v.rotation}deg)${v.rotateY ? ` perspective(1800px) rotateY(${v.rotateY}deg)` : ""}`,
+        transform: `translate(${v.x}px,${v.y}px) scale(${v.scale}) rotate(${v.rotation}deg) perspective(${v.perspective}px) rotateX(${v.rotateX}deg) rotateY(${v.rotateY}deg)`,
         opacity: v.opacity,
         filter: `blur(${v.blur}px) brightness(${v.brightness}) contrast(${v.contrast}) saturate(${v.saturation})`,
       }}

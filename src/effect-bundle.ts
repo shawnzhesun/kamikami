@@ -1,3 +1,4 @@
+import { usesSpatialMotion } from "./motion";
 import { z } from "zod";
 import {
   EffectSchema,
@@ -8,6 +9,7 @@ import {
 } from "./model";
 import { builtinEffects, allBuiltinEffects } from "./builtin-effects";
 export function effectEngine(effect: Effect) {
+  if (usesSpatialMotion(effect)) return "kamikami-visual-v5" as const;
   if (
     effect.text ||
     effect.passes?.some(
@@ -58,6 +60,7 @@ export const EffectBundleSchema = z
       "kamikami-visual-v2",
       "kamikami-visual-v3",
       "kamikami-visual-v4",
+      "kamikami-visual-v5",
     ]),
     name: z.string().min(1).max(80),
     author: z.string().max(100).default(""),
@@ -73,16 +76,18 @@ export const EffectBundleSchema = z
         "kamikami-visual-v2",
         "kamikami-visual-v3",
         "kamikami-visual-v4",
+        "kamikami-visual-v5",
       ].indexOf(bundle.engine) >=
       [
         "frameforge-curves-v1",
         "kamikami-visual-v2",
         "kamikami-visual-v3",
         "kamikami-visual-v4",
+        "kamikami-visual-v5",
       ].indexOf(effectEngine(bundle.effect)),
     {
       message:
-        "Effect parameters require a newer engine: visual passes use kamikami-visual-v2; remap, repetition, smear and pattern modes use kamikami-visual-v3; text animation and blinds require kamikami-visual-v4.",
+        "Effect parameters require a newer engine: visual passes use kamikami-visual-v2; remap, repetition, smear and pattern modes use kamikami-visual-v3; text animation and blinds require kamikami-visual-v4; spatial motion and text glitches require kamikami-visual-v5.",
       path: ["engine"],
     },
   );

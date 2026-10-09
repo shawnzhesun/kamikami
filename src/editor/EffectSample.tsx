@@ -5,11 +5,15 @@ import { layerAtTime, makeLayer, type Effect } from "../model";
 
 const sample = { ...makeLayer("scene", "Preview"), duration: 6 };
 export function effectPosterTime(effect: Effect) {
+  if (effect.text?.kind === "glitch") return 0.04;
+  if (effect.depth) return effect.depth.seconds * 0.35;
   if (
     effect.text &&
     ["typewriter", "scramble", "stagger"].includes(effect.text.kind)
   )
-    return effect.text.seconds;
+    return effect.text.motion?.direction === "out"
+      ? 6 - effect.text.seconds * 0.5
+      : effect.text.seconds;
   const transition = effect.passes?.find(
     (p) => p.timing === "in" || p.timing === "out",
   );
@@ -23,6 +27,9 @@ export function effectPosterTime(effect: Effect) {
 export function isTextEffectPreview(effect: Effect) {
   return (
     !!effect.text ||
+    !!effect.passes?.some(
+      (pass) => pass.field && pass.field.unit !== "whole",
+    ) ||
     effect.channels.some((channel) => channel.property === "letterSpacing") ||
     !!effect.passes?.some((pass) => pass.kind === "shatter")
   );
@@ -66,7 +73,7 @@ export function EffectSample({
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              transform: `translate(${(v.x * 180) / 1920}px,${(v.y * 96) / 1080}px) rotate(${v.rotation}deg) scale(${v.scale}) perspective(169px) rotateY(${v.rotateY}deg)`,
+              transform: `translate(${(v.x * 180) / 1920}px,${(v.y * 96) / 1080}px) rotate(${v.rotation}deg) scale(${v.scale}) perspective(${(v.perspective * 180) / 1920}px) rotateX(${v.rotateX}deg) rotateY(${v.rotateY}deg)`,
               opacity: v.opacity,
               filter: `brightness(${v.brightness}) contrast(${v.contrast}) saturate(${v.saturation}) blur(${(v.blur * 180) / 1920}px)`,
             }}

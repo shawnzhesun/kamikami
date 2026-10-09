@@ -1,7 +1,8 @@
 import { z } from "zod";
-import { clamp01, effectRandom, smooth } from "./visual-effects";
+import { clamp01, effectRandom } from "./visual-effects";
 import { resolveEffectInstance } from "./effect-instance";
 import type { Effect, Layer } from "./model";
+import { projectDepth, seeded, unit, ease } from "./motion";
 
 export const textEffectKinds = [
   "typewriter",
@@ -10,6 +11,7 @@ export const textEffectKinds = [
   "wave",
   "gradient",
   "neon",
+  "glitch",
 ] as const;
 export const textEffectNames: Record<(typeof textEffectKinds)[number], string> =
   {
@@ -19,6 +21,7 @@ export const textEffectNames: Record<(typeof textEffectKinds)[number], string> =
     wave: "Text wave",
     gradient: "Flowing text gradient",
     neon: "Neon text",
+    glitch: "Text glitch",
   };
 export const TextEffectSchema = z
   .object({
@@ -27,8 +30,40 @@ export const TextEffectSchema = z
     stagger: z.number().min(0).max(0.95).default(0.6),
     distance: z.number().min(0).max(3).default(0.6),
     speed: z.number().min(0).max(10).default(1),
-    style: z.enum(["rise", "flip", "pop"]).default("rise"),
-    unit: z.enum(["character", "word"]).default("character"),
+    style: z
+      .enum(["rise", "flip", "pop", "depth", "scatter", "spiral"])
+      .default("rise"),
+    unit: z.enum(["character", "word", "title"]).default("character"),
+    motion: z
+      .object({
+        depth: z.number().min(-0.8).max(8).default(3),
+        spread: z.number().min(0).max(8).default(2),
+        rotation: z.number().min(0).max(360).default(90),
+        order: z.enum(["forward", "reverse", "random"]).default("forward"),
+        direction: z.enum(["in", "out"]).default("in"),
+        easing: z.enum(["linear", "smooth", "ease-out"]).default("smooth"),
+      })
+      .strict()
+      .optional(),
+    glitch: z
+      .object({
+        timing: z
+          .enum(["continuous", "entrance", "exit"])
+          .default("continuous"),
+        affected: z.number().min(0).max(1).default(0.5),
+        burst: z.number().min(0.01).max(1).default(0.2),
+        jitter: z.number().min(0).max(2).default(0.2),
+        slices: z.number().min(0).max(2).default(0.15),
+        rgb: z.number().min(0).max(0.5).default(0.05),
+        dropout: z.number().min(0).max(1).default(0.05),
+        substitute: z.boolean().default(false),
+        alphabet: z
+          .string()
+          .max(200)
+          .default("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#$%&"),
+      })
+      .strict()
+      .optional(),
     cursor: z.boolean().default(true),
     color: z
       .string()
@@ -42,6 +77,10 @@ export const TextEffectSchema = z
   })
   .strict();
 export type TextEffect = z.infer<typeof TextEffectSchema>;
+const defaultGlitch = TextEffectSchema.parse({
+  kind: "glitch",
+  glitch: {},
+}).glitch!;
 
 // Shared defaults also recover known built-ins saved by pre-text-effect services.
 export const builtinTextSettings: Record<string, TextEffect> = {
@@ -61,6 +100,11 @@ export const builtinTextSettings: Record<string, TextEffect> = {
     secondary: "#8e1ea2",
     distance: 0.6,
     speed: 1.4,
+  }),
+  "text-glitch": TextEffectSchema.parse({
+    kind: "glitch",
+    speed: 3,
+    glitch: {},
   }),
 };
 
@@ -101,11 +145,29 @@ export function textUnitFrame(
   const strength = clamp01(amount);
   const seconds = Math.min(effect.seconds, Math.max(0.05, duration));
   const progress = clamp01(time / seconds);
-  const delay = count > 1 ? (index / (count - 1)) * effect.stagger : 0;
-  const entry = smooth((progress - delay) / (1 - effect.stagger));
-  const remaining = 1 - entry;
+  const order = effect.motion?.order;
+  const position =
+    order === "reverse"
+      ? count - 1 - index
+      : order === "random"
+        ? seeded(effect.seed, index) * Math.max(0, count - 1)
+        : index;
+  const delay = count > 1 ? (position / (count - 1)) * effect.stagger : 0;
+  const p =
+    effect.motion?.direction === "out"
+      ? unit((time - (duration - seconds)) / seconds)
+      : progress;
+  const entry = ease(
+    (p - delay) / (1 - effect.stagger),
+    effect.motion?.easing ?? "smooth",
+  );
+  const remaining = effect.motion?.direction === "out" ? entry : 1 - entry;
   let opacity = 1,
     y = 0,
+    x = 0,
+    rotation = 0,
+    rgb = 0,
+    slice = 0,
     rotateX = 0,
     scale = 1,
     scramble = false;
@@ -118,6 +180,28 @@ export function textUnitFrame(
     if (effect.style === "rise") y = remaining * effect.distance * strength;
     if (effect.style === "flip") rotateX = -90 * remaining * strength;
     if (effect.style === "pop") scale = 1 - 0.75 * remaining * strength;
+    if (["depth", "scatter", "spiral"].includes(effect.style)) {
+      const motion = effect.motion;
+      const q = remaining * strength;
+      const radius = (motion?.spread ?? 2) * q;
+      const angle =
+        seeded(effect.seed, index) * Math.PI * 2 +
+        (effect.style === "spiral" ? q * Math.PI * 4 : 0);
+      const d = projectDepth(
+        effect.style === "depth" ? 0 : Math.cos(angle) * radius,
+        effect.style === "depth" ? 0 : Math.sin(angle) * radius,
+        (motion?.depth ?? 3) * q,
+      );
+      x = d.x;
+      y = d.y;
+      scale = d.scale;
+      opacity *= d.opacity;
+      rotation =
+        (seeded(effect.seed, index + 193) * 2 - 1) *
+        (motion?.rotation ?? 90) *
+        q;
+      rotateX = q * 60;
+    }
   }
   if (effect.kind === "wave")
     y =
@@ -127,7 +211,44 @@ export function textUnitFrame(
       ) *
       effect.distance *
       strength;
-  return { opacity, y, rotateX, scale, scramble, progress };
+  if (effect.kind === "glitch") {
+    const g = effect.glitch ?? defaultGlitch;
+    const eligible =
+      g.timing === "continuous" ||
+      (g.timing === "entrance" ? time < seconds : time >= duration - seconds);
+    const tick = Math.floor(time * effect.speed);
+    const active =
+      eligible &&
+      effect.speed > 0 &&
+      time * effect.speed - tick < Math.min(1, g.burst * effect.speed) &&
+      seeded(effect.seed + tick * 97, index) < g.affected;
+    if (active && strength > 0) {
+      const sign = seeded(effect.seed + tick, index + 51) * 2 - 1;
+      x = sign * g.jitter * strength;
+      y =
+        (seeded(effect.seed + tick, index + 81) - 0.5) *
+        g.jitter *
+        strength *
+        0.4;
+      slice = sign * g.slices * strength;
+      rgb = g.rgb * strength;
+      opacity =
+        seeded(effect.seed + tick, index + 107) < g.dropout ? 1 - strength : 1;
+      scramble = g.substitute && strength > 0;
+    }
+  }
+  return {
+    opacity,
+    x,
+    y,
+    rotation,
+    rgb,
+    slice,
+    rotateX,
+    scale,
+    scramble,
+    progress,
+  };
 }
 
 const scrambleAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#$%&";
@@ -137,7 +258,12 @@ export function scrambledText(
   index: number,
   time: number,
   speed: number,
+  alphabet = scrambleAlphabet,
 ) {
+  const glyphs = textUnits(alphabet || scrambleAlphabet, "character").filter(
+    (v) => !/^\s+$/u.test(v),
+  );
+  if (!glyphs.length) return original;
   // Preserve whitespace and one grapheme's layout; replacements never mutate the source text.
   return /^\s+$/u.test(original)
     ? original
@@ -147,7 +273,7 @@ export function scrambledText(
             seed,
             Math.floor(time * speed * 18) * 2053 + index * 67 + i,
           );
-          return scrambleAlphabet[Math.floor(n * scrambleAlphabet.length)];
+          return glyphs[Math.floor(n * glyphs.length)];
         })
         .join("");
 }
