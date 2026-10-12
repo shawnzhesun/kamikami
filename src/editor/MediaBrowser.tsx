@@ -7,9 +7,12 @@ import {
   RefreshCw,
   Plus,
   Image as ImageIcon,
+  ListTree,
+  Sparkles,
 } from "lucide-react";
 import type { MediaAsset } from "../media";
 import { Waveform } from "./Waveform";
+import { badgeLabel } from "./AnalysisDialogs";
 
 type Props = {
   assets: MediaAsset[];
@@ -20,7 +23,10 @@ type Props = {
   onDelete: (a: MediaAsset) => void;
   trash: MediaAsset[];
   onRestore: (a: MediaAsset) => void;
+  onAnalyze: () => void;
+  onDetails: (a: MediaAsset) => void;
 };
+
 export function MediaBrowser({
   assets,
   busy,
@@ -30,6 +36,8 @@ export function MediaBrowser({
   onDelete,
   trash,
   onRestore,
+  onAnalyze,
+  onDetails,
 }: Props) {
   const [query, setQuery] = useState(""),
     [filter, setFilter] = useState("all"),
@@ -45,6 +53,14 @@ export function MediaBrowser({
         <button onClick={onImport} disabled={busy}>
           <Plus size={14} />
           {busy ? "Adding…" : "Add media"}
+        </button>
+        <button
+          title="Analyze media for the assistant (shows an estimate first)"
+          onClick={onAnalyze}
+          disabled={!assets.length}
+        >
+          <Sparkles size={14} />
+          Analyze
         </button>
         <button
           aria-label="Refresh media library"
@@ -143,6 +159,14 @@ export function MediaBrowser({
             )}
           </button>
           <strong title={a.name}>{a.name}</strong>
+          {!a.missing && (
+            <span
+              className={`analysis-badge ${a.analysis?.status ?? "none"}`}
+              title={a.analysis?.error ?? a.analysis?.summary ?? ""}
+            >
+              {badgeLabel[a.analysis?.status ?? "none"]}
+            </span>
+          )}
           <small>
             {a.type} · {a.duration ? `${a.duration.toFixed(2)}s · ` : ""}
             {a.width && a.height ? `${a.width} × ${a.height} · ` : ""}
@@ -169,9 +193,19 @@ export function MediaBrowser({
             >
               <Trash2 size={13} />
             </button>
-            {a.missing && (
+            {a.missing ? (
               <button onClick={() => onRelink(a)} disabled={busy}>
                 Relink file…
+              </button>
+            ) : (
+              <button
+                className="media-details"
+                aria-label={`Analysis details for ${a.name}`}
+                title="Transcript, shots, description and audio"
+                onClick={() => onDetails(a)}
+              >
+                <ListTree size={13} />
+                Details
               </button>
             )}
           </div>

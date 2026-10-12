@@ -2,6 +2,7 @@ import {
   KeyframeSchema,
   elementKeyframeProperties,
   parameterPathPattern,
+  setKeyframeFps,
   setTrack,
   snapTime,
   type KeyframeTarget,
@@ -13,7 +14,12 @@ import {
   reorderTracks,
   moveElementsToTrack,
 } from "./editor/tracks";
-import { elementTrackId, projectTracks, TimelineLayerSchema } from "./model";
+import {
+  LIMITS,
+  elementTrackId,
+  projectTracks,
+  TimelineLayerSchema,
+} from "./model";
 import { z } from "zod";
 import {
   LayerSchema,
@@ -26,7 +32,18 @@ import {
   type Project,
 } from "./model";
 import { EffectBundleSchema } from "./effect-bundle";
-import { moveClips, trimClip, splitClips } from "./editor/editing";
+import {
+  moveClips,
+  trimClip,
+  splitClips,
+  applyEditList,
+  crossfade,
+  cutSourceRanges,
+  detachAudio,
+  rippleDelete,
+  rippleDeleteElements,
+  rippleInsert,
+} from "./editor/editing";
 import { applyInstanceEffectDraft } from "./editor/effect-draft";
 import { durationChange } from "./editor-utils";
 import type { MediaAsset } from "./media";
@@ -49,7 +66,7 @@ export const AgentCommandSchema = z.discriminatedUnion("action", [
   }),
   z.object({
     action: z.literal("reorder_tracks"),
-    trackIds: z.array(z.string()).max(40),
+    trackIds: z.array(z.string()).max(LIMITS.tracks),
     ...revision,
   }),
   z.object({ action: z.literal("get_project") }),
@@ -117,6 +134,72 @@ export const AgentCommandSchema = z.discriminatedUnion("action", [
     ...revision,
   }),
   z.object({
+    action: z.literal("ripple_delete"),
+    /** Timeline ranges [start, end) in seconds; gaps close afterwards. */
+    ranges: z
+      .array(z.tuple([z.number(), z.number()]))
+      .min(1)
+      .max(2000),
+    /** Omit to ripple every layer (keeps picture and sound in sync). */
+    trackIds: z.array(z.string()).max(LIMITS.tracks).optional(),
+    ...revision,
+  }),
+  z.object({
+    action: z.literal("ripple_delete_clips"),
+    layerIds: z.array(z.string()).min(1).max(LIMITS.elements),
+    ...revision,
+  }),
+  z.object({
+    action: z.literal("ripple_insert"),
+    at: z.number().min(0),
+    duration: z.number().positive().max(LIMITS.seconds),
+    trackIds: z.array(z.string()).max(LIMITS.tracks).optional(),
+    ...revision,
+  }),
+  z.object({
+    action: z.literal("cut_source_ranges"),
+    layerId: z.string(),
+    /** Ranges in the clip's source seconds (as in its transcript/analysis). */
+    ranges: z
+      .array(z.tuple([z.number(), z.number()]))
+      .min(1)
+      .max(2000),
+    scope: z.enum(["all", "track"]).default("all"),
+    ...revision,
+  }),
+  z.object({
+    action: z.literal("apply_edit_list"),
+    ranges: z
+      .array(
+        z.object({
+          src: z.string(),
+          start: z.number().min(0),
+          end: z.number().min(0),
+          name: z.string().max(100).optional(),
+        }),
+      )
+      .min(1)
+      .max(LIMITS.elements),
+    trackId: z.string().optional(),
+    at: z.number().min(0).default(0),
+    replace: z.boolean().default(false),
+    ...revision,
+  }),
+  z.object({
+    action: z.literal("detach_audio"),
+    layerId: z.string(),
+    /** Extracted audio asset (the app extracts it; agents pass layerId and track). */
+    audioSrc: z.string(),
+    ...revision,
+  }),
+  z.object({
+    action: z.literal("crossfade"),
+    fromLayerId: z.string(),
+    toLayerId: z.string(),
+    seconds: z.number().min(0.04).max(10),
+    ...revision,
+  }),
+  z.object({
     action: z.literal("split_clips"),
     layerIds: z.array(z.string()).min(1),
     frame: z.number().int().min(0),
@@ -125,7 +208,12 @@ export const AgentCommandSchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("set_project_settings"),
     name: z.string().min(1).max(100).optional(),
-    duration: z.number().min(1).max(600).optional(),
+    duration: z.number().min(1).max(LIMITS.seconds).optional(),
+    width: z.number().int().min(256).max(4096).optional(),
+    height: z.number().int().min(256).max(4096).optional(),
+    fps: z.number().optional(),
+    /** Export loudness target in LUFS (e.g. −14 social, −23 broadcast), or null for off. */
+    exportLoudness: z.number().min(-31).max(-5).nullable().optional(),
     trimAffected: z.boolean().default(false),
     ...revision,
   }),
@@ -203,12 +291,12 @@ export const AgentCommandSchema = z.discriminatedUnion("action", [
   }),
   z.object({
     action: z.literal("reorder_layers"),
-    layerIds: z.array(z.string()).max(40),
+    layerIds: z.array(z.string()).max(LIMITS.elements),
     ...revision,
   }),
   z.object({
     action: z.literal("select_layers"),
-    layerIds: z.array(z.string()).max(40),
+    layerIds: z.array(z.string()).max(LIMITS.elements),
   }),
   z.object({
     action: z.literal("set_playhead"),
@@ -254,6 +342,7 @@ export function applyAgentEdit(
   assets: MediaAsset[] = [],
 ): Project {
   project = validateProject(project);
+  setKeyframeFps(project.fps);
   let next = project;
   if (command.action === "create_track")
     next = addTrack(project, command.track);
@@ -344,6 +433,51 @@ export function applyAgentEdit(
       assets.find((a) => a.src === layer.src)?.duration,
     );
   }
+  if (command.action === "ripple_delete")
+    next = rippleDelete(project, command.ranges, command.trackIds);
+  if (command.action === "ripple_delete_clips")
+    next = rippleDeleteElements(project, command.layerIds);
+  if (command.action === "ripple_insert")
+    next = rippleInsert(
+      project,
+      command.at,
+      command.duration,
+      command.trackIds,
+    );
+  if (command.action === "cut_source_ranges")
+    next = cutSourceRanges(
+      project,
+      command.layerId,
+      command.ranges,
+      command.scope,
+    );
+  if (command.action === "apply_edit_list")
+    next = applyEditList(
+      project,
+      command.ranges,
+      assets
+        .filter((a) => !a.missing && !a.deleted)
+        .map((a) => ({
+          src: a.src,
+          name: a.name,
+          type: a.type,
+          duration: a.duration,
+        })),
+      { trackId: command.trackId, at: command.at, replace: command.replace },
+    ).project;
+  if (command.action === "detach_audio") {
+    if (!assets.some((a) => a.src === command.audioSrc && a.type === "audio"))
+      throw new Error("The extracted audio is not in the media library yet.");
+    next = detachAudio(project, command.layerId, command.audioSrc).project;
+  }
+  if (command.action === "crossfade")
+    next = crossfade(
+      project,
+      command.fromLayerId,
+      command.toLayerId,
+      command.seconds,
+      (src) => assets.find((a) => a.src === src)?.duration ?? null,
+    );
   if (command.action === "split_clips")
     next = splitClips(project, command.layerIds, command.frame).project;
   if (command.action === "set_project_settings") {
@@ -355,7 +489,16 @@ export function applyAgentEdit(
       throw new Error(
         "Shortening affects clips. Confirm trimming, then set trimAffected to true.",
       );
-    next = { ...change.next, name: command.name ?? project.name };
+    next = {
+      ...change.next,
+      name: command.name ?? project.name,
+      ...(command.width !== undefined ? { width: command.width } : {}),
+      ...(command.height !== undefined ? { height: command.height } : {}),
+      ...(command.fps !== undefined ? { fps: command.fps } : {}),
+      ...(command.exportLoudness !== undefined
+        ? { exportLoudness: command.exportLoudness }
+        : {}),
+    };
   }
   if (command.action === "create_effect") {
     if (project.effects.some((e) => e.id === command.effect.id))

@@ -25,6 +25,27 @@ import {
 } from "./keyframes";
 import { instanceAmountAt, resolveEffectInstanceAt } from "./effect-instance";
 
+/** Supported project frame rates (NTSC rates as their usual decimal values). */
+export const frameRates = [23.976, 24, 25, 29.97, 30, 50, 59.94, 60] as const;
+export type FrameRate = (typeof frameRates)[number];
+/** Common output shapes; any even size from 256 to 4096 px is accepted. */
+export const resolutionPresets = [
+  { label: "1080p landscape (16:9)", width: 1920, height: 1080 },
+  { label: "Vertical (9:16)", width: 1080, height: 1920 },
+  { label: "Square (1:1)", width: 1080, height: 1080 },
+  { label: "Portrait (4:5)", width: 1080, height: 1350 },
+  { label: "720p (16:9)", width: 1280, height: 720 },
+  { label: "1440p (16:9)", width: 2560, height: 1440 },
+  { label: "4K UHD (16:9)", width: 3840, height: 2160 },
+] as const;
+/** Project capacity. Raised for transcript-driven editing (many short cuts). */
+export const LIMITS = {
+  elements: 500,
+  tracks: 40,
+  effects: 200,
+  seconds: 3600,
+  importBytes: 4 * 1024 * 1024 * 1024,
+} as const;
 export const ChannelSchema = z.object({
   property: z.enum([
     "x",
@@ -102,15 +123,16 @@ export const LayerSchema = z.object({
   type: z.enum(["scene", "title", "image", "video", "audio"]),
   src: z.string().max(500),
   text: z.string().max(2000),
-  start: z.number().min(0).max(600),
-  duration: z.number().min(0.1).max(600),
+  start: z.number().min(0).max(LIMITS.seconds),
+  duration: z.number().min(0.1).max(LIMITS.seconds),
   offset: z.number().min(0).max(36000),
   effectOffset: z.number().min(0).max(36000),
   effectDuration: z.number().min(0).max(36000),
   muted: z.boolean(),
   solo: z.boolean(),
-  x: z.number().min(-1920).max(1920),
-  y: z.number().min(-1080).max(1080),
+  // Pixels from the canvas center; bounded by the largest supported frame.
+  x: z.number().min(-4096).max(4096),
+  y: z.number().min(-4096).max(4096),
   scale: z.number().min(0.05).max(5),
   rotation: z.number().min(-360).max(360),
   opacity: z.number().min(0).max(1),
@@ -124,6 +146,9 @@ export const LayerSchema = z.object({
   visible: z.boolean(),
   effects: z.array(InstanceSchema).max(8),
   keyframes: ElementKeyframesSchema.optional(),
+  /** Fade from/to transparent and silent over these seconds at the clip edges. */
+  fadeIn: z.number().min(0).max(30).optional(),
+  fadeOut: z.number().min(0).max(30).optional(),
 });
 export const TimelineLayerSchema = z.object({
   id: z.string().min(1).max(100),
@@ -132,17 +157,21 @@ export const TimelineLayerSchema = z.object({
 export type TimelineLayer = z.infer<typeof TimelineLayerSchema>;
 export const ProjectSchema = z.object({
   fonts: z.array(FontAssetSchema).max(100).optional(),
-  tracks: z.array(TimelineLayerSchema).max(40).optional(),
+  tracks: z.array(TimelineLayerSchema).max(LIMITS.tracks).optional(),
   // Version 3 is written only when keyframes exist, so older readers reject
   // animated projects instead of silently discarding their keyframes.
   version: z.union([z.literal(2), z.literal(3)]),
   name: z.string().min(1).max(100),
-  width: z.literal(1920),
-  height: z.literal(1080),
-  fps: z.literal(24),
-  duration: z.number().min(1).max(600),
-  layers: z.array(LayerSchema).max(40),
-  effects: z.array(EffectSchema).max(40),
+  width: z.number().int().min(256).max(4096).multipleOf(2),
+  height: z.number().int().min(256).max(4096).multipleOf(2),
+  fps: z.number().refine((v) => (frameRates as readonly number[]).includes(v), {
+    message: `Frame rate must be one of ${frameRates.join(", ")}`,
+  }),
+  duration: z.number().min(1).max(LIMITS.seconds),
+  layers: z.array(LayerSchema).max(LIMITS.elements),
+  /** Integrated loudness target for exports (LUFS), or null/absent for off. */
+  exportLoudness: z.number().min(-31).max(-5).nullable().optional(),
+  effects: z.array(EffectSchema).max(LIMITS.effects),
 });
 export type Project = z.infer<typeof ProjectSchema>;
 export type Layer = z.infer<typeof LayerSchema>;
@@ -268,8 +297,8 @@ export function validateProject(input: unknown): Project {
     tracks.push({ id, name: element.name.trim() || "Untitled layer" });
     return { ...element, trackId: id };
   });
-  if (tracks.length > 40)
-    throw new Error("The project supports up to 40 layers");
+  if (tracks.length > LIMITS.tracks)
+    throw new Error(`The project supports up to ${LIMITS.tracks} layers`);
   p.tracks = tracks;
   for (const track of tracks) {
     const elements = p.layers
@@ -406,7 +435,13 @@ export function channelValue(c: Channel, t: number, duration: number) {
     );
   return c.from + (c.to - c.from) * f;
 }
-export function layerAtTime(layer: Layer, effects: Effect[], t: number) {
+/** `stage` is the composition size, used to scale depth travel to the frame. */
+export function layerAtTime(
+  layer: Layer,
+  effects: Effect[],
+  t: number,
+  stage: { width: number; height: number } = { width: 1920, height: 1080 },
+) {
   const v = {
     x: propertyAt(layer, "x", t),
     y: propertyAt(layer, "y", t),
@@ -442,8 +477,8 @@ export function layerAtTime(layer: Layer, effects: Effect[], t: number) {
         layer.effectDuration || layer.duration,
         amount,
       );
-      v.x += d.x * 1920;
-      v.y += d.y * 1080;
+      v.x += d.x * stage.width;
+      v.y += d.y * stage.height;
       v.scale *= d.scale;
       v.rotation += d.rotation;
       v.rotateX += d.tiltX;
@@ -472,7 +507,7 @@ export function layerAtTime(layer: Layer, effects: Effect[], t: number) {
       else v[c.property] += value * amount;
     }
   }
-  v.opacity = Math.max(0, Math.min(1, v.opacity));
+  v.opacity = Math.max(0, Math.min(1, v.opacity * fadeGain(layer, t)));
   v.blur = Math.max(0, Math.min(100, v.blur));
   v.scale = Math.max(0.001, v.scale);
   v.brightness = Math.max(0, Math.min(10, v.brightness));
@@ -513,15 +548,52 @@ export function makeLayer(type: Layer["type"], name: string): Layer {
     effects: [],
   };
 }
+/** Gain of a clip's fade-in/fade-out at clip-local seconds. */
+export function fadeGain(layer: Layer, localTime: number) {
+  const fadeIn = Math.min(layer.fadeIn ?? 0, layer.duration / 2);
+  const fadeOut = Math.min(layer.fadeOut ?? 0, layer.duration / 2);
+  const t = Math.max(0, Math.min(layer.duration, localTime));
+  return (
+    (fadeIn > 0 ? Math.min(1, t / fadeIn) : 1) *
+    (fadeOut > 0 ? Math.min(1, (layer.duration - t) / fadeOut) : 1)
+  );
+}
+/** Automatic de-click ramp at audio edges, in seconds. */
+export const AUDIO_EDGE_RAMP = 0.02;
+/** True when another piece of the same source continues seamlessly at this edge (a split). */
+function continues(layer: Layer, layers: Layer[], edge: "in" | "out") {
+  const fps = 24;
+  return layers.some(
+    (o) =>
+      o.id !== layer.id &&
+      o.src === layer.src &&
+      elementTrackId(o) === elementTrackId(layer) &&
+      (edge === "in"
+        ? Math.abs(o.start + o.duration - layer.start) < 0.5 / fps &&
+          Math.abs(o.offset + o.duration - layer.offset) < 0.5 / fps
+        : Math.abs(layer.start + layer.duration - o.start) < 0.5 / fps &&
+          Math.abs(layer.offset + layer.duration - o.offset) < 0.5 / fps),
+  );
+}
 /** `localTime` is clip-local seconds; omit it for the static (unkeyed) level. */
 export function layerVolume(layer: Layer, layers: Layer[], localTime?: number) {
   const soloing = layers.some(
     (l) => l.visible && ["audio", "video"].includes(l.type) && l.solo,
   );
   if (layer.muted || (soloing && !layer.solo)) return 0;
-  return localTime === undefined
-    ? layer.volume
-    : Math.max(0, Math.min(1, propertyAt(layer, "volume", localTime)));
+  if (localTime === undefined) return layer.volume;
+  const t = Math.max(0, Math.min(layer.duration, localTime));
+  const rampIn = continues(layer, layers, "in")
+    ? 1
+    : Math.min(1, t / AUDIO_EDGE_RAMP);
+  const rampOut = continues(layer, layers, "out")
+    ? 1
+    : Math.min(1, (layer.duration - t) / AUDIO_EDGE_RAMP);
+  return (
+    Math.max(0, Math.min(1, propertyAt(layer, "volume", localTime))) *
+    fadeGain(layer, localTime) *
+    Math.max(0, Math.min(rampIn, rampOut))
+  );
 }
 export const initialProject: Project = validateProject({
   version: 2,

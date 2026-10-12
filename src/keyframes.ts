@@ -61,8 +61,9 @@ export const propertyRanges: Record<
   KeyframeProperty,
   { min: number; max: number; label: string }
 > = {
-  x: { min: -1920, max: 1920, label: "X position" },
-  y: { min: -1080, max: 1080, label: "Y position" },
+  // Schema bounds; the editor narrows them to the project frame.
+  x: { min: -4096, max: 4096, label: "X position" },
+  y: { min: -4096, max: 4096, label: "Y position" },
   scale: { min: 0.05, max: 5, label: "Scale" },
   rotation: { min: -360, max: 360, label: "Rotation" },
   opacity: { min: 0, max: 1, label: "Opacity" },
@@ -151,15 +152,23 @@ export function keyframeValue(track: readonly Keyframe[], time: number) {
   const u = (time - a.time) / Math.max(1e-9, b.time - a.time);
   return a.value + (b.value - a.value) * easeKeyframe(a, u);
 }
+/**
+ * Frame rate used to snap keyframes while editing. The editor and agent
+ * protocol set it from the project; evaluation itself is continuous in seconds.
+ */
+let editingFps = 24;
+export function setKeyframeFps(fps: number) {
+  if (Number.isFinite(fps) && fps > 0) editingFps = fps;
+}
 /** Sort by time; a later duplicate at the same frame replaces an earlier one. */
-export function normalizeTrack(track: readonly Keyframe[], fps = 24) {
+export function normalizeTrack(track: readonly Keyframe[], fps = editingFps) {
   const byFrame = new Map<number, Keyframe>();
   for (const k of track) byFrame.set(Math.round(k.time * fps), k);
   return [...byFrame.values()].sort((a, b) => a.time - b.time);
 }
-export const snapTime = (time: number, fps = 24) =>
+export const snapTime = (time: number, fps = editingFps) =>
   Math.max(0, Math.round(time * fps) / fps);
-const sameFrame = (a: number, b: number, fps = 24) =>
+const sameFrame = (a: number, b: number, fps = editingFps) =>
   Math.abs(a - b) < 0.5 / fps;
 
 export const animationTime = (layer: Layer, localTime: number) =>
@@ -452,7 +461,7 @@ export function visibleKeyframeTimes(layer: Layer, targets?: KeyframeTarget[]) {
     for (const k of track) {
       const local = k.time - layer.effectOffset;
       if (local >= -1e-6 && local <= layer.duration + 1e-6)
-        times.set(Math.round(local * 24), local);
+        times.set(Math.round(local * editingFps), local);
     }
   }
   return [...times.values()].sort((a, b) => a - b);
@@ -465,8 +474,8 @@ export function adjacentKeyframe(
 ) {
   const times = visibleKeyframeTimes(layer, targets);
   return direction > 0
-    ? times.find((t) => t > localTime + 0.5 / 24)
-    : [...times].reverse().find((t) => t < localTime - 0.5 / 24);
+    ? times.find((t) => t > localTime + 0.5 / editingFps)
+    : [...times].reverse().find((t) => t < localTime - 0.5 / editingFps);
 }
 /** Move every key at one time (all targets) to another, as when dragging a timeline diamond. */
 export function retimeKeyframes(

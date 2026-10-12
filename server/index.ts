@@ -3,12 +3,27 @@ import { EffectLibrary } from "./effect-library";
 import { EffectBundleSchema } from "../src/effect-bundle";
 import { AgentCommandSchema } from "../src/agent-protocol";
 import { MediaLibrary } from "./media-library";
+import { AnalysisStore } from "./analysis/store";
+import { AnalysisQueue } from "./analysis/queue";
+import { extractAudioTrack, normalizeLoudness } from "./analysis/ffmpeg";
+import { AnalysisSettingsStore } from "./analysis/settings";
+import { estimate, modelStages } from "./analysis/stages";
+import {
+  analysisSections,
+  libraryDigest,
+  searchAnalyses,
+  sliceAnalysis,
+  type AnalysisSection,
+} from "./analysis/query";
+import { viewRange } from "./analysis/view";
+import { providerHost, type ProviderConnection } from "./analysis/provider";
+import { analysisTiers, type AnalysisTier } from "../src/asset-analysis";
 import { FontLibrary, MAX_FONT_BYTES } from "./font-library";
 import express from "express";
 import multer from "multer";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { mkdir, readFile, writeFile, rename, stat } from "node:fs/promises";
+import { mkdir, readFile, writeFile, rename, rm, stat } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { EditorBridge } from "./editor-bridge";
 import { AssistantService } from "./assistant";
@@ -24,6 +39,7 @@ import {
   initialProject,
   ProjectSchema,
   EffectSchema,
+  LIMITS,
 } from "../src/model";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -46,6 +62,27 @@ await Promise.all(
   ),
 );
 const library = new MediaLibrary(data);
+const analysisStore = new AnalysisStore(data);
+const analysisSettings = new AnalysisSettingsStore(data);
+// Model stages borrow the assistant's connection lazily (it is created below).
+let analysisConnection: () => ProviderConnection | null = () => null;
+const analysisQueue = new AnalysisQueue(
+  analysisStore,
+  data,
+  modelStages({
+    connection: () => analysisConnection(),
+    settings: () => analysisSettings.read(),
+    fontFile: path.join(
+      root,
+      "public",
+      "fonts",
+      "builtin",
+      "DejaVuSans-Bold.ttf",
+    ),
+  }),
+  2,
+  async (src) => (await library.list()).find((a) => a.src === src)?.name ?? src,
+);
 const effects = new EffectLibrary(data);
 const fonts = new FontLibrary(data, path.join(root, "public"));
 const app = express();
@@ -115,7 +152,7 @@ const upload = multer({
     filename: (_req, file, cb) =>
       cb(null, randomUUID() + path.extname(file.originalname).toLowerCase()),
   }),
-  limits: { fileSize: 500 * 1024 * 1024, files: 1 },
+  limits: { fileSize: LIMITS.importBytes, files: 1 },
   fileFilter: (_req, file, cb) => {
     if (
       !/\.(png|jpg|jpeg|webp|gif|mp4|webm|mov|mp3|wav|m4a|ogg)$/i.test(
@@ -142,7 +179,17 @@ app.get("/api/health", (_req, res) =>
 );
 const bridge = new EditorBridge();
 const assistant = new AssistantService(bridge, data);
+analysisConnection = () => assistant.analysisConnection();
 await assistant.load();
+await analysisQueue.load();
+// Probe assets imported before analysis existed (free and local).
+void Promise.all([library.list(), analysisStore.index()]).then(
+  ([assets, entries]) => {
+    for (const a of assets)
+      if (!a.missing && (!entries[a.src] || entries[a.src].status === "none"))
+        analysisQueue.enqueue(a.src, "probe");
+  },
+);
 app.get("/api/assistant", (_req, res) => res.json(assistant.state()));
 app.get("/api/assistant/models", async (_req, res) =>
   res.json(await assistant.listModels()),
@@ -231,7 +278,234 @@ app.put("/api/project", async (req, res) => {
   }
 });
 app.get("/api/media", async (req, res) => {
-  res.json(await library.list(req.query.includeDeleted === "true"));
+  const [assets, entries] = await Promise.all([
+    library.list(req.query.includeDeleted === "true"),
+    analysisStore.index(),
+  ]);
+  res.json(
+    assets.map((a) => ({
+      ...a,
+      analysis: entries[a.src] ?? { status: "none" },
+    })),
+  );
+});
+app.get("/api/analysis", async (_req, res) => {
+  res.json({
+    entries: await analysisStore.index(),
+    jobs: analysisQueue.list(),
+  });
+});
+app.get("/api/analysis/asset", async (req, res) => {
+  const src = String(req.query.src ?? "");
+  const entry = await analysisStore.entry(src);
+  const analysis = entry.sha256 ? await analysisStore.read(entry.sha256) : null;
+  if (!analysis)
+    return res
+      .status(404)
+      .json({ error: "This asset has not been analyzed yet." });
+  const section = analysisSections.includes(
+    req.query.section as AnalysisSection,
+  )
+    ? (req.query.section as AnalysisSection)
+    : "overview";
+  const start = Number(req.query.start ?? 0) || 0;
+  const end = req.query.end === undefined ? Infinity : Number(req.query.end);
+  res.json({
+    src,
+    status: entry.status,
+    ...(entry.error ? { note: entry.error } : {}),
+    ...sliceAnalysis(
+      analysis,
+      section,
+      start,
+      Number.isFinite(end) ? end : Infinity,
+    ),
+  });
+});
+async function analyzedLibrary() {
+  const [assets, entries] = await Promise.all([
+    library.list(),
+    analysisStore.index(),
+  ]);
+  return Promise.all(
+    assets
+      .filter((a) => !a.missing)
+      .map(async (asset) => ({
+        asset,
+        entry: entries[asset.src],
+        analysis: entries[asset.src]?.sha256
+          ? await analysisStore.read(entries[asset.src].sha256!)
+          : null,
+      })),
+  );
+}
+app.get("/api/analysis/search", async (req, res) => {
+  const limit = Math.max(1, Math.min(50, Number(req.query.limit) || 10));
+  res.json({
+    results: searchAnalyses(
+      String(req.query.q ?? ""),
+      await analyzedLibrary(),
+      limit,
+    ),
+  });
+});
+app.get("/api/analysis/digest", async (_req, res) => {
+  const [assets, entries] = await Promise.all([
+    library.list(),
+    analysisStore.index(),
+  ]);
+  res.json({ digest: libraryDigest(assets, entries) });
+});
+app.post("/api/analysis/view", async (req, res) => {
+  try {
+    const src = String(req.body.src ?? "");
+    const asset = (await library.list()).find(
+      (a) => a.src === src && !a.missing,
+    );
+    if (!asset) return res.status(404).json({ error: "Media not found." });
+    const duration =
+      asset.duration ??
+      (await analysisStore
+        .entry(src)
+        .then(async (e) =>
+          e.sha256
+            ? (await analysisStore.read(e.sha256))?.probe.duration
+            : null,
+        )) ??
+      0;
+    const start = Math.max(0, Number(req.body.start) || 0);
+    const end = Math.min(
+      duration || start + 10,
+      Math.max(start + 0.05, Number(req.body.end) || start + 10),
+    );
+    const id = randomUUID();
+    await mkdir(path.join(data, "exports", "views"), { recursive: true });
+    await viewRange(
+      path.join(data, src),
+      asset.type,
+      start,
+      end,
+      path.join(data, "exports", "views", `${id}.png`),
+      path.join(root, "public", "fonts", "builtin", "DejaVuSans-Bold.ttf"),
+      { frames: Number(req.body.frames) || 8 },
+    );
+    res.json({ id, url: `/api/analysis/views/${id}.png`, src, start, end });
+  } catch (e) {
+    res.status(400).json({ error: (e as Error).message });
+  }
+});
+app.get("/api/analysis/views/:id.png", (req, res) => {
+  if (!/^[a-f0-9-]+$/.test(req.params.id)) return res.sendStatus(404);
+  res.sendFile(path.join(data, "exports", "views", `${req.params.id}.png`), {
+    dotfiles: "allow",
+  });
+});
+async function analysisTargets(body: { srcs?: unknown; tier?: unknown }) {
+  const tier: AnalysisTier = analysisTiers.includes(body.tier as AnalysisTier)
+    ? (body.tier as AnalysisTier)
+    : (await analysisSettings.read()).defaultTier;
+  const assets = (await library.list()).filter((a) => !a.missing);
+  const chosen = Array.isArray(body.srcs)
+    ? assets.filter((a) => (body.srcs as unknown[]).includes(a.src))
+    : assets;
+  return { tier, assets: chosen };
+}
+/** Extract a video's audio track as its own asset (cached per source and track). */
+app.post("/api/media/extract-audio", async (req, res) => {
+  try {
+    const src = String(req.body.src ?? "");
+    const track = Math.max(
+      0,
+      Math.min(31, Math.round(Number(req.body.track) || 0)),
+    );
+    const assets = await library.list(true);
+    const source = assets.find((a) => a.src === src && !a.missing);
+    if (!source || source.type !== "video")
+      return res.status(404).json({ error: "Choose an imported video." });
+    const stem = path.basename(src).replace(/\.[^.]+$/, "");
+    const filename = `${stem}-a${track}.m4a`;
+    const existing = assets.find(
+      (a) => a.src === `/media/${filename}` && !a.missing,
+    );
+    if (existing) {
+      if (existing.deleted) await library.setDeleted(existing.src, false);
+      return res.json({ ...existing, deleted: false });
+    }
+    const output = path.join(data, "media", filename);
+    await extractAudioTrack(path.join(data, src), output, track);
+    const asset = await library.register(
+      filename,
+      `${source.name} (audio${track ? ` track ${track + 1}` : ""})`,
+      (await stat(output)).size,
+    );
+    analysisQueue.enqueue(asset.src, "probe");
+    res.json(asset);
+  } catch (e) {
+    res.status(400).json({ error: (e as Error).message });
+  }
+});
+app.get("/api/analysis/settings", async (_req, res) => {
+  res.json(await analysisSettings.read());
+});
+app.put("/api/analysis/settings", async (req, res) => {
+  try {
+    res.json(await analysisSettings.update(req.body));
+  } catch (e) {
+    res.status(400).json({ error: (e as Error).message });
+  }
+});
+app.post("/api/analysis/estimate", async (req, res) => {
+  const { tier, assets } = await analysisTargets(req.body);
+  const entries = await analysisStore.index();
+  const items = await Promise.all(
+    assets.map(async (a) => ({
+      type: a.type,
+      duration: a.duration,
+      analysis: entries[a.src]?.sha256
+        ? await analysisStore.read(entries[a.src].sha256!)
+        : null,
+    })),
+  );
+  res.json({
+    tier,
+    estimate: estimate(
+      items,
+      tier,
+      await analysisSettings.read(),
+      analysisConnection(),
+    ),
+  });
+});
+app.post("/api/analysis/run", async (req, res) => {
+  const { tier, assets } = await analysisTargets(req.body);
+  // Model tiers upload media, so they need an explicit confirmation of the estimate.
+  if (tier !== "probe" && req.body.confirmed !== true)
+    return res.status(400).json({
+      error: "Confirm the analysis estimate before running model stages.",
+    });
+  const connection = analysisConnection();
+  if (tier !== "probe" && req.body.allowUpload === true && connection)
+    await analysisSettings.update({
+      consent: {
+        ...(await analysisSettings.read()).consent,
+        [providerHost(connection)]: true,
+      },
+    });
+  res.json({
+    jobs: assets.map((a) =>
+      analysisQueue.enqueue(
+        a.src,
+        tier,
+        typeof req.body.prompt === "string" ? { prompt: req.body.prompt } : {},
+      ),
+    ),
+  });
+});
+app.post("/api/analysis/cancel", (req, res) => {
+  analysisQueue.cancel(
+    typeof req.body.id === "string" ? req.body.id : undefined,
+  );
+  res.json({ jobs: analysisQueue.list() });
 });
 app.post("/api/media/delete", async (req, res) => {
   res.json(await library.setDeleted(req.body.src, true));
@@ -260,14 +534,15 @@ app.get("/api/capabilities", (_req, res) =>
     effectBundle: z.toJSONSchema(EffectBundleSchema),
     commands: z.toJSONSchema(AgentCommandSchema),
     limits: {
-      layers: 40,
-      effectsPerProject: 40,
+      elements: LIMITS.elements,
+      layers: LIMITS.tracks,
+      effectsPerProject: LIMITS.effects,
       effectsPerLayer: 8,
-      durationSeconds: 600,
-      importBytes: 500 * 1024 * 1024,
+      durationSeconds: LIMITS.seconds,
+      importBytes: LIMITS.importBytes,
     },
     conventions:
-      "Project version 2 stores complete independent settings on each applied effect instance; version 3 is written when keyframes exist. Keyframes: element.keyframes.{x,y,scale,rotation,opacity,volume} and instance.keyframes.{amount,parameters[numeric settings path]} are arrays of {time,value,easing,bezier?}; times are animation seconds (clip-local time + effectOffset); easing (linear/ease-in/ease-out/ease-in-out/hold/bezier) shapes the segment leaving a key; an animated value replaces the static one and effects still layer on top. Prefer set_keyframes, which takes clip-local times. version-1 projects migrate with their current appearance preserved. update_effect_instance changes one element; update_effect changes only a preset for future uses. tracks are independent timeline layers ordered bottom to top; layers is the legacy JSON array of elements, each referencing a trackId. Same-track elements cannot overlap; seconds for clip times; x/y from canvas center; source offsets and effect offsets preserve trim continuity. Frequency is cycles per second and phase is cycles. Channels add x/y/rotation/blur/letterSpacing/rotateX/rotateY/skewX and multiply scale/scaleX/scaleY/opacity/brightness/contrast/saturation. Curves include linear/ease/ease-out/sine/pulse/shake/steps plus spring back/anticipate (phase = extra overshoot), elastic (frequency = oscillations), bounce (frequency = bounces) and damped (frequency Hz, phase = extra damping); shake frequency is held samples per second, steps frequency is the number of steps. Optional channel seconds runs the curve over that span from the clip start, or from the end with align end. Optional visual passes provide alpha-aware lighting, texture, cutout and transition treatments; timing is constant, in, out or pulse. Optional text recipes animate title elements with typewriter, scramble, stagger (rise/flip/pop), wave, gradient and neon modes. Text seconds are entrance duration; stagger controls relative unit delays or wave phase; distance is in em. Text effects apply only to title elements. Blinds passes support horizontal/vertical strip direction and count. Tint remains a rectangular screen blend on non-text layers. Optional depth settings animate a flat element through perspective and focus. Text glitch adds seeded per-unit bursts; stagger supports depth/scatter/spiral entrances and exits. Particle passes can include particles settings for depth emitters and trails; repeat passes can include field settings for volume/tunnel/orbit and word/character repetition. These require kamikami-visual-v5. Passes warp (warpMode boil/liquid/melt), bevel, extrude, sheen (sheenStyle gloss/foil), paper, ink, pixel (pixelMode pixelate/dither/gameboy), dissolve, goo, glow and lens, the new channels/curves and channel spans require kamikami-visual-v6. Title text kinds mask (direction up/down/left/right), focus (variant soft/slam), stretch, swipe (direction left/right), slot, bounce (variant bounce/elastic), turn (direction left/right), highlight (variant marker/block; color = box), underline (color = line), outline, echo (color = outline), split, draw (color = stroke), flicker, count and circle (distance = spacing, speed = rotation) require kamikami-visual-v7; blurrise, karaoke (color = sung), shimmer (color/secondary), prism, bubbles, flap, roll, odometer and the line-sequence kinds retype, rotate, typeloop and morph (each text line is one step) are also v7. seconds/stagger/unit set timing and motion.direction out plays them as exits. Passes shape (shapeMode), doors (doorMode), clock (clockMode, count = blades), feather (angle = direction), lumawipe (lumaOrder), reflection, tiltshift, oldfilm, ripple (rippleMode) and cells (cellMode) are v7; for reveals strength 1 is fully hidden, so timing in reveals. Effect origin {x,y} in -1..1 sets the transform pivot for hinged 3D moves. Animation remains deterministic and instance-scoped. Recipes are declarative, no executable code.",
+      "Project version 2 stores complete independent settings on each applied effect instance; version 3 is written when keyframes exist. Keyframes: element.keyframes.{x,y,scale,rotation,opacity,volume} and instance.keyframes.{amount,parameters[numeric settings path]} are arrays of {time,value,easing,bezier?}; times are animation seconds (clip-local time + effectOffset); easing (linear/ease-in/ease-out/ease-in-out/hold/bezier) shapes the segment leaving a key; an animated value replaces the static one and effects still layer on top. Prefer set_keyframes, which takes clip-local times. version-1 projects migrate with their current appearance preserved. update_effect_instance changes one element; update_effect changes only a preset for future uses. tracks are independent timeline layers ordered bottom to top; layers is the legacy JSON array of elements, each referencing a trackId. Same-track elements cannot overlap; seconds for clip times; x/y from canvas center; source offsets and effect offsets preserve trim continuity. Frequency is cycles per second and phase is cycles. Channels add x/y/rotation/blur/letterSpacing/rotateX/rotateY/skewX and multiply scale/scaleX/scaleY/opacity/brightness/contrast/saturation. Curves include linear/ease/ease-out/sine/pulse/shake/steps plus spring back/anticipate (phase = extra overshoot), elastic (frequency = oscillations), bounce (frequency = bounces) and damped (frequency Hz, phase = extra damping); shake frequency is held samples per second, steps frequency is the number of steps. Optional channel seconds runs the curve over that span from the clip start, or from the end with align end. Optional visual passes provide alpha-aware lighting, texture, cutout and transition treatments; timing is constant, in, out or pulse. Optional text recipes animate title elements with typewriter, scramble, stagger (rise/flip/pop), wave, gradient and neon modes. Text seconds are entrance duration; stagger controls relative unit delays or wave phase; distance is in em. Text effects apply only to title elements. Blinds passes support horizontal/vertical strip direction and count. Tint remains a rectangular screen blend on non-text layers. Optional depth settings animate a flat element through perspective and focus. Text glitch adds seeded per-unit bursts; stagger supports depth/scatter/spiral entrances and exits. Particle passes can include particles settings for depth emitters and trails; repeat passes can include field settings for volume/tunnel/orbit and word/character repetition. These require kamikami-visual-v5. Passes warp (warpMode boil/liquid/melt), bevel, extrude, sheen (sheenStyle gloss/foil), paper, ink, pixel (pixelMode pixelate/dither/gameboy), dissolve, goo, glow and lens, the new channels/curves and channel spans require kamikami-visual-v6. Title text kinds mask (direction up/down/left/right), focus (variant soft/slam), stretch, swipe (direction left/right), slot, bounce (variant bounce/elastic), turn (direction left/right), highlight (variant marker/block; color = box), underline (color = line), outline, echo (color = outline), split, draw (color = stroke), flicker, count and circle (distance = spacing, speed = rotation) require kamikami-visual-v7; blurrise, karaoke (color = sung), shimmer (color/secondary), prism, bubbles, flap, roll, odometer and the line-sequence kinds retype, rotate, typeloop and morph (each text line is one step) are also v7. seconds/stagger/unit set timing and motion.direction out plays them as exits. Passes shape (shapeMode), doors (doorMode), clock (clockMode, count = blades), feather (angle = direction), lumawipe (lumaOrder), reflection, tiltshift, oldfilm, ripple (rippleMode) and cells (cellMode) are v7; for reveals strength 1 is fully hidden, so timing in reveals. Effect origin {x,y} in -1..1 sets the transform pivot for hinged 3D moves. Projects support 23.976–60 fps and even sizes 256–4096 px; elements may set fadeIn/fadeOut seconds (audio edges get automatic 20 ms de-click ramps). Media analysis sidecars (get_asset_analysis) give asset-relative seconds: transcript words/segments (source asr or aligned lyrics), shots, captioned frames, silences, loudness, image descriptions. Animation remains deterministic and instance-scoped. Recipes are declarative, no executable code.",
   }),
 );
 app.post("/api/media/relink", async (req, res) => {
@@ -279,13 +554,23 @@ app.put("/api/media/:filename", async (req, res) => {
 });
 app.post("/api/import", upload.single("file"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file supplied" });
-  res.json(
-    await library.register(
-      req.file.filename,
-      req.file.originalname,
-      req.file.size,
-    ),
+  const asset = await library.register(
+    req.file.filename,
+    req.file.originalname,
+    req.file.size,
   );
+  // The probe is free and local, so every import gets one automatically;
+  // transcription on import is a separate opt-in.
+  const settings = await analysisSettings.read();
+  analysisQueue.enqueue(
+    asset.src,
+    settings.transcriptionEnabled &&
+      settings.autoTranscribe &&
+      asset.type !== "image"
+      ? "transcribe"
+      : "probe",
+  );
+  res.json(asset);
 });
 app.get("/api/exports/:id", async (req, res) => {
   if (!/^[a-f0-9-]+\.mp4$/.test(req.params.id)) return res.sendStatus(404);
@@ -296,7 +581,7 @@ app.get("/api/exports/:id", async (req, res) => {
 
 type Job = {
   id: string;
-  status: "bundling" | "rendering" | "done" | "error";
+  status: "bundling" | "rendering" | "normalizing" | "done" | "error";
   progress: number;
   error?: string;
 };
@@ -313,6 +598,63 @@ async function getBundle() {
   );
   return bundled;
 }
+/**
+ * Review a timeline range as rendered output: frames plus the mixed-audio
+ * waveform, for the agent's self-check after cuts (one PNG, quarter scale).
+ */
+app.post("/api/render-range", async (req, res) => {
+  const dir = path.join(data, "exports", "views");
+  const clip = path.join(dir, `${randomUUID()}.mp4`);
+  try {
+    const project = validateProject(req.body.project);
+    await fonts.assertAvailable(project);
+    const start = Math.max(0, Number(req.body.start) || 0);
+    const end = Math.min(
+      project.duration,
+      Math.max(start + 1 / project.fps, Number(req.body.end) || start + 3),
+    );
+    if (end - start > 30)
+      throw new Error("Review at most 30 seconds at a time.");
+    const first = Math.floor(start * project.fps);
+    const last = Math.max(first, Math.ceil(end * project.fps) - 1);
+    await mkdir(dir, { recursive: true });
+    const serveUrl = await getBundle(),
+      inputProps = { project, mediaOrigin: "http://127.0.0.1:4318" };
+    const composition = await selectComposition({
+      serveUrl,
+      id: "KamiKami",
+      inputProps,
+    });
+    await renderMedia({
+      composition,
+      serveUrl,
+      codec: "h264",
+      inputProps,
+      frameRange: [first, last],
+      scale: Math.min(1, 640 / project.width),
+      outputLocation: clip,
+      concurrency: 2,
+    });
+    const id = randomUUID();
+    await viewRange(
+      clip,
+      "video",
+      0,
+      (last - first + 1) / project.fps,
+      path.join(dir, `${id}.png`),
+      path.join(root, "public", "fonts", "builtin", "DejaVuSans-Bold.ttf"),
+      {
+        frames: Number(req.body.frames) || 8,
+        labelOffset: first / project.fps,
+      },
+    );
+    res.json({ id, url: `/api/analysis/views/${id}.png`, start, end });
+  } catch (e) {
+    res.status(400).json({ error: (e as Error).message });
+  } finally {
+    await rm(clip, { force: true }).catch(() => {});
+  }
+});
 app.post("/api/render", async (req, res) => {
   const project = validateProject(req.body.project),
     frame = req.body.frame;
@@ -411,6 +753,19 @@ app.post("/api/export", async (req, res) => {
             job.progress = progress;
           },
         });
+        // Optional loudness normalization (e.g. −14 LUFS for social platforms).
+        if (
+          typeof project.exportLoudness === "number" &&
+          project.layers.some((l) => l.type === "audio" || l.type === "video")
+        ) {
+          job.status = "normalizing";
+          const output = path.join(data, "exports", id + ".mp4");
+          const normalized = path.join(data, "exports", id + ".norm.mp4");
+          if (
+            await normalizeLoudness(output, normalized, project.exportLoudness)
+          )
+            await rename(normalized, output);
+        }
         job.status = "done";
         job.progress = 1;
       } catch (e) {

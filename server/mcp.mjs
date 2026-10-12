@@ -2,15 +2,21 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { definitions } from "./editor-tools.mjs";
 import { stat } from "node:fs/promises";
+import { openAsBlob } from "node:fs";
 import path from "node:path";
 import { readFile } from "node:fs/promises";
 const base = "http://127.0.0.1:4318";
-async function api(route, body, method = body === undefined ? "GET" : "POST") {
+async function api(
+  route,
+  body,
+  method = body === undefined ? "GET" : "POST",
+  timeoutMs = 45000,
+) {
   const response = await fetch(base + route, {
     method,
     headers: { "Content-Type": "application/json", "X-KamiKami": "mcp" },
     body: body === undefined ? undefined : JSON.stringify(body),
-    signal: AbortSignal.timeout(45000),
+    signal: AbortSignal.timeout(timeoutMs),
   });
   const value = await response.json();
   if (!response.ok) throw new Error(value.error || "KamiKami request failed");
@@ -51,10 +57,86 @@ server.server.oninitialized = () => {
   }, 4000);
   heartbeat.unref();
 };
+const text = (value) => ({
+  content: [{ type: "text", text: JSON.stringify(value) }],
+});
 async function tool(action, args) {
   try {
     const s = await connect();
     let result;
+    const query = (values) =>
+      new URLSearchParams(
+        Object.entries(values)
+          .filter(([, v]) => v !== undefined)
+          .map(([k, v]) => [k, String(v)]),
+      ).toString();
+    if (action === "get_asset_analysis")
+      return text(
+        await api(
+          `/api/analysis/asset?${query({ src: args.src, section: args.section, start: args.start, end: args.end })}`,
+        ),
+      );
+    if (action === "search_assets")
+      return text(
+        await api(
+          `/api/analysis/search?${query({ q: args.query, limit: args.limit })}`,
+        ),
+      );
+    if (action === "view_asset_range" || action === "view_timeline_range") {
+      const view =
+        action === "view_asset_range"
+          ? await api("/api/analysis/view", args)
+          : await api(
+              "/api/render-range",
+              {
+                ...args,
+                project: (
+                  await api("/api/agents/command", {
+                    id: (await connect()).id,
+                    command: { action: "get_project" },
+                  })
+                ).project,
+              },
+              "POST",
+              180000,
+            );
+      const response = await fetch(base + view.url);
+      if (!response.ok) throw new Error("The range view is unavailable.");
+      return {
+        content: [
+          { type: "text", text: JSON.stringify(view) },
+          {
+            type: "image",
+            mimeType: "image/png",
+            data: Buffer.from(await response.arrayBuffer()).toString("base64"),
+          },
+        ],
+      };
+    }
+    if (action === "analyze_assets") {
+      const { tier, estimate } = await api("/api/analysis/estimate", {
+        srcs: args.srcs,
+        tier: args.tier,
+      });
+      // MCP clients have no in-app dialog: return the estimate until the user approves.
+      if (tier !== "probe" && args.confirmed !== true)
+        return text({
+          needsConfirmation: true,
+          tier,
+          estimate,
+          instruction:
+            "Show this estimate to the user. Call analyze_assets again with confirmed: true only after they approve uploading media.",
+        });
+      return text(
+        await api("/api/analysis/run", {
+          srcs: args.srcs,
+          tier,
+          prompt: args.prompt,
+          confirmed: true,
+          allowUpload: tier !== "probe",
+        }),
+      );
+    }
     if (action === "get_capabilities") result = await api("/api/capabilities");
     else if (action === "get_export")
       result = await api("/api/export/" + encodeURIComponent(args.jobId));
@@ -63,19 +145,20 @@ async function tool(action, args) {
     else {
       if (action === "import_media") {
         const info = await stat(args.path);
-        if (!info.isFile() || info.size > 500 * 1024 * 1024)
-          throw new Error("Choose a file up to 500 MB.");
+        if (!info.isFile() || info.size > 4 * 1024 * 1024 * 1024)
+          throw new Error("Choose a file up to 4 GB.");
         const form = new FormData();
+        // Stream from disk instead of reading large media into memory.
         form.append(
           "file",
-          new Blob([await readFile(args.path)]),
+          await openAsBlob(args.path),
           path.basename(args.path),
         );
         const response = await fetch(base + "/api/import", {
           method: "POST",
           headers: { "X-KamiKami": "mcp" },
           body: form,
-          signal: AbortSignal.timeout(120000),
+          signal: AbortSignal.timeout(30 * 60_000),
         });
         const asset = await response.json();
         if (!response.ok) throw new Error(asset.error);
@@ -85,10 +168,33 @@ async function tool(action, args) {
         });
         return { content: [{ type: "text", text: JSON.stringify(asset) }] };
       }
-      result = await api("/api/agents/command", {
-        id: s.id,
-        command: { action, ...args },
-      });
+      if (action === "detach_audio") {
+        // Extract the requested track, then detach it in the live editor.
+        const live = await api("/api/agents/command", {
+          id: s.id,
+          command: { action: "get_project" },
+        });
+        const video = live.project.layers.find((l) => l.id === args.layerId);
+        if (!video)
+          throw new Error("Element not found. Read the project again.");
+        const extracted = await api("/api/media/extract-audio", {
+          src: video.src,
+          track: args.track ?? 0,
+        });
+        await api("/api/agents/command", {
+          id: s.id,
+          command: { action: "refresh_media" },
+        });
+        const { track: _track, ...rest } = args;
+        result = await api("/api/agents/command", {
+          id: s.id,
+          command: { action, ...rest, audioSrc: extracted.src },
+        });
+      } else
+        result = await api("/api/agents/command", {
+          id: s.id,
+          command: { action, ...args },
+        });
     }
     if (action === "render_frame") {
       const deadline = Date.now() + 110000;

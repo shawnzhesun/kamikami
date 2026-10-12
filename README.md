@@ -59,7 +59,7 @@ See [the videoplayback.mp4 re-creation case study](docs/videoplayback-recreation
 
 `.kamikami/project.json` is the current autosaved project. `.kamikami/media/` holds imported copies, and `.kamikami/library.json` persists their names and metadata. `.kamikami/exports/` holds rendered videos and agent-review PNG frames. `.kamikami/effects.json` stores reusable user effects. `.kamikami/fonts/` holds imported font files, and `.kamikami/fonts.json` stores the font catalog shared by projects in the workspace. Projects store snapshots of their custom font definitions; font bytes remain in the workspace. Keep the fonts directory when moving a project. Bundled fonts and their copyright/license notices live in `public/fonts/`. Favorites and recent font choices are local browser preferences. Deleted media is hidden in Media trash with its source bytes retained for recovery. `.kamikami/assistant.json` stores local conversations and connection metadata (never the API key). All workspace data is gitignored. Project writes use atomic rename. Header Save (⌘/Ctrl+S) writes project JSON to a chosen file: the first save opens a location picker, later saves overwrite that file. Open project in the header makes the opened JSON the current save destination after validation. The destination is remembered across app sessions; a missing file prompts for a location again. Background autosave continues to update the local recovery copy without modifying the chosen JSON. Desktop mode uses native file dialogs; browser mode requires file access APIs (Chrome/Edge) and may ask to renew file permission after reopening. Project JSON references workspace media and fonts; it does not embed those files. The agent save_project command continues to flush the local recovery copy without opening a file dialog. Undo history is in memory and resets on reload.
 
-Keep the entire `.kamikami` directory to preserve media when moving this prototype. There is currently one active project per workspace. Rendering is local, at 1920×1080/24fps, with one export at a time. Long projects may be slow; start with short scenes.
+Keep the entire `.kamikami` directory to preserve media when moving this prototype. There is currently one active project per workspace. Rendering is local at the project's size and frame rate (1920×1080 at 24 fps by default), with one export at a time. Long projects may be slow; start with short scenes.
 
 ## Architecture
 
@@ -90,7 +90,7 @@ Text Glitch and Depth Motion add configurable text corruption and projected dept
 - Keyframes cover element transforms, opacity, volume, effect strength and numeric effect parameters with named easing; there is no graph editor for custom Bézier handles yet (agents can supply `bezier` control points).
 - No beat detection, lyric alignment, or AI image generation yet. Agents can inspect rendered PNG frames; motion/audio review still requires playback.
 - No cloud hosting, accounts, marketplace, or collaboration.
-- Initial hard limits: 10-minute compositions, 40 layers/effects, 500 MB per import.
+- Limits: 60-minute compositions, 500 elements on up to 40 layers, 200 effect definitions, 4 GB per import.
 - Local endpoints enforce loopback host/origin and a custom mutation header. This is a single-user development service, not a remotely deployable backend.
 - Review Remotion licensing before commercial deployment: https://www.remotion.dev/docs/license/pricing
 
@@ -156,3 +156,29 @@ Twenty-three effects chosen from [the candidate survey](docs/effect-candidates.m
 - **Reveals and looks:** Shape iris (star/heart/flower/diamond/rectangle), Barn doors, Clock wipe / pinwheel, Feathered wipe, Luma wipe, Reflection, Tilt-shift, Old film, 3D card moves (cube turn, page turn, corner roll, hinge swing, swap back), Ripple (ripples/shockwave/water drop), and Cell reveal.
 
 Effects can now set a transform pivot (`origin`) for hinged moves. Retype, Word rotator, Type and delete and Gooey word morph use each line of the text as one step. All of these use `kamikami-visual-v7`.
+
+## Assistant-driven media analysis and editing core — October 11, 2026
+
+See [the design](docs/asset-analysis-design.md).
+
+**Analysis**
+- Every import is probed locally and for free with bundled ffmpeg: shots, loudness, silences, black or frozen spans, audio tracks, and a content hash.
+- **Analyze** in Media shows an estimate. After you consent per provider, it sends contact sheets of shot keyframes and images to your assistant connection for captions and descriptions, then writes a one-line summary, tags and scenes in the UI language.
+- Transcription with word timings (`/audio/transcriptions`, `whisper-1`) is **opt-in** in Assistant settings, as is auto-transcribing new imports.
+- Paste lyrics or a script when analyzing one asset and they are aligned to the recognized words, line by line, with low-confidence words flagged.
+- Results live in `.kamikami/analysis/<sha256>.json`, so renamed or relinked files keep their analysis.
+- Media cards show an analysis status. **Details** opens the transcript, shots, description and audio; clicking a word or shot seeks the preview.
+
+**Assistant and MCP tools**
+- `get_asset_analysis`, `search_assets`, `view_asset_range` (frames over a waveform) and `view_timeline_range` (the rendered cut).
+- `analyze_assets`, which always asks for approval of the estimate.
+- Editing tools: `apply_edit_list`, `cut_source_ranges`, `ripple_delete`, `ripple_delete_clips`, `ripple_insert`, `crossfade` and `detach_audio`.
+
+**Editing core**
+- Up to 500 elements, one-hour projects and 4 GB imports.
+- Ripple delete with **Shift+Backspace**.
+- Fade-in and fade-out per clip, with automatic de-click ramps at audio edges.
+- Crossfades and detaching a video's audio (any recorded track).
+- Project settings choose the output size (including 9:16 vertical), frame rate (23.976–60 fps) and export loudness (−14, −16 or −23 LUFS, two-pass loudnorm).
+
+The bundled `ffmpeg-static` build is GPL with nonfree components. It is fine for development, but must be replaced before distribution (see the design doc).

@@ -1,4 +1,3 @@
-import { Dropdown } from "./Dropdown";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ArrowUp,
@@ -16,7 +15,7 @@ import {
 } from "lucide-react";
 import { api, inspectMedia, type MediaAsset } from "../media";
 import type { Layer } from "../model";
-import { OPENAI_BASE_URL } from "../assistant-connection";
+import { AssistantSettingsDialog } from "./AssistantSettings";
 import type { AssistantState, AssistantArtifact } from "../assistant";
 
 type Props = {
@@ -42,16 +41,7 @@ export function AgentsPanel({
   const [error, setError] = useState("");
   const [connectionError, setConnectionError] = useState("");
   const [settings, setSettings] = useState(false);
-  const [model, setModel] = useState("");
-  const [connectionName, setConnectionName] = useState("OpenAI");
-  const [baseURL, setBaseURL] = useState(OPENAI_BASE_URL);
-  const [apiMode, setApiMode] = useState<"chat" | "responses">("responses");
-  const [key, setKey] = useState("");
-  const [reuseKey, setReuseKey] = useState(false);
-  const [availableModels, setAvailableModels] = useState<string[]>([]);
-  const [loadingModels, setLoadingModels] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [attachments, setAttachments] = useState<MediaAsset[]>([]);
   const [clearConfirm, setClearConfirm] = useState(false);
@@ -59,7 +49,6 @@ export function AgentsPanel({
   const file = useRef<HTMLInputElement>(null);
   const log = useRef<HTMLDivElement>(null);
   const follow = useRef(true);
-  const initialized = useRef(false);
   const busy = !!state?.active || submitting;
   useEffect(() => {
     let alive = true;
@@ -70,13 +59,6 @@ export function AgentsPanel({
         if (alive) {
           setState(next);
           setConnectionError("");
-          if (!initialized.current) {
-            setModel(next.model);
-            setConnectionName(next.name);
-            setBaseURL(next.baseURL);
-            setApiMode(next.apiMode);
-            initialized.current = true;
-          }
         }
       } catch (e) {
         if (alive) setConnectionError((e as Error).message);
@@ -123,47 +105,6 @@ export function AgentsPanel({
     }
     setSubmitting(false);
     composer.current?.focus();
-  }
-  async function saveSettings() {
-    setSaving(true);
-    setError("");
-    try {
-      const input = {
-        model: model.trim(),
-        name: connectionName.trim(),
-        baseURL: baseURL.trim(),
-        apiMode,
-        reuseKey,
-        ...(key.trim() ? { apiKey: key.trim() } : {}),
-      };
-      if (window.kamikamiAssistant)
-        await window.kamikamiAssistant.saveSettings(input);
-      else await api("/api/assistant/settings", "POST", input);
-      setKey("");
-      setReuseKey(false);
-      setState(await api("/api/assistant"));
-      setSettings(false);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setSaving(false);
-    }
-  }
-  async function disconnect() {
-    setSaving(true);
-    setError("");
-    try {
-      if (window.kamikamiAssistant)
-        await window.kamikamiAssistant.clearSettings();
-      else await api("/api/assistant/settings", "DELETE");
-      setKey("");
-      setReuseKey(false);
-      setState(await api("/api/assistant"));
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setSaving(false);
-    }
   }
   async function attach(files: FileList | null) {
     if (!files?.length) return;
@@ -258,13 +199,7 @@ export function AgentsPanel({
           title="Assistant settings"
           aria-label="Assistant settings"
           aria-expanded={settings}
-          onClick={() => {
-            setSettings(!settings);
-            setModel(state?.model || model);
-            setConnectionName(state?.name || connectionName);
-            setBaseURL(state?.baseURL || baseURL);
-            setApiMode(state?.apiMode || apiMode);
-          }}
+          onClick={() => setSettings(!settings)}
         >
           <Settings2 size={16} />
         </button>
@@ -288,169 +223,12 @@ export function AgentsPanel({
         </div>
       )}
       {settings && (
-        <form
-          className="assistant-settings"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void saveSettings();
-          }}
-        >
-          <div className="assistant-section-title">
-            <strong>Model connection</strong>
-            <button
-              type="button"
-              aria-label="Close assistant settings"
-              onClick={() => setSettings(false)}
-            >
-              <X size={15} />
-            </button>
-          </div>
-          <label>
-            Connection name
-            <input
-              value={connectionName}
-              onChange={(e) => setConnectionName(e.target.value)}
-              placeholder="Azure OpenAI"
-              disabled={busy || saving}
-            />
-          </label>
-          <label>
-            Base URL
-            <input
-              type="url"
-              value={baseURL}
-              onChange={(e) => {
-                setBaseURL(e.target.value);
-                setAvailableModels([]);
-                setReuseKey(false);
-              }}
-              placeholder="https://your-proxy.example/v1"
-              spellCheck={false}
-              disabled={busy || saving}
-            />
-          </label>
-          <label>
-            API format
-            <Dropdown
-              label="API format"
-              value={apiMode}
-              onChange={(value) => setApiMode(value as "chat" | "responses")}
-              disabled={busy || saving}
-              options={[
-                {
-                  value: "chat",
-                  label: "Chat Completions",
-                  description: "LiteLLM / compatible proxies",
-                },
-                {
-                  value: "responses",
-                  label: "Responses",
-                  description: "OpenAI / compatible proxies",
-                },
-              ]}
-            />
-          </label>
-          <label>
-            API key
-            <input
-              type="password"
-              autoComplete="off"
-              spellCheck={false}
-              value={key}
-              onChange={(e) => setKey(e.target.value)}
-              placeholder={
-                state?.configured &&
-                baseURL.replace(/\/+$/, "") === state.baseURL
-                  ? "Key connected · enter to replace"
-                  : "Paste your API key"
-              }
-              disabled={busy || saving}
-            />
-          </label>
-          {state?.configured &&
-            baseURL.replace(/\/+$/, "") !== state.baseURL && (
-              <label className="assistant-reuse-key">
-                <input
-                  type="checkbox"
-                  checked={reuseKey}
-                  onChange={(e) => setReuseKey(e.target.checked)}
-                  disabled={busy || saving}
-                />
-                Use saved key for this URL
-              </label>
-            )}
-          <label>
-            Model / deployment
-            <Dropdown
-              label="Model / deployment"
-              editable
-              value={model}
-              onChange={setModel}
-              placeholder="Model alias configured on your proxy"
-              options={availableModels.map((id) => ({ value: id, label: id }))}
-              disabled={busy || saving}
-            />
-          </label>
-          <button
-            type="button"
-            disabled={
-              loadingModels ||
-              !state?.configured ||
-              baseURL.replace(/\/+$/, "") !== state.baseURL
-            }
-            onClick={async () => {
-              setLoadingModels(true);
-              setError("");
-              try {
-                const result = await api("/api/assistant/models");
-                setAvailableModels(result.models);
-              } catch (e) {
-                setError((e as Error).message);
-              } finally {
-                setLoadingModels(false);
-              }
-            }}
-          >
-            {loadingModels ? "Loading models…" : "Load models"}
-          </button>
-          {!!availableModels.length && (
-            <span className="assistant-model-count">
-              {availableModels.length} available
-            </span>
-          )}
-          <div className="assistant-actions">
-            <button
-              className="primary"
-              type="submit"
-              disabled={
-                busy ||
-                saving ||
-                !model.trim() ||
-                !connectionName.trim() ||
-                !baseURL.trim() ||
-                ((!state?.configured ||
-                  (baseURL.replace(/\/+$/, "") !== state.baseURL &&
-                    !reuseKey)) &&
-                  !key.trim())
-              }
-            >
-              {saving
-                ? "Connecting…"
-                : state?.configured
-                  ? "Save connection"
-                  : "Connect assistant"}
-            </button>
-            {state?.configured && (
-              <button
-                type="button"
-                disabled={busy || saving}
-                onClick={() => void disconnect()}
-              >
-                Disconnect
-              </button>
-            )}
-          </div>
-        </form>
+        <AssistantSettingsDialog
+          state={state}
+          busy={busy}
+          onState={setState}
+          onClose={() => setSettings(false)}
+        />
       )}
       <div
         className="assistant-log"

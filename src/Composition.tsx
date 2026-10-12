@@ -15,12 +15,14 @@ import {
 } from "remotion";
 import { layerAtTime, layerVolume, type Project, type Layer } from "./model";
 
-function Station() {
+function Station({ width, height }: { width: number; height: number }) {
+  // The artwork is drawn at 1920×1080 and covers other frame shapes.
   return (
     <svg
       viewBox="0 0 1920 1080"
-      width="1920"
-      height="1080"
+      width={width}
+      height={height}
+      preserveAspectRatio="xMidYMid slice"
       xmlns="http://www.w3.org/2000/svg"
     >
       <defs>
@@ -153,7 +155,7 @@ function VisualLayer({
   const frame = useCurrentFrame(),
     { fps } = useVideoConfig();
   const t = frame / fps,
-    v = layerAtTime(layer, project.effects, t);
+    v = layerAtTime(layer, project.effects, t, project);
   const src = layer.src ? mediaOrigin + layer.src : "";
   if (missing)
     return layer.type === "audio" ? null : (
@@ -192,8 +194,16 @@ function VisualLayer({
         filter: `blur(${v.blur}px) brightness(${v.brightness}) contrast(${v.contrast}) saturate(${v.saturation})`,
       }}
     >
-      <GraphicEffects layer={layer} effects={project.effects} time={t}>
-        {layer.type === "scene" && <Station />}
+      <GraphicEffects
+        layer={layer}
+        effects={project.effects}
+        time={t}
+        width={project.width}
+        height={project.height}
+      >
+        {layer.type === "scene" && (
+          <Station width={project.width} height={project.height} />
+        )}
         {layer.type === "title" && (
           <FontText
             layer={layer}

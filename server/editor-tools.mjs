@@ -210,12 +210,146 @@ definitions.push(
     false,
   ],
   [
+    "get_asset_analysis",
+    "Read an asset's analysis (read before watching). section: overview (default: summary, tags, probe, loudness, scenes, counts), transcript (segments), words (word timings, capped at 3000), shots (cuts plus black/frozen spans), frames (captioned samples), audio (loudness, silences), image (description, OCR, colors, subject box, safe text region), or all. start/end are asset seconds and slice time-based sections.",
+    {
+      src: z.string(),
+      section: z
+        .enum([
+          "overview",
+          "transcript",
+          "words",
+          "shots",
+          "frames",
+          "audio",
+          "image",
+          "all",
+        ])
+        .optional(),
+      start: z.number().optional(),
+      end: z.number().optional(),
+    },
+    true,
+  ],
+  [
+    "search_assets",
+    "Search analyzed media by keywords across names, summaries, tags, frame captions, on-screen text, scenes and transcripts. Returns matching assets with timestamped hits.",
+    { query: z.string().min(1), limit: z.number().int().optional() },
+    true,
+  ],
+  [
+    "view_asset_range",
+    "Render one PNG of a source range: labelled frames over a waveform. Use at decision points (choosing a cut, checking a take), never to scan whole files.",
+    {
+      src: z.string(),
+      start: z.number(),
+      end: z.number(),
+      frames: z.number().int().min(1).max(12).optional(),
+    },
+    true,
+  ],
+  [
+    "view_timeline_range",
+    "Render the live timeline between start and end (seconds, ≤30) at low resolution and return one PNG of frames over the mixed-audio waveform. Use it after cuts to check continuity, pops and pacing.",
+    {
+      start: z.number(),
+      end: z.number(),
+      frames: z.number().int().min(1).max(12).optional(),
+    },
+    true,
+  ],
+  [
+    "analyze_assets",
+    "Analyze media (all assets, or srcs). tier: probe (free, local: shots, loudness, silences), transcribe (opt-in in settings), balanced (default: probe, captions, summary, and transcription only if enabled) or full. Model tiers upload media to the connected provider and require the user's approval of a cost estimate; the app asks them. Pass prompt (e.g. lyrics) to guide transcription.",
+    {
+      srcs: z.array(z.string()).optional(),
+      tier: z.enum(["probe", "transcribe", "balanced", "full"]).optional(),
+      prompt: z.string().max(4000).optional(),
+      confirmed: z.boolean().optional(),
+    },
+    false,
+  ],
+  [
     "trim_clip",
     "Trim a clip edge to a position in composition seconds, preserving source/effect offsets.",
     {
       layerId: z.string(),
       edge: z.enum(["left", "right"]),
       position: z.number(),
+      ...rev,
+    },
+    false,
+  ],
+  [
+    "ripple_delete",
+    "Remove timeline ranges [start, end) (seconds) and close the gaps: clips inside are removed, clips crossing an edge are trimmed or split, everything after moves left. Omit trackIds to ripple all layers and keep sync.",
+    {
+      ranges: z.array(z.tuple([z.number(), z.number()])),
+      trackIds: z.array(z.string()).optional(),
+      ...rev,
+    },
+    false,
+  ],
+  [
+    "ripple_delete_clips",
+    "Delete clips and close the gap on each clip's own layer.",
+    { layerIds: z.array(z.string()), ...rev },
+    false,
+  ],
+  [
+    "ripple_insert",
+    "Open a gap of duration seconds at a timeline time, splitting clips that span it and pushing later clips right.",
+    {
+      at: z.number(),
+      duration: z.number(),
+      trackIds: z.array(z.string()).optional(),
+      ...rev,
+    },
+    false,
+  ],
+  [
+    "cut_source_ranges",
+    "Cut ranges given in a clip's source seconds (from its analysis: silences, filler words, retakes) and close the gaps. scope all (default) ripples every layer; track only that clip's layer.",
+    {
+      layerId: z.string(),
+      ranges: z.array(z.tuple([z.number(), z.number()])),
+      scope: z.enum(["all", "track"]).optional(),
+      ...rev,
+    },
+    false,
+  ],
+  [
+    "apply_edit_list",
+    "Assemble source ranges back to back on one layer in a single undo step (an edit decision list). Each range is {src, start, end, name?} in source seconds; cut on word/silence boundaries from the analysis. trackId targets an existing layer (else a new one); at is the timeline start; replace clears that layer first.",
+    {
+      ranges: z.array(
+        z.object({
+          src: z.string(),
+          start: z.number(),
+          end: z.number(),
+          name: z.string().optional(),
+        }),
+      ),
+      trackId: z.string().optional(),
+      at: z.number().optional(),
+      replace: z.boolean().optional(),
+      ...rev,
+    },
+    false,
+  ],
+  [
+    "detach_audio",
+    "Detach a video's sound into its own audio element on a separate layer (for J/L cuts, separate audio edits, or choosing another recorded audio track; see the asset probe's audioTracks). The video is muted. track is the 0-based audio track (default 0).",
+    { layerId: z.string(), track: z.number().int().min(0).optional(), ...rev },
+    false,
+  ],
+  [
+    "crossfade",
+    "Crossfade two adjacent clips (to starts where from ends) by seconds, using spare source footage; the overlapping clip moves to a free layer.",
+    {
+      fromLayerId: z.string(),
+      toLayerId: z.string(),
+      seconds: z.number(),
       ...rev,
     },
     false,
@@ -228,10 +362,14 @@ definitions.push(
   ],
   [
     "set_project_settings",
-    "Rename or change duration. Shortening requires trimAffected=true after reviewing affected clips with the user.",
+    "Rename, change duration, output size (width/height, e.g. 1080x1920 vertical), frame rate (23.976, 24, 25, 29.97, 30, 50, 59.94, 60) or export loudness (LUFS target such as -14 for social, -23 broadcast; null for off). Shortening requires trimAffected=true after reviewing affected clips with the user.",
     {
       name: z.string().optional(),
       duration: z.number().optional(),
+      width: z.number().int().optional(),
+      height: z.number().int().optional(),
+      fps: z.number().optional(),
+      exportLoudness: z.number().nullable().optional(),
       trimAffected: z.boolean().optional(),
       ...rev,
     },

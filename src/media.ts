@@ -1,4 +1,5 @@
 import { usesSpatialMotion } from "./motion";
+import type { AnalysisEntry } from "./asset-analysis";
 import {
   engineAtLeast,
   usesV6Features,
@@ -22,6 +23,8 @@ export type MediaAsset = MediaMetadata & {
   size: number;
   missing: boolean;
   deleted?: boolean;
+  /** Analysis status from the local service (see asset-analysis.ts). */
+  analysis?: AnalysisEntry;
 };
 export const mediaType = (name: string): MediaAsset["type"] =>
   /\.(mp3|wav|m4a|ogg)$/i.test(name)

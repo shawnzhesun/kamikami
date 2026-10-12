@@ -44,7 +44,9 @@ export function CanvasEditor({
     Record<string, { width: number; height: number }>
   >({});
   const [snap, setSnap] = useState(true);
-  const [canvasWidth, setCanvasWidth] = useState(1920);
+  const W = project.width,
+    H = project.height;
+  const [canvasWidth, setCanvasWidth] = useState(W);
   const [guides, setGuides] = useState<{ x?: number; y?: number }>({});
   const [editing, setEditing] = useState<{ id: string; text: string } | null>(
     null,
@@ -52,7 +54,7 @@ export function CanvasEditor({
   useEffect(() => () => cleanup.current?.(), []);
   useLayoutEffect(() => {
     const measure = () => {
-      setCanvasWidth(root.current?.clientWidth ?? 1920);
+      setCanvasWidth(root.current?.clientWidth ?? W);
       const next: typeof sizes = {};
       for (const l of project.layers) {
         if (l.type === "title") {
@@ -68,11 +70,11 @@ export function CanvasEditor({
           const asset = assets.find((a) => a.src === l.src);
           const fit =
             asset?.width && asset.height
-              ? Math.min(1920 / asset.width, 1080 / asset.height)
+              ? Math.min(W / asset.width, H / asset.height)
               : 1;
           next[l.id] = {
-            width: asset?.width ? asset.width * fit : 1920,
-            height: asset?.height ? asset.height * fit : 1080,
+            width: asset?.width ? asset.width * fit : W,
+            height: asset?.height ? asset.height * fit : H,
           };
         }
       }
@@ -92,17 +94,12 @@ export function CanvasEditor({
     visibleAt(l, frame, project.fps),
   );
   const box = (l: Layer): Bounds =>
-    layerBounds(
-      l,
-      project,
-      frame,
-      sizes[l.id] ?? { width: 1920, height: 1080 },
-    );
+    layerBounds(l, project, frame, sizes[l.id] ?? { width: W, height: H });
   const point = (e: { clientX: number; clientY: number }) => {
     const r = root.current!.getBoundingClientRect();
     return {
-      x: ((e.clientX - r.left) / r.width) * 1920,
-      y: ((e.clientY - r.top) / r.height) * 1080,
+      x: ((e.clientX - r.left) / r.width) * W,
+      y: ((e.clientY - r.top) / r.height) * H,
     };
   };
   const hit = (e: { clientX: number; clientY: number }) => {
@@ -162,8 +159,8 @@ export function CanvasEditor({
           const guide: { x?: number; y?: number } = {};
           if (snap && !event.altKey) {
             const others = visible.filter((l) => !ids.includes(l.id)).map(box);
-            const tx = [0, 960, 1920, ...others.map((b) => b.cx)],
-              ty = [0, 540, 1080, ...others.map((b) => b.cy)];
+            const tx = [0, W / 2, W, ...others.map((b) => b.cx)],
+              ty = [0, H / 2, H, ...others.map((b) => b.cy)];
             const sx = snapValue(bounds.cx + dx, tx, 12),
               sy = snapValue(bounds.cy + dy, ty, 12);
             if (sx !== bounds.cx + dx) {
@@ -232,9 +229,9 @@ export function CanvasEditor({
           axis,
           clamp(
             layerPropertyAt(l, axis, frame, project.fps) +
-              (axis === "x" ? 960 - b.cx : 540 - b.cy),
-            axis === "x" ? -1920 : -1080,
-            axis === "x" ? 1920 : 1080,
+              (axis === "x" ? W / 2 - b.cx : H / 2 - b.cy),
+            axis === "x" ? -W : -H,
+            axis === "x" ? W : H,
           ),
           frame,
           project.fps,
@@ -323,11 +320,11 @@ export function CanvasEditor({
                   key={l.id}
                   className="canvas-selection"
                   style={{
-                    left: `${(b.cx / 1920) * 100}%`,
-                    top: `${(b.cy / 1080) * 100}%`,
-                    width: `${((b.width * b.scale) / 1920) * 100}%`,
-                    height: `${((b.height * b.scale) / 1080) * 100}%`,
-                    transform: `translate(-50%,-50%) rotate(${b.rotation}deg) perspective(${((b.perspective ?? 1800) * b.scale * canvasWidth) / 1920}px) rotateX(${b.rotateX ?? 0}deg) rotateY(${b.rotateY ?? 0}deg)`,
+                    left: `${(b.cx / W) * 100}%`,
+                    top: `${(b.cy / H) * 100}%`,
+                    width: `${((b.width * b.scale) / W) * 100}%`,
+                    height: `${((b.height * b.scale) / H) * 100}%`,
+                    transform: `translate(-50%,-50%) rotate(${b.rotation}deg) perspective(${((b.perspective ?? 1800) * b.scale * canvasWidth) / W}px) rotateX(${b.rotateX ?? 0}deg) rotateY(${b.rotateY ?? 0}deg)`,
                   }}
                 >
                   <span className="canvas-layer-name">{l.name}</span>
@@ -353,13 +350,13 @@ export function CanvasEditor({
         {guides.x !== undefined && (
           <i
             className="canvas-guide vertical"
-            style={{ left: `${(guides.x / 1920) * 100}%` }}
+            style={{ left: `${(guides.x / W) * 100}%` }}
           />
         )}
         {guides.y !== undefined && (
           <i
             className="canvas-guide horizontal"
-            style={{ top: `${(guides.y / 1080) * 100}%` }}
+            style={{ top: `${(guides.y / H) * 100}%` }}
           />
         )}
       </div>

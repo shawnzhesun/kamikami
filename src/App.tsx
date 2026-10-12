@@ -6,7 +6,11 @@ import {
 import { NumberField } from "./editor/NumberField";
 import { KeyframeField } from "./editor/KeyframeField";
 import { EffectParameterKeys } from "./editor/EffectParameterKeys";
-import { propertyRanges, type KeyframeProperty } from "./keyframes";
+import {
+  propertyRanges,
+  setKeyframeFps,
+  type KeyframeProperty,
+} from "./keyframes";
 import {
   allBuiltinEffects,
   builtinEffectCategory,
@@ -37,7 +41,12 @@ import {
   insertElement,
   moveElementsToTrack,
 } from "./editor/tracks";
-import { projectTracks, elementTrackId, type TimelineLayer } from "./model";
+import {
+  LIMITS,
+  projectTracks,
+  elementTrackId,
+  type TimelineLayer,
+} from "./model";
 import React, { useEffect, useId, useRef, useState } from "react";
 import { Player, type PlayerRef } from "@remotion/player";
 import {
@@ -86,6 +95,7 @@ import {
 } from "./effect-bundle";
 import { EditHistory } from "./history";
 import { isGestureActive } from "./editor/gesture";
+import { detachAudio, rippleDeleteElements } from "./editor/editing";
 
 import {
   api,
@@ -98,6 +108,7 @@ import { CanvasEditor } from "./editor/CanvasEditor";
 import { Timeline } from "./editor/Timeline";
 import { EffectCard } from "./editor/EffectCard";
 import { MediaBrowser } from "./editor/MediaBrowser";
+import { AnalyzeDialog, AssetDetails } from "./editor/AnalysisDialogs";
 import { AgentsPanel } from "./editor/AgentsPanel";
 import { LibraryResize, libraryLimit } from "./editor/LibraryResize";
 import {
@@ -106,12 +117,14 @@ import {
   type EditorRequest,
 } from "./agent-protocol";
 
-const timecode = (f: number) =>
-  `${Math.floor(f / 24 / 60)
+const timecode = (f: number, fps = 24) =>
+  `${Math.floor(f / fps / 60)
     .toString()
-    .padStart(2, "0")}:${Math.floor((f / 24) % 60)
+    .padStart(2, "0")}:${Math.floor((f / fps) % 60)
     .toString()
-    .padStart(2, "0")}:${(f % 24).toString().padStart(2, "0")}`;
+    .padStart(2, "0")}:${Math.floor(f % Math.round(fps))
+    .toString()
+    .padStart(2, "0")}`;
 export function App() {
   const projectFiles = useRef(new ProjectFileAccess());
   const [projectFilename, setProjectFilename] = useState<string | null>(null);
@@ -134,6 +147,11 @@ export function App() {
     };
   }, []);
   const [projectSettings, setProjectSettings] = useState(false);
+  const [analyzeTarget, setAnalyzeTarget] = useState<{
+    srcs?: string[];
+    title: string;
+  } | null>(null);
+  const [detailsSrc, setDetailsSrc] = useState<string | null>(null);
   const [effectModal, setEffectModal] = useState(false);
   const [effectDraft, setEffectDraft] = useState<Effect | null>(null);
   const [effectElementId, setEffectElementId] = useState<string | null>(null);
@@ -678,6 +696,8 @@ export function App() {
       group,
     );
   }
+  // Keyframes snap to the project's frame rate while editing.
+  setKeyframeFps(project.fps);
   /** Replace the selected element with a keyframe-aware edit of itself. */
   function replaceSelected(next: Layer) {
     return commit({
@@ -697,8 +717,20 @@ export function App() {
         layer={selected}
         target={{ kind: "property", property }}
         label={propertyRanges[property].label}
-        min={propertyRanges[property].min}
-        max={propertyRanges[property].max}
+        min={
+          property === "x"
+            ? -project.width
+            : property === "y"
+              ? -project.height
+              : propertyRanges[property].min
+        }
+        max={
+          property === "x"
+            ? project.width
+            : property === "y"
+              ? project.height
+              : propertyRanges[property].max
+        }
         step={step}
         frame={frame}
         fps={project.fps}
@@ -845,6 +877,15 @@ export function App() {
           : [],
     );
   }
+  // Keep analysis badges live while the local service works through its queue.
+  const analyzing = assets.some((a) =>
+    ["queued", "running"].includes(a.analysis?.status ?? ""),
+  );
+  useEffect(() => {
+    if (!analyzing) return;
+    const timer = setInterval(() => void refreshMedia(), 2000);
+    return () => clearInterval(timer);
+  }, [analyzing]);
   async function refreshMedia() {
     try {
       const all: MediaAsset[] = await api("/api/media?includeDeleted=true");
@@ -1110,16 +1151,25 @@ export function App() {
         if (event.repeat) return;
         player.current?.pause();
         const base = current.current;
+        // Shift+Backspace ripple-deletes: each clip's gap closes on its layer.
         if (
-          commit({
-            ...base,
-            layers: base.layers.filter(
-              (element) => !selectedIds.includes(element.id),
-            ),
-          })
+          commit(
+            event.shiftKey
+              ? rippleDeleteElements(base, selectedIds)
+              : {
+                  ...base,
+                  layers: base.layers.filter(
+                    (element) => !selectedIds.includes(element.id),
+                  ),
+                },
+          )
         ) {
           selectLayers([]);
-          setStatus("Selected elements deleted · Undo available");
+          setStatus(
+            event.shiftKey
+              ? "Ripple deleted · later clips moved left · Undo available"
+              : "Selected elements deleted · Undo available",
+          );
         }
       } else if (event.code === "Space" && !target.closest("button,a")) {
         event.preventDefault();
@@ -1165,9 +1215,9 @@ export function App() {
     };
   }, []);
   useEffect(() => {
-    if (frame >= project.duration * 24)
+    if (frame >= project.duration * project.fps)
       player.current?.seekTo(
-        Math.max(0, Math.round(project.duration * 24) - 1),
+        Math.max(0, Math.round(project.duration * project.fps) - 1),
       );
   }, [project.duration]);
   useEffect(() => {
@@ -2268,6 +2318,34 @@ export function App() {
           {effectControls}
         </EffectSettingsDialog>
       )}
+      {analyzeTarget && (
+        <AnalyzeDialog
+          srcs={analyzeTarget.srcs}
+          title={analyzeTarget.title}
+          onClose={() => setAnalyzeTarget(null)}
+          onStarted={(count) => {
+            setStatus(
+              `Analysis queued for ${count} asset${count === 1 ? "" : "s"}`,
+            );
+            void refreshMedia();
+          }}
+        />
+      )}
+      {detailsSrc &&
+        assets.some((a) => a.src === detailsSrc) &&
+        !analyzeTarget && (
+          <AssetDetails
+            asset={assets.find((a) => a.src === detailsSrc)!}
+            onClose={() => setDetailsSrc(null)}
+            onAnalyze={() => {
+              const asset = assets.find((a) => a.src === detailsSrc)!;
+              setAnalyzeTarget({
+                srcs: [asset.src],
+                title: `Analyze “${asset.name}”`,
+              });
+            }}
+          />
+        )}
       {projectSettings && (
         <ProjectSettings
           project={project}
@@ -2472,6 +2550,10 @@ export function App() {
                 onRelink={(a) => chooseImport("relink", a)}
                 onDelete={(a) => void requestMediaDelete(a)}
                 trash={mediaTrash}
+                onAnalyze={() =>
+                  setAnalyzeTarget({ title: "Analyze media library" })
+                }
+                onDetails={(a) => setDetailsSrc(a.src)}
                 onRestore={async (a) => {
                   try {
                     await api("/api/media/restore", "POST", { src: a.src });
@@ -2592,7 +2674,8 @@ export function App() {
               COMPOSITION <ChevronRight size={12} /> Scene 01
             </span>
             <span>
-              1920 × 1080 <span className="divider" /> 24 FPS
+              {project.width} × {project.height} <span className="divider" />{" "}
+              {project.fps} FPS
             </span>
           </div>
           <div
@@ -2608,16 +2691,26 @@ export function App() {
               selectLayers([]);
             }}
           >
-            <div className="preview-wrap">
+            <div
+              className="preview-wrap"
+              style={
+                {
+                  "--frame-ratio": project.width / project.height,
+                } as React.CSSProperties
+              }
+            >
               <Player
                 ref={player}
                 component={Composition}
                 inputProps={{ project: displayProject, missingSources }}
-                durationInFrames={Math.round(project.duration * 24)}
-                compositionWidth={1920}
-                compositionHeight={1080}
-                fps={24}
-                style={{ width: "100%", aspectRatio: "16/9" }}
+                durationInFrames={Math.round(project.duration * project.fps)}
+                compositionWidth={project.width}
+                compositionHeight={project.height}
+                fps={project.fps}
+                style={{
+                  width: "100%",
+                  aspectRatio: `${project.width} / ${project.height}`,
+                }}
                 controls={false}
                 clickToPlay={false}
                 acknowledgeRemotionLicense
@@ -2643,13 +2736,23 @@ export function App() {
           </div>
           <div className="transport">
             <span className="timecode">
-              {timecode(frame)}{" "}
-              <span>/ {timecode(Math.round(project.duration * 24))}</span>
+              {timecode(frame, project.fps)}{" "}
+              <span>
+                /{" "}
+                {timecode(
+                  Math.round(project.duration * project.fps),
+                  project.fps,
+                )}
+              </span>
             </span>
             <div>
               <button
                 title="Back one second"
-                onClick={() => player.current?.seekTo(Math.max(0, frame - 24))}
+                onClick={() =>
+                  player.current?.seekTo(
+                    Math.max(0, frame - Math.round(project.fps)),
+                  )
+                }
               >
                 −1s
               </button>
@@ -2668,7 +2771,10 @@ export function App() {
                 title="Forward one second"
                 onClick={() =>
                   player.current?.seekTo(
-                    Math.min(Math.round(project.duration * 24) - 1, frame + 24),
+                    Math.min(
+                      Math.round(project.duration * project.fps) - 1,
+                      frame + Math.round(project.fps),
+                    ),
                   )
                 }
               >
@@ -2801,7 +2907,7 @@ export function App() {
                       <button
                         aria-label="Duplicate element"
                         title="Duplicate element"
-                        disabled={project.layers.length >= 40}
+                        disabled={project.layers.length >= LIMITS.elements}
                         onClick={() => {
                           const l = {
                             ...selected,
@@ -2917,6 +3023,38 @@ export function App() {
                         >
                           Solo
                         </button>
+                        {selected.type === "video" && (
+                          <button
+                            title="Move this clip's sound to its own audio layer"
+                            onClick={async () => {
+                              try {
+                                setStatus("Extracting audio…");
+                                const audio = (await api(
+                                  "/api/media/extract-audio",
+                                  "POST",
+                                  { src: selected.src, track: 0 },
+                                )) as MediaAsset;
+                                await refreshMedia();
+                                if (
+                                  commit(
+                                    detachAudio(
+                                      current.current,
+                                      selected.id,
+                                      audio.src,
+                                    ).project,
+                                  )
+                                )
+                                  setStatus(
+                                    "Audio detached to its own layer · Undo available",
+                                  );
+                              } catch (e) {
+                                setStatus((e as Error).message);
+                              }
+                            }}
+                          >
+                            Detach audio
+                          </button>
+                        )}
                       </div>
                       {animatedField("volume", 0.05)}
                     </>
@@ -2995,6 +3133,24 @@ export function App() {
                       </p>
                     </>
                   )}
+                  <div className="field-row">
+                    <NumberField
+                      label="Fade in (s)"
+                      value={selected.fadeIn ?? 0}
+                      min={0}
+                      max={Math.min(30, selected.duration / 2)}
+                      step={0.05}
+                      onChange={(n) => updateLayer({ fadeIn: n })}
+                    />
+                    <NumberField
+                      label="Fade out (s)"
+                      value={selected.fadeOut ?? 0}
+                      min={0}
+                      max={Math.min(30, selected.duration / 2)}
+                      step={0.05}
+                      onChange={(n) => updateLayer({ fadeOut: n })}
+                    />
+                  </div>
                   <label>
                     Layer
                     <Dropdown
@@ -3120,7 +3276,9 @@ export function App() {
                   ? "Export failed"
                   : exportJob.status === "bundling"
                     ? "Preparing renderer…"
-                    : `Rendering · ${Math.round(exportJob.progress * 100)}%`}
+                    : exportJob.status === "normalizing"
+                      ? "Normalizing loudness…"
+                      : `Rendering · ${Math.round(exportJob.progress * 100)}%`}
             </strong>
             {["done", "error"].includes(exportJob.status) && (
               <button

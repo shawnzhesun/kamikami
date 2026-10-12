@@ -1,6 +1,14 @@
 import React, { useEffect, useRef, useState } from "react";
 import { durationChange } from "../editor-utils";
-import { elementTrackId, type Project, type TimelineLayer } from "../model";
+import {
+  LIMITS,
+  elementTrackId,
+  frameRates,
+  resolutionPresets,
+  type Project,
+  type TimelineLayer,
+} from "../model";
+import { Dropdown } from "./Dropdown";
 
 export function SettingsDialog({
   title,
@@ -41,12 +49,33 @@ export function ProjectSettings({
   const [duration, setDuration] = useState(String(project.duration));
   const [confirmed, setConfirmed] = useState(false);
   const [error, setError] = useState("");
+  const [size, setSize] = useState(`${project.width}x${project.height}`);
+  const [fps, setFps] = useState(String(project.fps));
+  const [loudness, setLoudness] = useState(
+    project.exportLoudness == null ? "off" : String(project.exportLoudness),
+  );
+  const sizeOptions = [
+    ...resolutionPresets.map((p) => ({
+      value: `${p.width}x${p.height}`,
+      label: `${p.label} · ${p.width} × ${p.height}`,
+    })),
+    ...(resolutionPresets.some(
+      (p) => p.width === project.width && p.height === project.height,
+    )
+      ? []
+      : [
+          {
+            value: `${project.width}x${project.height}`,
+            label: `Custom · ${project.width} × ${project.height}`,
+          },
+        ]),
+  ];
   const seconds = Number(duration);
   const valid =
     duration.trim() !== "" &&
     Number.isFinite(seconds) &&
     seconds >= 1 &&
-    seconds <= 600;
+    seconds <= LIMITS.seconds;
   const change = valid ? durationChange(base, seconds) : null;
   return (
     <SettingsDialog title="Project settings" onClose={onClose}>
@@ -63,7 +92,21 @@ export function ProjectSettings({
             setError("Review and confirm the affected elements below.");
             return;
           }
-          if (onSave({ ...change.next, name: name.trim() }, base)) onClose();
+          const [width, height] = size.split("x").map(Number);
+          if (
+            onSave(
+              {
+                ...change.next,
+                name: name.trim(),
+                width,
+                height,
+                fps: Number(fps),
+                exportLoudness: loudness === "off" ? null : Number(loudness),
+              },
+              base,
+            )
+          )
+            onClose();
           else
             setError(
               "The project changed or could not be saved. Close settings and try again.",
@@ -86,7 +129,7 @@ export function ProjectSettings({
             required
             type="number"
             min={1}
-            max={600}
+            max={LIMITS.seconds}
             step="any"
             value={duration}
             onChange={(e) => {
@@ -95,7 +138,48 @@ export function ProjectSettings({
             }}
           />
         </label>
-        <p className="muted">1920 × 1080 · 24 fps</p>
+        <label>
+          Output size
+          <Dropdown
+            label="Output size"
+            value={size}
+            options={sizeOptions}
+            onChange={setSize}
+          />
+        </label>
+        <div className="field-row">
+          <label>
+            Frame rate
+            <Dropdown
+              label="Frame rate"
+              value={fps}
+              options={frameRates.map((r) => ({
+                value: String(r),
+                label: `${r} fps`,
+              }))}
+              onChange={setFps}
+            />
+          </label>
+          <label>
+            Export loudness
+            <Dropdown
+              label="Export loudness"
+              value={loudness}
+              options={[
+                { value: "off", label: "Off (as mixed)" },
+                { value: "-14", label: "−14 LUFS · social" },
+                { value: "-16", label: "−16 LUFS · podcast" },
+                { value: "-23", label: "−23 LUFS · broadcast" },
+              ]}
+              onChange={setLoudness}
+            />
+          </label>
+        </div>
+        <p className="muted">
+          Positions are measured from the canvas center, so changing the size
+          keeps elements centered. Timing is in seconds and survives frame-rate
+          changes.
+        </p>
         {!!change?.affected.length && (
           <div className="settings-affected">
             <p>
