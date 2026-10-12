@@ -1,3 +1,5 @@
+import type { ShapePreset } from "./shapes";
+import { ShapeControls } from "./editor/ShapeControls";
 import {
   DepthControls,
   TextMotionControls,
@@ -75,6 +77,7 @@ import { Composition } from "./Composition";
 import {
   initialProject,
   makeLayer,
+  makeShape,
   validateProject,
   resolveEffectInstance,
   type Project,
@@ -1385,9 +1388,20 @@ export function App() {
     if (file.current) file.current.value = "";
   }
   function addTitle() {
+    addElement(makeLayer("title", "Text"));
+  }
+  function addShape(preset: ShapePreset, color: string) {
+    const shape =
+      preset.shape.filled === false
+        ? { ...preset.shape, stroke: color }
+        : preset.shape;
+    addElement(makeShape(shape, preset.label, color));
+  }
+  /** Insert a new element at the playhead on the selected layer (or a new one). */
+  function addElement(element: Layer) {
     const base = current.current;
     const l = {
-      ...makeLayer("title", "Text"),
+      ...element,
       duration: Math.min(5, base.duration),
     };
     try {
@@ -1395,25 +1409,35 @@ export function App() {
         selectedTrack && projectTracks(base).some((t) => t.id === selectedTrack)
           ? selectedTrack
           : undefined;
-      const next = trackId
-        ? insertElement(base, l, trackId, frame / base.fps)
-        : {
-            ...base,
-            layers: [
-              ...base.layers,
-              {
-                ...l,
-                start: Math.min(frame / base.fps, base.duration - 0.125),
-                duration: Math.min(
-                  l.duration,
-                  base.duration - frame / base.fps,
-                ),
-              },
-            ],
-          };
+      const onNewLayer = () => ({
+        ...base,
+        layers: [
+          ...base.layers,
+          {
+            ...l,
+            start: Math.min(frame / base.fps, base.duration - 0.125),
+            duration: Math.min(l.duration, base.duration - frame / base.fps),
+          },
+        ],
+      });
+      let next: Project;
+      let fallback = false;
+      try {
+        next = trackId
+          ? insertElement(base, l, trackId, frame / base.fps)
+          : onNewLayer();
+      } catch {
+        // The selected layer is busy at the playhead: stack a new layer instead.
+        next = onNewLayer();
+        fallback = true;
+      }
       if (commit(next)) {
         selectLayer(l.id);
         setRightTab("inspector");
+        if (fallback)
+          setStatus(
+            `Added ${l.name.toLowerCase()} on a new layer · the selected layer is occupied here`,
+          );
       }
     } catch (e) {
       setStatus((e as Error).message);
@@ -2823,6 +2847,7 @@ export function App() {
               else setStatus("This media is unavailable. Refresh the library.");
             }}
             onAddText={addTitle}
+            onAddShape={addShape}
             onApplyEffect={applyEffect}
           />
         </main>
@@ -3116,6 +3141,24 @@ export function App() {
                         </label>
                       </div>
                     </>
+                  )}
+                  {selected.type === "shape" && selected.shape && (
+                    <ShapeControls
+                      layer={selected}
+                      onShape={(patch, group) => {
+                        const latest = current.current.layers.find(
+                          (l) => l.id === selected.id,
+                        );
+                        if (latest?.shape)
+                          updateLayer(
+                            { shape: { ...latest.shape, ...patch } },
+                            group,
+                          );
+                      }}
+                      onColor={(color) =>
+                        updateLayer({ color }, `shape:${selected.id}:fill`)
+                      }
+                    />
                   )}
                   {selected.type !== "audio" && (
                     <>

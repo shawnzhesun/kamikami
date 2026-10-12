@@ -202,6 +202,8 @@ type Detail = {
   status: string;
   note?: string;
   summary: string;
+  description?: string;
+  manual?: string[];
   tags: string[];
   probe: {
     duration: number | null;
@@ -310,6 +312,15 @@ export function AssetDetails({
               {tab === "overview" && (
                 <>
                   <p>{detail.summary}</p>
+                  {detail.description && (
+                    <p className="asset-description">{detail.description}</p>
+                  )}
+                  {!!detail.manual?.length && (
+                    <p className="muted">
+                      Written by you or the assistant:{" "}
+                      {detail.manual.join(", ")}. Analysis keeps these.
+                    </p>
+                  )}
                   {!!detail.tags.length && (
                     <p className="asset-tags">
                       {detail.tags.map((t) => (

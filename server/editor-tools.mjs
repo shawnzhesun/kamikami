@@ -61,6 +61,39 @@ export const definitions = [
     false,
   ],
   [
+    "add_shape",
+    "Add a vector shape element (treated like an image: transforms, effects, keyframes). shape.kind: rectangle (radius for rounded corners; a thin rectangle is a line), ellipse (equal width/height for a circle), polygon (sides: 3 triangle, 4 diamond, 5, 6…), star (sides = points, innerRadius 0.1–0.95), arrow (points right; rotate to aim), heart. width/height are composition pixels. color is the fill; filled:false with stroke/strokeWidth draws an outline only. Edit later with update_layer (patch.shape replaces the whole shape object; patch.color changes the fill).",
+    {
+      shape: z.object({
+        kind: z.enum([
+          "rectangle",
+          "ellipse",
+          "polygon",
+          "star",
+          "arrow",
+          "heart",
+        ]),
+        width: z.number(),
+        height: z.number(),
+        filled: z.boolean().optional(),
+        stroke: z.string().optional(),
+        strokeWidth: z.number().optional(),
+        radius: z.number().optional(),
+        sides: z.number().int().optional(),
+        innerRadius: z.number().optional(),
+      }),
+      color: z.string().optional().describe("Fill color, #rrggbb."),
+      trackId: z.string().optional(),
+      name: z.string().max(100).optional(),
+      start: z.number().optional(),
+      duration: z.number().optional(),
+      x: z.number().optional(),
+      y: z.number().optional(),
+      ...rev,
+    },
+    false,
+  ],
+  [
     "apply_project",
     "Apply a complete validated project in one Undo step, including effect definitions. Preserve unrelated IDs/content.",
     { project: z.record(z.string(), z.unknown()), ...rev },
@@ -257,6 +290,86 @@ definitions.push(
       frames: z.number().int().min(1).max(12).optional(),
     },
     true,
+  ],
+  [
+    "set_asset_metadata",
+    "Write metadata to media assets without running analysis, e.g. descriptions the user gives in chat or analysis done outside the app. Batch up to 100 items; each needs an exact src from the library. Fields: summary (one factual line used in the library digest), tags, description (free-form, any asset), scenes [{start,end,title}] (video), sections [{start,end,label}] (audio/video), transcript {language?, segments [{start,end,text}], words? [{t,s,e}]} (audio/video; replaces any transcript), image {caption, details, ocr, colors, subject, safeTextRegion} (images; merged). Times are asset seconds. Omitted fields are unchanged; clear lists fields to remove. Written fields are marked manual and automatic analysis never overwrites them. Do not invent details the user did not provide or you did not see.",
+    {
+      items: z
+        .array(
+          z.object({
+            src: z.string(),
+            summary: z.string().max(600).optional(),
+            tags: z.array(z.string().max(40)).max(20).optional(),
+            description: z.string().max(4000).optional(),
+            scenes: z
+              .array(
+                z.object({
+                  start: z.number(),
+                  end: z.number(),
+                  title: z.string(),
+                }),
+              )
+              .optional(),
+            sections: z
+              .array(
+                z.object({
+                  start: z.number(),
+                  end: z.number(),
+                  label: z.string(),
+                }),
+              )
+              .optional(),
+            transcript: z
+              .object({
+                language: z.string().optional(),
+                segments: z.array(
+                  z.object({
+                    start: z.number(),
+                    end: z.number(),
+                    text: z.string(),
+                  }),
+                ),
+                words: z
+                  .array(
+                    z.object({ t: z.string(), s: z.number(), e: z.number() }),
+                  )
+                  .optional(),
+              })
+              .optional(),
+            image: z
+              .object({
+                caption: z.string().optional(),
+                details: z.string().optional(),
+                ocr: z.array(z.string()).optional(),
+                colors: z.array(z.string()).optional(),
+                subject: z
+                  .tuple([z.number(), z.number(), z.number(), z.number()])
+                  .nullable()
+                  .optional(),
+                safeTextRegion: z
+                  .enum(["top", "bottom", "left", "right", "center", "none"])
+                  .optional(),
+              })
+              .optional(),
+            clear: z
+              .array(
+                z.enum([
+                  "summary",
+                  "description",
+                  "scenes",
+                  "sections",
+                  "transcript",
+                  "image",
+                ]),
+              )
+              .optional(),
+          }),
+        )
+        .min(1)
+        .max(100),
+    },
+    false,
   ],
   [
     "analyze_assets",

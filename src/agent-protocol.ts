@@ -28,10 +28,12 @@ import {
   resolveEffectInstance,
   ProjectSchema,
   makeLayer,
+  makeShape,
   validateProject,
   type Project,
 } from "./model";
 import { EffectBundleSchema } from "./effect-bundle";
+import { ShapeSchema } from "./shapes";
 import {
   moveClips,
   trimClip,
@@ -282,6 +284,21 @@ export const AgentCommandSchema = z.discriminatedUnion("action", [
     name: z.string().min(1).max(100).default("Agent text"),
     start: z.number().min(0).optional(),
     duration: z.number().min(0.1).optional(),
+    ...revision,
+  }),
+  z.object({
+    action: z.literal("add_shape"),
+    trackId: z.string().optional(),
+    shape: ShapeSchema,
+    color: z
+      .string()
+      .regex(/^#[0-9a-fA-F]{6}$/)
+      .default("#f2765e"),
+    name: z.string().min(1).max(100).optional(),
+    start: z.number().min(0).optional(),
+    duration: z.number().min(0.1).optional(),
+    x: z.number().min(-4096).max(4096).optional(),
+    y: z.number().min(-4096).max(4096).optional(),
     ...revision,
   }),
   z.object({
@@ -586,6 +603,27 @@ export function applyAgentEdit(
           text: command.text,
           start,
           duration: command.duration ?? project.duration - start,
+        },
+      ],
+    };
+  } else if (command.action === "add_shape") {
+    const start = command.start ?? 0;
+    next = {
+      ...project,
+      layers: [
+        ...project.layers,
+        {
+          ...makeShape(
+            command.shape,
+            command.name ??
+              command.shape.kind[0].toUpperCase() + command.shape.kind.slice(1),
+            command.color,
+          ),
+          trackId: command.trackId,
+          start,
+          duration: command.duration ?? project.duration - start,
+          x: command.x ?? 0,
+          y: command.y ?? 0,
         },
       ],
     };

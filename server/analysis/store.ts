@@ -15,6 +15,7 @@ import { mediaPath } from "../../src/media";
  */
 export class AnalysisStore {
   private queue = Promise.resolve();
+  private sidecars = Promise.resolve();
   readonly directory: string;
   constructor(workspace: string) {
     this.directory = path.join(workspace, "analysis");
@@ -78,6 +79,30 @@ export class AnalysisStore {
     } catch {
       return null;
     }
+  }
+  /**
+   * Serialized read-modify-write of one sidecar, so manual metadata and
+   * running analysis never overwrite each other's changes.
+   */
+  update(
+    sha256: string,
+    change: (
+      latest: AssetAnalysis | null,
+    ) => AssetAnalysis | Promise<AssetAnalysis>,
+  ): Promise<AssetAnalysis> {
+    const operation = this.sidecars.then(async () => {
+      const next = AssetAnalysisSchema.parse(
+        await change(await this.read(sha256)),
+      );
+      if (next.sha256 !== sha256) throw new Error("Analysis hash mismatch");
+      await this.atomic(path.join(this.directory, `${sha256}.json`), next);
+      return next;
+    });
+    this.sidecars = operation.then(
+      () => {},
+      () => {},
+    );
+    return operation;
   }
   async write(analysis: AssetAnalysis) {
     const valid = AssetAnalysisSchema.parse(analysis);

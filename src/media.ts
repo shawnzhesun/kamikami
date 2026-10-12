@@ -61,6 +61,9 @@ export async function api(url: string, method = "GET", body?: unknown) {
   const project = payload?.project ?? payload;
   const needsInstanceSupport = project?.version === 2 || project?.version === 3;
   const needsKeyframes = project?.version === 3;
+  const needsShapes = !!project?.layers?.some(
+    (layer) => (layer as { type?: string }).type === "shape",
+  );
   const definitions = Array.isArray(body)
     ? body
     : (project?.effects ?? (payload?.effect ? [payload.effect] : []));
@@ -96,6 +99,7 @@ export async function api(url: string, method = "GET", body?: unknown) {
       (needsTextEngine ||
         needsInstanceSupport ||
         needsKeyframes ||
+        needsShapes ||
         needsV6Engine ||
         needsV7Engine ||
         needsMotionEngine))
@@ -120,6 +124,10 @@ export async function api(url: string, method = "GET", body?: unknown) {
     )
       throw new Error(
         "The local service is outdated. Restart KamiKami with npm run desktop before saving or rendering spring, illustration and 3D-look effects.",
+      );
+    if (needsShapes && !health.elementTypes?.includes("shape"))
+      throw new Error(
+        "The local service is outdated. Restart KamiKami with npm run desktop before saving or rendering shapes.",
       );
     if (needsKeyframes && !(health.projectVersion >= 3))
       throw new Error(

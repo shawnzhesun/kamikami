@@ -21,6 +21,8 @@ import type { MediaAsset } from "../media";
 import { clamp, moveClips, snapValue, splitClips, trimClip } from "./editing";
 import { startGesture } from "./gesture";
 import { Waveform } from "./Waveform";
+import { ShapeMenu } from "./ShapeMenu";
+import type { ShapePreset } from "../shapes";
 import { EFFECT_DRAG_TYPE } from "../effect-bundle";
 import { retimeKeyframes, visibleKeyframeTimes } from "../keyframes";
 
@@ -41,6 +43,7 @@ type Props = {
   onEditLayer: (track: TimelineLayer) => void;
   onDropMedia: (src: string, trackId: string | undefined, time: number) => void;
   onAddText: () => void;
+  onAddShape: (preset: ShapePreset, color: string) => void;
   onApplyEffect: (effectId: string, layerId: string) => void;
 };
 export function Timeline({
@@ -60,6 +63,7 @@ export function Timeline({
   onEditLayer,
   onDropMedia,
   onAddText,
+  onAddShape,
   onApplyEffect,
 }: Props) {
   const [zoom, setZoom] = useState(1),
@@ -395,6 +399,7 @@ export function Timeline({
             <Plus size={13} />
             Text
           </button>
+          <ShapeMenu onAdd={onAddShape} />
           <button
             onClick={split}
             disabled={!selected.length}

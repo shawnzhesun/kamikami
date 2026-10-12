@@ -3,6 +3,7 @@ import { GraphicEffects } from "./GraphicEffects";
 import { orderedElements } from "./model";
 import { instanceAmountAt, resolveEffectInstanceAt } from "./effect-instance";
 import { animationTime } from "./keyframes";
+import { shapePath } from "./shapes";
 import React from "react";
 import {
   AbsoluteFill,
@@ -219,6 +220,9 @@ function VisualLayer({
             style={{ width: "100%", height: "100%", objectFit: "contain" }}
           />
         )}
+        {layer.type === "shape" && layer.shape && (
+          <ShapeArt layer={layer} time={t} project={project} />
+        )}
         {layer.type === "video" && src && (
           <Video
             src={src}
@@ -228,6 +232,7 @@ function VisualLayer({
           />
         )}
         {layer.type !== "title" &&
+          layer.type !== "shape" &&
           layer.effects
             .filter((i) => i.enabled)
             .map((i) => {
@@ -247,6 +252,62 @@ function VisualLayer({
               ) : null;
             })}
       </GraphicEffects>
+    </AbsoluteFill>
+  );
+}
+/** A vector shape at its own size; effect tints color the shape, not the frame. */
+function ShapeArt({
+  layer,
+  time,
+  project,
+}: {
+  layer: Layer;
+  time: number;
+  project: Project;
+}) {
+  const shape = layer.shape!;
+  const d = shapePath(shape);
+  const strokeWidth = shape.stroke ? (shape.strokeWidth ?? 0) : 0;
+  const local = animationTime(layer, time);
+  const tints = layer.effects
+    .filter((i) => i.enabled)
+    .map((i) => {
+      const e = resolveEffectInstanceAt(i, project.effects, local);
+      const amount = instanceAmountAt(i, local);
+      return e && e.tint > 0 && amount > 0
+        ? { color: e.color, opacity: Math.min(1, e.tint * amount) }
+        : null;
+    })
+    .filter((x) => !!x);
+  // Centered in a full-frame box: effect passes wrap children in frame-sized layers.
+  return (
+    <AbsoluteFill style={{ justifyContent: "center", alignItems: "center" }}>
+      <svg
+        width={shape.width}
+        height={shape.height}
+        viewBox={`0 0 ${shape.width} ${shape.height}`}
+        style={{ overflow: "visible", flex: "none" }}
+      >
+        <path
+          d={d}
+          fill={shape.filled === false ? "none" : layer.color}
+          stroke={strokeWidth > 0 ? shape.stroke : "none"}
+          strokeWidth={strokeWidth}
+          strokeLinejoin="round"
+        />
+        {tints.map((tint, i) => (
+          <path
+            key={i}
+            d={d}
+            fill={shape.filled === false ? "none" : tint.color}
+            stroke={strokeWidth > 0 ? tint.color : "none"}
+            strokeWidth={strokeWidth}
+            strokeLinejoin="round"
+            opacity={tint.opacity}
+            style={{ mixBlendMode: "screen" }}
+          />
+        ))}
+      </svg>
     </AbsoluteFill>
   );
 }

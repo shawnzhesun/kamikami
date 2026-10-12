@@ -4,7 +4,8 @@ import { randomUUID } from "node:crypto";
 import {
   PROBE_ANALYZER_VERSION,
   analysisTiers,
-  probeSummary,
+  entrySummary,
+  keepManual,
   type AnalysisTier,
   type AssetAnalysis,
 } from "../../src/asset-analysis";
@@ -193,8 +194,12 @@ export class AnalysisQueue {
         cached?.paramsHash !== probeParamsHash()
       )
         analysis = await probeAsset(file, mediaType(job.src), signal, sha256);
-      // Save the probe first so later stage failures never lose it.
-      await this.store.write(analysis);
+      // Save the probe first so later stage failures never lose it. Every
+      // write keeps manual metadata written meanwhile (keepManual).
+      const fresh = analysis;
+      analysis = await this.store.update(sha256, (latest) =>
+        keepManual(latest, fresh),
+      );
       const name = await this.nameOf(job.src);
       const problems: string[] = [];
       for (const stage of this.stages.filter((s) =>
@@ -204,7 +209,7 @@ export class AnalysisQueue {
         job.stage = stage.name;
         this.emit(job);
         try {
-          analysis = await stage.run(analysis, {
+          const result = await stage.run(analysis, {
             file,
             src: job.src,
             name,
@@ -212,7 +217,9 @@ export class AnalysisQueue {
             signal,
             prompt: job.prompt,
           });
-          await this.store.write(analysis);
+          analysis = await this.store.update(sha256, (latest) =>
+            keepManual(latest, result),
+          );
         } catch (error) {
           if (signal.aborted) throw error;
           problems.push(String((error as Error).message).slice(0, 200));
@@ -223,7 +230,7 @@ export class AnalysisQueue {
         status: problems.length ? "partial" : "ready",
         tier: job.tier,
         updatedAt: new Date().toISOString(),
-        summary: analysis!.summary?.text ?? probeSummary(analysis!),
+        summary: entrySummary(analysis!),
         ...(problems.length ? { error: problems.join(" ").slice(0, 400) } : {}),
       }));
       job.status = "done";

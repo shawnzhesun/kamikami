@@ -9,6 +9,7 @@ import {
 } from "./font-assets";
 import { z } from "zod";
 import { DepthSchema, bounceOut, depthFrame } from "./motion";
+import { ShapeSchema, type Shape } from "./shapes";
 export { bounceOut } from "./motion";
 import { TextEffectSchema, builtinTextSettings } from "./text-effects";
 import { VisualPassSchema, effectRandom } from "./visual-effects";
@@ -120,7 +121,7 @@ export const LayerSchema = z.object({
   trackId: z.string().min(1).max(100).optional(),
   id: z.string().max(100),
   name: z.string().max(100),
-  type: z.enum(["scene", "title", "image", "video", "audio"]),
+  type: z.enum(["scene", "title", "image", "video", "audio", "shape"]),
   src: z.string().max(500),
   text: z.string().max(2000),
   start: z.number().min(0).max(LIMITS.seconds),
@@ -149,6 +150,8 @@ export const LayerSchema = z.object({
   /** Fade from/to transparent and silent over these seconds at the clip edges. */
   fadeIn: z.number().min(0).max(30).optional(),
   fadeOut: z.number().min(0).max(30).optional(),
+  /** Geometry of a shape element; its fill is `color`. */
+  shape: ShapeSchema.optional(),
 });
 export const TimelineLayerSchema = z.object({
   id: z.string().min(1).max(100),
@@ -258,6 +261,14 @@ export function validateProject(input: unknown): Project {
       if (!fontVariant(font, l.fontWeight ?? 800, l.fontStyle ?? "normal"))
         throw new Error(`Unsupported weight or style for “${font.family}”`);
     }
+    if (l.type === "shape" ? !l.shape : l.shape)
+      throw new Error(
+        l.shape
+          ? `Only shape elements have shape geometry (“${l.name}”)`
+          : `Shape element “${l.name}” needs shape geometry`,
+      );
+    if (l.type === "shape" && l.src)
+      throw new Error(`Shape element “${l.name}” cannot reference media`);
     if (new Set(l.effects.map((e) => e.effectId)).size !== l.effects.length)
       throw new Error("An effect preset can only be applied once per element");
     if (l.start + l.duration > p.duration + 0.001)
@@ -281,7 +292,10 @@ export function validateProject(input: unknown): Project {
     }));
   }
   for (const l of p.layers) validateKeyframes(l);
-  p.version = p.layers.some((l) => allTracks(l).length) ? 3 : 2;
+  // Shapes also need version 3, so older readers reject them instead of failing oddly.
+  p.version = p.layers.some((l) => allTracks(l).length || l.type === "shape")
+    ? 3
+    : 2;
   const tracks = p.tracks ? [...p.tracks] : [];
   if (new Set(tracks.map((t) => t.id)).size !== tracks.length)
     throw new Error("Layer IDs must be unique");
@@ -546,6 +560,15 @@ export function makeLayer(type: Layer["type"], name: string): Layer {
     fontFamily: DEFAULT_FONT,
     visible: true,
     effects: [],
+  };
+}
+/** A shape element filled with `color`, sized like an image's fitted box. */
+export function makeShape(shape: Shape, name: string, color: string): Layer {
+  return {
+    ...makeLayer("shape", name),
+    text: "",
+    color,
+    shape: structuredClone(shape),
   };
 }
 /** Gain of a clip's fade-in/fade-out at clip-local seconds. */

@@ -182,3 +182,24 @@ See [the design](docs/asset-analysis-design.md).
 - Project settings choose the output size (including 9:16 vertical), frame rate (23.976–60 fps) and export loudness (−14, −16 or −23 LUFS, two-pass loudnorm).
 
 The bundled `ffmpeg-static` build is GPL with nonfree components. It is fine for development, but must be replaced before distribution (see the design doc).
+
+## Shapes and assistant-written asset metadata — October 12, 2026
+
+**Shapes**
+- **+ Shape** next to **+ Text** adds rectangles, rounded rectangles, circles, ellipses, triangles, diamonds, pentagons, hexagons, stars, arrows, hearts, lines and rings, in a swatch or custom color.
+- Shapes are vector elements that behave like images: move, scale and rotate them on the canvas, apply effects, keyframe them and fade them.
+- The inspector edits the shape type, size, corner radius, sides or points, fill and outline.
+- If the selected layer is busy at the playhead, the new element goes on a new layer instead of failing (this applies to text too).
+- The assistant and MCP use `add_shape`, and `update_layer` with `patch.shape` to change one. Projects with shapes are saved as version 3.
+
+**Asset metadata without running analysis**
+- Describe assets in the assistant chat, or paste results from analysis done elsewhere (descriptions, tags, scene lists, timed transcripts). The assistant saves them with `set_asset_metadata`, in batches of up to 100 assets.
+- Fields:
+  - summary and tags, used in the library digest;
+  - a free-form description;
+  - scenes for video, and sections for audio and video;
+  - a transcript with segment times and optional word times;
+  - image fields: caption, details, on-screen text, colors and safe text region.
+- Times are checked against each asset's duration. Unprobed files get the free local probe first.
+- Written fields are marked manual. Later automatic analysis keeps them and skips the paid stages they replace (summary, transcription, image description). Use `clear` to remove them.
+- **Details** shows the description and which fields were written by you or the assistant.

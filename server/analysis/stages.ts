@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import {
   ImageDescriptionSchema,
+  isManual,
   probeSummary,
   type AnalysisSettings,
   type AnalysisTier,
@@ -165,7 +166,9 @@ export function lookStage(deps: StageDeps): AnalysisStage {
   return {
     name: "look",
     tiers: ["balanced", "full"],
-    applies: (a) => a.type !== "audio",
+    // A manual image description replaces the model's; video frames still get captions.
+    applies: (a) =>
+      a.type !== "audio" && !(a.type === "image" && isManual(a, "image")),
     async run(analysis, { file, signal, tier, name }) {
       const { connection, settings } = await connectionFor(
         deps,
@@ -325,6 +328,7 @@ export function transcribeStage(deps: StageDeps): AnalysisStage {
     tiers: ["transcribe", "balanced", "full"],
     // Opt-in: only applies when transcription is enabled and there is audible audio.
     applies: async (a) =>
+      !isManual(a, "transcript") &&
       (await deps.settings()).transcriptionEnabled &&
       a.probe.audioTracks.length > 0 &&
       !!a.audio &&
@@ -465,6 +469,8 @@ export function summarizeStage(deps: StageDeps): AnalysisStage {
   return {
     name: "summary",
     tiers: ["balanced", "full"],
+    // A manual summary is the user's; don't pay to replace it.
+    applies: (a) => !isManual(a, "summary"),
     async run(analysis, { signal, name }) {
       const { connection, settings } = await connectionFor(deps, "summaries");
       const facts: string[] = [
@@ -474,6 +480,8 @@ export function summarizeStage(deps: StageDeps): AnalysisStage {
         facts.push(
           `Image: ${analysis.image.caption}. ${analysis.image.details}`,
         );
+      if (analysis.description)
+        facts.push(`Description from the user: ${analysis.description}`);
       const samples = analysis.visual?.samples ?? [];
       if (samples.length)
         facts.push(

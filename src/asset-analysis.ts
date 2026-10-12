@@ -124,7 +124,7 @@ export const TranscriptSchema = z
   .object({
     language: z.string().max(20).optional(),
     /** "lyrics" when the user's pasted text was aligned to the recognized words. */
-    source: z.enum(["asr", "lyrics"]).optional(),
+    source: z.enum(["asr", "lyrics", "manual"]).optional(),
     alignment: z
       .object({
         matched: z.number().int().min(0),
@@ -224,6 +224,8 @@ export const AssetAnalysisSchema = z
       )
       .max(200)
       .optional(),
+    /** Free-form description written by the user or assistant (manual metadata). */
+    description: z.string().max(4000).optional(),
     /** Compact, always-injected line for the assistant's library digest. */
     summary: z
       .object({
@@ -275,4 +277,195 @@ export function probeSummary(a: AssetAnalysis): string {
   if (a.probe.audioTracks.length > 1)
     parts.push(`${a.probe.audioTracks.length} audio tracks`);
   return parts.join(", ");
+}
+
+/**
+ * Manual metadata: descriptions, tags, scenes or transcripts written by the
+ * user or the assistant (for example, from analysis done outside the app).
+ * Each manual field records provenance `manual.<field>`; automatic analysis
+ * skips or preserves those fields instead of overwriting them.
+ */
+export const manualFields = [
+  "summary",
+  "description",
+  "scenes",
+  "sections",
+  "transcript",
+  "image",
+] as const;
+export type ManualField = (typeof manualFields)[number];
+const MANUAL = "manual.";
+const timedText = <T extends z.ZodRawShape>(shape: T) =>
+  z.object({ start: time, end: time, ...shape }).strict();
+export const AssetMetadataSchema = z
+  .object({
+    /** One factual line, shown to the assistant for every asset. */
+    summary: z.string().trim().min(1).max(600).optional(),
+    tags: z.array(z.string().trim().min(1).max(40)).max(20).optional(),
+    description: z.string().trim().min(1).max(4000).optional(),
+    scenes: z
+      .array(timedText({ title: z.string().trim().min(1).max(120) }))
+      .max(500)
+      .optional(),
+    sections: z
+      .array(timedText({ label: z.string().trim().min(1).max(40) }))
+      .max(200)
+      .optional(),
+    transcript: z
+      .object({
+        language: z.string().max(20).optional(),
+        segments: z
+          .array(timedText({ text: z.string().trim().min(1).max(4000) }))
+          .min(1)
+          .max(20000),
+        words: TranscriptSchema.shape.words.optional(),
+      })
+      .strict()
+      .optional(),
+    /** Image assets only; merged into any existing description. */
+    image: ImageDescriptionSchema.partial().optional(),
+    /** Remove these manual fields (automatic analysis may fill them again). */
+    clear: z.array(z.enum(manualFields)).max(manualFields.length).optional(),
+  })
+  .strict();
+export type AssetMetadata = z.infer<typeof AssetMetadataSchema>;
+
+export const isManual = (a: AssetAnalysis, field: ManualField) =>
+  !!a.provenance[MANUAL + field];
+
+/** Merge manual metadata into an analysis; times are checked against the asset. */
+export function applyMetadata(
+  analysis: AssetAnalysis,
+  input: AssetMetadata,
+  author: string,
+  now = new Date().toISOString(),
+): { analysis: AssetAnalysis; fields: ManualField[] } {
+  const next: AssetAnalysis = structuredClone(analysis);
+  const fields: ManualField[] = [];
+  const mark = (field: ManualField) => {
+    fields.push(field);
+    next.provenance[MANUAL + field] = {
+      analyzer: "manual",
+      version: "1",
+      model: author.slice(0, 120),
+      createdAt: now,
+    };
+  };
+  for (const field of input.clear ?? []) {
+    delete next[field];
+    delete next.provenance[MANUAL + field];
+  }
+  const duration = analysis.probe.duration;
+  const timed = <T extends { start: number; end: number }>(
+    list: T[],
+    what: string,
+  ) => {
+    if (analysis.type === "image")
+      throw new Error(`Images have no timeline, so they cannot have ${what}.`);
+    for (const item of list) {
+      if (!(item.end > item.start))
+        throw new Error(`Each ${what} range needs end > start.`);
+      if (duration !== null && item.start >= duration + 0.05)
+        throw new Error(
+          `A ${what} range starts at ${item.start}s, after the asset ends (${duration.toFixed(2)}s).`,
+        );
+    }
+    const round = (v: number) =>
+      Math.round((duration === null ? v : Math.min(v, duration)) * 1000) / 1000;
+    return list
+      .map((item) => ({
+        ...item,
+        start: round(item.start),
+        end: round(item.end),
+      }))
+      .filter((item) => item.end > item.start)
+      .sort((a, b) => a.start - b.start);
+  };
+  if (input.summary !== undefined || input.tags !== undefined) {
+    next.summary = {
+      text: input.summary ?? next.summary?.text ?? entrySummary(next),
+      tags: input.tags ?? next.summary?.tags ?? [],
+    };
+    mark("summary");
+  }
+  if (input.description !== undefined) {
+    next.description = input.description;
+    mark("description");
+  }
+  if (input.scenes) {
+    if (analysis.type !== "video")
+      throw new Error("Scenes are for video assets; use sections for audio.");
+    next.scenes = timed(input.scenes, "scene");
+    mark("scenes");
+  }
+  if (input.sections) {
+    next.sections = timed(input.sections, "section");
+    mark("sections");
+  }
+  if (input.transcript) {
+    const segments = timed(input.transcript.segments, "transcript segment");
+    next.transcript = {
+      ...(input.transcript.language
+        ? { language: input.transcript.language }
+        : {}),
+      source: "manual",
+      text: segments.map((s) => s.text).join(" "),
+      segments,
+      words: input.transcript.words ?? [],
+    };
+    mark("transcript");
+  }
+  if (input.image) {
+    if (analysis.type !== "image")
+      throw new Error(
+        "Image descriptions are for image assets; use description for audio and video.",
+      );
+    next.image = {
+      caption: "",
+      details: "",
+      ocr: [],
+      colors: [],
+      subject: null,
+      safeTextRegion: "none",
+      ...next.image,
+      ...input.image,
+    };
+    mark("image");
+  }
+  return { analysis: AssetAnalysisSchema.parse(next), fields };
+}
+
+/**
+ * Carry manual fields from the latest stored analysis into a newly computed
+ * one, so analysis that started before a manual edit never overwrites it.
+ */
+export function keepManual(
+  latest: AssetAnalysis | null,
+  next: AssetAnalysis,
+): AssetAnalysis {
+  if (!latest || latest.sha256 !== next.sha256) return next;
+  const merged: AssetAnalysis = { ...next, provenance: { ...next.provenance } };
+  for (const field of manualFields) {
+    const key = MANUAL + field;
+    if (latest.provenance[key]) {
+      (merged as Record<string, unknown>)[field] = latest[field];
+      merged.provenance[key] = latest.provenance[key];
+    } else if (next.provenance[key]) {
+      // Cleared manually since this analysis started.
+      delete (merged as Record<string, unknown>)[field];
+      delete merged.provenance[key];
+    }
+  }
+  return merged;
+}
+
+/** The digest line: summary, else the description's first sentence, else probe facts. */
+export function entrySummary(a: AssetAnalysis): string {
+  if (a.summary?.text) return a.summary.text;
+  if (a.description) {
+    const first =
+      a.description.match(/^.*?[.!?。！？](\s|$)/)?.[0] ?? a.description;
+    return first.trim().slice(0, 600);
+  }
+  return probeSummary(a);
 }

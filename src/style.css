@@ -936,7 +936,9 @@ footer .divider {
 }
 .preview-area {
   padding-top: 46px;
-  overflow: visible;
+  /* Off-frame selection boxes (3D, scaled or moved elements) stay inside the
+     viewer like a pasteboard instead of covering the transport and inspector. */
+  overflow: clip;
 }
 .preview-wrap {
   position: relative;
@@ -956,6 +958,7 @@ footer .divider {
 }
 .canvas-tools {
   position: absolute;
+  z-index: 2;
   bottom: calc(100% + 9px);
   left: 0;
   display: flex;
@@ -963,6 +966,9 @@ footer .divider {
   gap: 4px;
   white-space: nowrap;
   color: var(--on-chrome);
+  /* Opaque, so off-frame selection outlines pass behind the tools. */
+  background: var(--chrome);
+  border-radius: 7px;
 }
 .canvas-tools button {
   min-height: 26px;
@@ -2662,7 +2668,6 @@ button[aria-pressed="true"] {
   background: var(--coral);
 }
 
-
 /* Asset analysis: badges, analyze dialog, details drawer. */
 .analysis-badge {
   display: inline-block;
@@ -3200,4 +3205,89 @@ button[aria-pressed="true"] {
 .prefs-footer .primary {
   min-width: 96px;
   border-radius: 7px;
+}
+
+/* Add shape menu and shape inspector fields. */
+.dropdown-panel.shape-menu {
+  padding: 10px;
+  max-height: none;
+}
+.shape-menu-title {
+  margin: 2px 2px 8px;
+  font-size: 10px;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.shape-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+  margin-bottom: 12px;
+}
+.shape-grid button {
+  aspect-ratio: 1;
+  min-height: 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel) 60%, var(--cream));
+}
+.shape-grid button:hover {
+  border-color: var(--blue);
+  background: var(--hover);
+}
+.shape-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.shape-swatches button,
+.shape-custom-color {
+  width: 24px;
+  height: 24px;
+  min-height: 0;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--brown) 25%, transparent);
+}
+.shape-swatches button[aria-checked="true"] {
+  box-shadow:
+    0 0 0 2px var(--surface),
+    0 0 0 4px var(--blue);
+}
+.shape-custom-color {
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+  background: conic-gradient(
+    #f2765e,
+    #f5c84c,
+    #5fbf8f,
+    #4f8fd8,
+    #8a6fd6,
+    #e85d9a,
+    #f2765e
+  );
+}
+.shape-custom-color input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.shape-paint-heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.shape-paint-heading input {
+  width: auto;
+  margin: 0;
+}
+.asset-description {
+  white-space: pre-wrap;
+  line-height: 1.55;
 }

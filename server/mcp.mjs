@@ -76,6 +76,16 @@ async function tool(action, args) {
           `/api/analysis/asset?${query({ src: args.src, section: args.section, start: args.start, end: args.end })}`,
         ),
       );
+    if (action === "set_asset_metadata")
+      return text(
+        // Unprobed assets are probed first, which can take a few seconds each.
+        await api(
+          "/api/analysis/metadata",
+          { items: args.items, by: "mcp" },
+          "POST",
+          180000,
+        ),
+      );
     if (action === "search_assets")
       return text(
         await api(

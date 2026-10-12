@@ -1,5 +1,7 @@
 import {
-  probeSummary,
+  entrySummary,
+  isManual,
+  manualFields,
   type AnalysisEntry,
   type AssetAnalysis,
 } from "../../src/asset-analysis";
@@ -35,7 +37,8 @@ export function sliceAnalysis(
   const transcript = analysis.transcript;
   const overview = {
     type: analysis.type,
-    summary: analysis.summary?.text ?? probeSummary(analysis),
+    summary: entrySummary(analysis),
+    ...(analysis.description ? { description: analysis.description } : {}),
     tags: analysis.summary?.tags ?? [],
     probe: analysis.probe,
     counts: {
@@ -55,7 +58,11 @@ export function sliceAnalysis(
     sections: analysis.sections ?? [],
     language: transcript?.language,
     image: analysis.image ?? null,
-    analyzed: Object.keys(analysis.provenance),
+    analyzed: Object.keys(analysis.provenance).filter(
+      (k) => !k.startsWith("manual."),
+    ),
+    // Fields written by the user or assistant; automatic analysis keeps them.
+    manual: manualFields.filter((f) => isManual(analysis, f)),
   };
   const words = (transcript?.words ?? []).filter((w) =>
     inRange(w.s, w.e, s, e),
@@ -145,6 +152,7 @@ export function searchAnalyses(
           "summary",
           `${analysis.summary.text} ${analysis.summary.tags.join(" ")}`,
         );
+      if (analysis.description) add("description", analysis.description);
       if (analysis.image)
         add(
           "image",
