@@ -1,3 +1,4 @@
+import { isFrameArt } from "./artwork";
 import { usesSpatialMotion } from "./motion";
 import { z } from "zod";
 import {
@@ -13,8 +14,10 @@ import {
   engineAtLeast,
   usesV6Features,
   usesV7Features,
+  usesV8Features,
 } from "./visual-effects";
 export function effectEngine(effect: Effect) {
+  if (usesV8Features(effect)) return "kamikami-visual-v8" as const;
   if (usesV7Features(effect)) return "kamikami-visual-v7" as const;
   if (usesV6Features(effect)) return "kamikami-visual-v6" as const;
   if (usesSpatialMotion(effect)) return "kamikami-visual-v5" as const;
@@ -157,6 +160,16 @@ export function applyEffectToLayers(
     )
   )
     throw new Error("Text effects can only be applied to text elements.");
+  if (
+    effect.art &&
+    isFrameArt(effect.art.kind) &&
+    project.layers.some(
+      (layer) => layerIds.includes(layer.id) && layer.type === "title",
+    )
+  )
+    throw new Error(
+      "Artwork copies and frames apply to images, video, shapes and backdrops. Use a text treatment for text.",
+    );
   const existing = project.effects.find((e) => e.id === effect.id);
   // The catalog recipe can differ from a historical project definition.
   // New instances use the supplied recipe; existing snapshots stay untouched.

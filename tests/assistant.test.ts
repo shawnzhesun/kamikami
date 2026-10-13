@@ -126,7 +126,7 @@ test("native tools share the MCP catalog; file access is supplied by the attachm
     assistantTools.map((t) => t.name),
     definitions.filter((d) => d[0] !== "import_media").map((d) => d[0]),
   );
-  assert.equal(assistantTools.length, 56);
+  assert.equal(assistantTools.length, 57);
 });
 
 test("multi-step native edits use live revisions and one undo group, and history excludes credentials", async () => {

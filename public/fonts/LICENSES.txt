@@ -1,6 +1,6 @@
 # Bundled font notices
 
-These font files are distributed unchanged. Family names, copyright and license notices below are extracted from the files. License texts and distributor notices follow.
+These font files are distributed unchanged, except the WOFF2 files marked “Latin subset”: those are Latin-only subsets of the Google Fonts releases (Basic Latin, Latin-1, Latin Extended-A, punctuation, arrows and geometric shapes), with outlines and name/license metadata otherwise unchanged. None of the subset fonts declares a Reserved Font Name. Family names, copyright and license notices below are extracted from the files. License texts and distributor notices follow.
 
 ## HostGrotesk-Italic-VariableFont_wght.ttf
 
@@ -409,6 +409,126 @@ This Font Software is licensed under the SIL Open Font License, Version 1.1. Thi
 Copyright (c) 2003–2016 The David Libre Project Authors.
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: http://scripts.sil.org/OFL
+
+## DelaGothicOne-Regular.woff2
+
+Latin subset. Copyright 2020 The Dela Gothic Project Authors (https://github.com/syakuzen/DelaGothic)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: https://openfontlicense.org
+
+## ZenKakuGothicNew-Black.woff2
+
+Latin subset. Copyright 2022 The Zen Kaku Gothic Project Authors (https://github.com/googlefonts/zen-kakugothic)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: https://openfontlicense.org
+
+## MPLUSRounded1c-ExtraBold.woff2
+
+Latin subset. Copyright 2016 The Rounded M+ Project Authors.
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: https://openfontlicense.org
+
+## ZenOldMincho-Black.woff2
+
+Latin subset. Copyright 2021 The Zen Old Mincho Project Authors (https://github.com/googlefonts/zen-oldmincho)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: https://openfontlicense.org
+
+## ShipporiMinchoB1-ExtraBold.woff2
+
+Latin subset. Copyright 2021 The Shippori Mincho Project Authors (https://github.com/fontdasu/ShipporiMincho)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: https://openfontlicense.org
+
+## KaiseiTokumin-ExtraBold.woff2
+
+Latin subset. Copyright 2020 The Kaisei Project Authors (https://github.com/Font-Kai/Kaisei)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: https://openfontlicense.org
+
+## KiwiMaru-Medium.woff2
+
+Latin subset. Copyright 2020 The Kiwi Maru Project Authors (https://github.com/Kiwi-KawagotoKajiru/Kiwi-Maru)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: https://openfontlicense.org
+
+## MochiyPopOne-Regular.woff2
+
+Latin subset. Copyright 2020 The Mochiypop Project Authors (https://github.com/fontdasu/Mochiypop)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: https://openfontlicense.org
+
+## DotGothic16-Regular.woff2
+
+Latin subset. Copyright 2020 The DotGothic16 Project Authors (https://github.com/fontworks-fonts/DotGothic16)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: https://openfontlicense.org
+
+## ReggaeOne-Regular.woff2
+
+Latin subset. Copyright 2020 The Reggae Project Authors (https://github.com/fontworks-fonts/Reggae)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: https://openfontlicense.org
+
+## RampartOne-Regular.woff2
+
+Latin subset. Copyright 2020 The Rampart Project Authors (https://github.com/fontworks-fonts/Rampart)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: https://openfontlicense.org
+
+## PottaOne-Regular.woff2
+
+Latin subset. Copyright 2020 The Potta Project Authors (https://github.com/go108go/Potta)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: https://openfontlicense.org
+
+## KleeOne-SemiBold.woff2
+
+Latin subset. Copyright 2020 The Klee Project Authors (https://github.com/fontworks-fonts/Klee)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: https://openfontlicense.org
+
+## YujiSyuku-Regular.woff2
+
+Latin subset. Copyright 2021 The Yuji Project Authors (https://github.com/Kinutafontfactory/Yuji)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: https://openfontlicense.org
+
+## IBMPlexSans-VariableFont_wdth-wght.ttf
+
+Copyright © 2017 IBM Corp. with Reserved Font Name "Plex". Distributed unchanged (renamed file only).
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: https://openfontlicense.org
+
+## IBMPlexSans-Italic-VariableFont_wdth-wght.ttf
+
+Copyright © 2017 IBM Corp. with Reserved Font Name "Plex". Distributed unchanged (renamed file only).
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: https://openfontlicense.org
+
+## IBMPlexMono-Regular.ttf
+
+Copyright © 2017 IBM Corp. with Reserved Font Name "Plex". Distributed unchanged.
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: https://openfontlicense.org
+
+## IBMPlexMono-Medium.ttf
+
+Copyright © 2017 IBM Corp. with Reserved Font Name "Plex". Distributed unchanged.
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: https://openfontlicense.org
+
+## IBMPlexMono-SemiBold.ttf
+
+Copyright © 2017 IBM Corp. with Reserved Font Name "Plex". Distributed unchanged.
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: https://openfontlicense.org
+
+## IBMPlexMono-Bold.ttf
+
+Copyright © 2017 IBM Corp. with Reserved Font Name "Plex". Distributed unchanged.
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1. This license is available with a FAQ at: https://openfontlicense.org
 
 ## Amiri
 

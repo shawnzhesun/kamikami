@@ -100,3 +100,24 @@ export function moveElementsToTrack(
   });
   return validateProject({ ...project, layers });
 }
+/**
+ * Add a full-length element (backdrops, finishes) on its own new layer: at the
+ * bottom for backgrounds, on top for finishing overlays.
+ */
+export function addFullLengthElement(
+  project: Project,
+  element: Layer,
+  position: "bottom" | "top",
+  trackId: string = crypto.randomUUID(),
+): Project {
+  const track = { id: trackId, name: element.name.slice(0, 100) || "Backdrop" };
+  const tracks = projectTracks(project);
+  return validateProject({
+    ...project,
+    tracks: position === "bottom" ? [track, ...tracks] : [...tracks, track],
+    layers: [
+      ...project.layers,
+      { ...element, trackId, start: 0, duration: project.duration },
+    ],
+  });
+}

@@ -546,5 +546,237 @@
         "style": "normal"
       }
     ]
+  },
+  {
+    "id": "builtin-dela-gothic-one",
+    "family": "Dela Gothic One",
+    "category": "Display",
+    "variants": [
+      {
+        "src": "/fonts/builtin/DelaGothicOne-Regular.woff2",
+        "weightMin": 400,
+        "weightMax": 400,
+        "style": "normal"
+      }
+    ]
+  },
+  {
+    "id": "builtin-zen-kaku-gothic-new",
+    "family": "Zen Kaku Gothic New",
+    "category": "Sans serif",
+    "variants": [
+      {
+        "src": "/fonts/builtin/ZenKakuGothicNew-Black.woff2",
+        "weightMin": 900,
+        "weightMax": 900,
+        "style": "normal"
+      }
+    ]
+  },
+  {
+    "id": "builtin-m-plus-rounded-1c",
+    "family": "M PLUS Rounded 1c",
+    "category": "Sans serif",
+    "variants": [
+      {
+        "src": "/fonts/builtin/MPLUSRounded1c-ExtraBold.woff2",
+        "weightMin": 800,
+        "weightMax": 800,
+        "style": "normal"
+      }
+    ]
+  },
+  {
+    "id": "builtin-ibm-plex-sans",
+    "family": "IBM Plex Sans",
+    "category": "Sans serif",
+    "variants": [
+      {
+        "src": "/fonts/builtin/IBMPlexSans-VariableFont_wdth-wght.ttf",
+        "weightMin": 100,
+        "weightMax": 700,
+        "style": "normal"
+      },
+      {
+        "src": "/fonts/builtin/IBMPlexSans-Italic-VariableFont_wdth-wght.ttf",
+        "weightMin": 100,
+        "weightMax": 700,
+        "style": "italic"
+      }
+    ]
+  },
+  {
+    "id": "builtin-zen-old-mincho",
+    "family": "Zen Old Mincho",
+    "category": "Serif",
+    "variants": [
+      {
+        "src": "/fonts/builtin/ZenOldMincho-Black.woff2",
+        "weightMin": 900,
+        "weightMax": 900,
+        "style": "normal"
+      }
+    ]
+  },
+  {
+    "id": "builtin-shippori-mincho-b1",
+    "family": "Shippori Mincho B1",
+    "category": "Serif",
+    "variants": [
+      {
+        "src": "/fonts/builtin/ShipporiMinchoB1-ExtraBold.woff2",
+        "weightMin": 800,
+        "weightMax": 800,
+        "style": "normal"
+      }
+    ]
+  },
+  {
+    "id": "builtin-kaisei-tokumin",
+    "family": "Kaisei Tokumin",
+    "category": "Serif",
+    "variants": [
+      {
+        "src": "/fonts/builtin/KaiseiTokumin-ExtraBold.woff2",
+        "weightMin": 800,
+        "weightMax": 800,
+        "style": "normal"
+      }
+    ]
+  },
+  {
+    "id": "builtin-kiwi-maru",
+    "family": "Kiwi Maru",
+    "category": "Serif",
+    "variants": [
+      {
+        "src": "/fonts/builtin/KiwiMaru-Medium.woff2",
+        "weightMin": 500,
+        "weightMax": 500,
+        "style": "normal"
+      }
+    ]
+  },
+  {
+    "id": "builtin-mochiy-pop-one",
+    "family": "Mochiy Pop One",
+    "category": "Display",
+    "variants": [
+      {
+        "src": "/fonts/builtin/MochiyPopOne-Regular.woff2",
+        "weightMin": 400,
+        "weightMax": 400,
+        "style": "normal"
+      }
+    ]
+  },
+  {
+    "id": "builtin-dotgothic16",
+    "family": "DotGothic16",
+    "category": "Display",
+    "variants": [
+      {
+        "src": "/fonts/builtin/DotGothic16-Regular.woff2",
+        "weightMin": 400,
+        "weightMax": 400,
+        "style": "normal"
+      }
+    ]
+  },
+  {
+    "id": "builtin-reggae-one",
+    "family": "Reggae One",
+    "category": "Display",
+    "variants": [
+      {
+        "src": "/fonts/builtin/ReggaeOne-Regular.woff2",
+        "weightMin": 400,
+        "weightMax": 400,
+        "style": "normal"
+      }
+    ]
+  },
+  {
+    "id": "builtin-rampart-one",
+    "family": "Rampart One",
+    "category": "Display",
+    "variants": [
+      {
+        "src": "/fonts/builtin/RampartOne-Regular.woff2",
+        "weightMin": 400,
+        "weightMax": 400,
+        "style": "normal"
+      }
+    ]
+  },
+  {
+    "id": "builtin-potta-one",
+    "family": "Potta One",
+    "category": "Display",
+    "variants": [
+      {
+        "src": "/fonts/builtin/PottaOne-Regular.woff2",
+        "weightMin": 400,
+        "weightMax": 400,
+        "style": "normal"
+      }
+    ]
+  },
+  {
+    "id": "builtin-klee-one",
+    "family": "Klee One",
+    "category": "Handwriting",
+    "variants": [
+      {
+        "src": "/fonts/builtin/KleeOne-SemiBold.woff2",
+        "weightMin": 600,
+        "weightMax": 600,
+        "style": "normal"
+      }
+    ]
+  },
+  {
+    "id": "builtin-yuji-syuku",
+    "family": "Yuji Syuku",
+    "category": "Handwriting",
+    "variants": [
+      {
+        "src": "/fonts/builtin/YujiSyuku-Regular.woff2",
+        "weightMin": 400,
+        "weightMax": 400,
+        "style": "normal"
+      }
+    ]
+  },
+  {
+    "id": "builtin-ibm-plex-mono",
+    "family": "IBM Plex Mono",
+    "category": "Monospace",
+    "variants": [
+      {
+        "src": "/fonts/builtin/IBMPlexMono-Regular.ttf",
+        "weightMin": 400,
+        "weightMax": 400,
+        "style": "normal"
+      },
+      {
+        "src": "/fonts/builtin/IBMPlexMono-Medium.ttf",
+        "weightMin": 500,
+        "weightMax": 500,
+        "style": "normal"
+      },
+      {
+        "src": "/fonts/builtin/IBMPlexMono-SemiBold.ttf",
+        "weightMin": 600,
+        "weightMax": 600,
+        "style": "normal"
+      },
+      {
+        "src": "/fonts/builtin/IBMPlexMono-Bold.ttf",
+        "weightMin": 700,
+        "weightMax": 700,
+        "style": "normal"
+      }
+    ]
   }
 ]

@@ -66,6 +66,8 @@ export function CanvasEditor({
             width: Math.max(40, element?.offsetWidth ?? 400),
             height: Math.max(l.fontSize, element?.offsetHeight ?? l.fontSize),
           };
+        } else if (l.type === "backdrop") {
+          next[l.id] = { width: W, height: H };
         } else if (l.type === "shape" && l.shape) {
           // Include a centered outline, which extends half its width outside the path.
           const outline = l.shape.stroke ? (l.shape.strokeWidth ?? 0) : 0;

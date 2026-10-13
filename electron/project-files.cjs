@@ -66,6 +66,20 @@ class ProjectFiles {
     await atomicWrite(this.metadata, JSON.stringify({ destination }));
     this.destination = destination;
   }
+  /** New project: Save must ask for a location instead of overwriting the old file. */
+  async forget() {
+    if (this.busy)
+      throw new Error("A project file operation is already in progress.");
+    this.busy = true;
+    try {
+      this.pending = null;
+      await mkdir(path.dirname(this.metadata), { recursive: true });
+      await atomicWrite(this.metadata, JSON.stringify({ destination: null }));
+      this.destination = null;
+    } finally {
+      this.busy = false;
+    }
+  }
   async open() {
     if (this.busy)
       throw new Error("A project file operation is already in progress.");
@@ -185,6 +199,7 @@ function installProjectFiles() {
     open: () => files.open(),
     accept: (token) => files.accept(token),
     save: (text, name) => files.save(text, name),
+    forget: () => files.forget(),
   })) {
     ipcMain.handle(`project-file:${channel}`, async (event, ...args) => {
       if (

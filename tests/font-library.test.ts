@@ -89,7 +89,7 @@ function webFont(ttf: Buffer, version: 1 | 2) {
 }
 
 test("every bundled face exists and declares the weights/styles contained in its bytes", async () => {
-  assert.equal(builtinFonts.length, 20);
+  assert.equal(builtinFonts.length, 36);
   const seen = new Set<string>();
   for (const font of builtinFonts) {
     assert.ok(!seen.has(font.id));
@@ -108,10 +108,17 @@ test("every bundled face exists and declares the weights/styles contained in its
       fontWeights(font, selected.fontStyle).includes(selected.fontWeight),
     );
   }
-  assert.match(
-    await readFile(path.join(publicDir, "fonts/LICENSES.txt"), "utf8"),
-    /SIL OPEN FONT LICENSE/i,
+  const notices = await readFile(
+    path.join(publicDir, "fonts/LICENSES.txt"),
+    "utf8",
   );
+  assert.match(notices, /SIL OPEN FONT LICENSE/i);
+  // Every bundled file carries its own copyright notice.
+  for (const face of builtinFonts.flatMap((font) => font.variants))
+    assert.ok(
+      notices.includes(`## ${path.basename(face.src)}\n`),
+      `Missing notice for ${face.src}`,
+    );
 });
 
 test("font metadata handles static and variable TTF, WOFF, and WOFF2", async () => {

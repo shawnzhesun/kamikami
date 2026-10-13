@@ -15,6 +15,7 @@ const fontLibrary = new FontLibrary(fontData, path.resolve("public"));
 const effectLibrary = new EffectLibrary(fontData);
 
 let project = structuredClone(initialProject);
+
 const assets = [
   {
     src: "/media/fixture.png",
@@ -68,9 +69,18 @@ const fixture = {
       if (req.url === "/api/health")
         result = {
           ok: true,
-          effectEngine: "kamikami-visual-v5",
-          projectVersion: 2,
+          effectEngine: "kamikami-visual-v8",
+          projectVersion: 3,
           effectLibraryVersion: 2,
+          elementTypes: [
+            "scene",
+            "title",
+            "image",
+            "video",
+            "audio",
+            "shape",
+            "backdrop",
+          ],
         };
       else if (req.url === "/api/fonts/import") {
         const request = new Request("http://localhost/api/fonts/import", {
@@ -151,6 +161,10 @@ try {
         localStorage.setItem("fixture-project-file", text);
         return { name: "fixture.json" };
       },
+      forget: async () => {
+        localStorage.removeItem("fixture-project-file");
+        window.fixtureForgot = true;
+      },
     };
   });
   await page.setViewport({ width: 1440, height: 980, deviceScaleFactor: 1 });
@@ -197,14 +211,18 @@ try {
     );
   };
   await wait(() => exists(".media-card"));
-  assert.equal(await exists(".header-actions .open-project-button"), true);
-  assert.equal(
+  assert.deepEqual(
     await page.evaluate(() =>
-      document
-        .querySelector(".open-project-button")
-        .nextElementSibling.textContent.trim(),
+      [...document.querySelectorAll(".header-start > *")].map((e) =>
+        e.classList.contains("brand")
+          ? "brand"
+          : [...e.querySelectorAll("button")].map((b) =>
+              b.getAttribute("aria-label"),
+            ),
+      ),
     ),
-    "Save",
+    ["brand", ["New project", "Open project"]],
+    "New and Open sit right of the logo",
   );
   for (const width of [1100, 1440]) {
     await page.setViewport({ width, height: 980, deviceScaleFactor: 1 });
@@ -216,13 +234,21 @@ try {
       const actions = document
         .querySelector(".header-actions")
         .getBoundingClientRect();
+      const start = document
+        .querySelector(".header-file-actions")
+        .getBoundingClientRect();
+      const fits = [...document.querySelectorAll("header button")].every(
+        (b) => b.scrollWidth <= b.clientWidth + 1,
+      );
       return {
         centered:
           Math.abs(title.x + title.width / 2 - header.x - header.width / 2) < 1,
-        separated: title.right <= actions.left,
+        separated: title.right <= actions.left && start.right <= title.left,
+        fits,
       };
     });
     assert.ok(layout.centered, `Project title is centered at ${width}px`);
+    assert.ok(layout.fits, `Header buttons are not clipped at ${width}px`);
     assert.ok(
       layout.separated,
       `Header actions do not overlap the title at ${width}px`,
@@ -484,7 +510,14 @@ try {
   );
 
   assert.ok(!(await text()).includes("Add at playhead"));
-  assert.ok(!(await text()).includes("Analyze"));
+  // Library analysis is a toolbar action; cards stay free of analysis labels.
+  assert.ok(
+    !(await page.evaluate(() =>
+      [...document.querySelectorAll(".media-card")].some((c) =>
+        c.textContent.includes("Analyze"),
+      ),
+    )),
+  );
   assert.equal(
     await page.evaluate(() => document.querySelector(".media-card").draggable),
     true,
@@ -639,7 +672,10 @@ try {
   await click('header button[aria-label="Undo"]');
   await save();
   assert.equal(project.layers.find((e) => e.id === first.id).trackId, track.id);
+  // The timeline ignores clicks for 200 ms after a drag ends.
+  await new Promise((resolve) => setTimeout(resolve, 250));
   await click('button[aria-label="Settings for Pictures"]');
+  await wait(() => exists("dialog[open] .delete-layer-action"));
   await page.evaluate(() =>
     [...document.querySelectorAll("dialog[open] button")]
       .find((e) => e.textContent === "Delete layer")
@@ -790,6 +826,12 @@ try {
     String(originalFrom),
   );
   await fill('.effect-dialog-body input[type="number"]', "1.02");
+  // Number fields commit on blur, which a real click on Save causes first.
+  await page.evaluate(() =>
+    document
+      .querySelector('.effect-dialog-body input[type="number"]')
+      .dispatchEvent(new FocusEvent("focusout", { bubbles: true })),
+  );
   await click('.effect-dialog-footer button[type="submit"]');
   await wait(async () => !(await exists("dialog[open]")));
   await save();
@@ -854,6 +896,8 @@ try {
     false,
   );
   const beforeFork = structuredClone(project);
+  // Fork stays disabled while an effect-library save is in flight.
+  await wait(() => exists('button[aria-label="Fork effect"]:not(:disabled)'));
   await click('button[aria-label="Fork effect"]');
   await wait(() => exists('input[aria-label="Effect name"]'));
   assert.equal(
@@ -1014,6 +1058,88 @@ try {
     ),
     saved.layers.length,
   );
+  // New project asks before replacing edits, detaches the file and is undoable.
+  const newProjectButton = 'header button[aria-label="New project"]';
+  await page.setViewport({ width: 1440, height: 980, deviceScaleFactor: 1 });
+  const header = await client.send("Page.captureScreenshot", {
+    format: "png",
+    clip: { x: 0, y: 0, width: 1440, height: 70, scale: 1 },
+  });
+  await writeFile(
+    path.join(output, "header.png"),
+    Buffer.from(header.value.data, "base64"),
+  );
+  await click(newProjectButton);
+  await wait(() => exists("dialog.new-project-dialog[open]"));
+  const prompt = await client.send("Page.captureScreenshot", {
+    format: "png",
+  });
+  await writeFile(
+    path.join(output, "new-project.png"),
+    Buffer.from(prompt.value.data, "base64"),
+  );
+  assert.match(
+    await page.evaluate(
+      () => document.querySelector("dialog.new-project-dialog").textContent,
+    ),
+    /may not be in fixture\.json/,
+  );
+  await page.evaluate(() =>
+    [...document.querySelectorAll("dialog[open] button")]
+      .find((e) => e.textContent === "Cancel")
+      .click(),
+  );
+  await wait(async () => !(await exists("dialog[open]")));
+  assert.deepEqual(project, saved);
+  await click(newProjectButton);
+  await wait(() => exists("dialog.new-project-dialog[open]"));
+  await page.evaluate(() =>
+    [...document.querySelectorAll("dialog[open] button")]
+      .find((e) => e.textContent === "Don’t save")
+      .click(),
+  );
+  await wait(() => project.layers.length === 0);
+  assert.equal(project.name, "Untitled project");
+  assert.equal(project.width, saved.width);
+  assert.equal(project.fps, saved.fps);
+  assert.equal(project.tracks.length, 1);
+  assert.equal(await page.evaluate(() => window.fixtureForgot), true);
+  await wait(() =>
+    exists('header button[title="Save project JSON… (⌘/Ctrl S)"]'),
+  );
+  assert.equal(
+    await page.evaluate(
+      () => document.querySelector(".project-name").textContent,
+    ),
+    "Untitled project",
+  );
+  // A fresh, unedited project is replaced without asking.
+  await click(newProjectButton);
+  await new Promise((resolve) => setTimeout(resolve, 200));
+  assert.equal(await exists("dialog[open]"), false);
+  await click('header button[aria-label="Undo"]');
+  await wait(() => project.layers.length === saved.layers.length);
+  assert.equal(project.name, saved.name);
+  // Backdrops land on their own full-length layers.
+  await click(
+    'button[title="Add a full-frame background or finishing overlay"]',
+  );
+  await wait(() => exists('button[aria-label="Add rings"]'));
+  await click('button[aria-label="Add rings"]');
+  await save();
+  // Save may finish choosing a file before the recovery copy lands.
+  await wait(() => project.layers.some((l) => l.type === "backdrop"));
+  const rings = project.layers.find((l) => l.type === "backdrop");
+  assert.equal(rings.backdrop.kind, "rings");
+  assert.equal(
+    project.tracks[0].id,
+    rings.trackId,
+    "backgrounds go under everything",
+  );
+  assert.ok((await text()).includes("BACKDROP"));
+  await click('header button[aria-label="Undo"]');
+  await save();
+  await wait(() => !project.layers.some((l) => l.type === "backdrop"));
   assert.deepEqual(errors, []);
   console.log(`Browser checks passed. Screenshots: ${output}`);
 } finally {

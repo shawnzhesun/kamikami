@@ -1,5 +1,6 @@
-import { AnimatedText } from "./AnimatedText";
-import React, { useEffect, useLayoutEffect, useState } from "react";
+import { AnimatedText, TextMetricsContext } from "./AnimatedText";
+import React, { useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { canvasMeasure } from "./kinetic-type";
 import { flushSync } from "react-dom";
 import { getRemotionEnvironment, useDelayRender } from "remotion";
 import { fontCSS, resolveFont } from "./font-assets";
@@ -81,6 +82,21 @@ export function FontText({
   }, [key, delayRender, continueRender, cancelRender]);
   const pending = !!layer.fontId && loaded !== key;
   const error = failure?.key === key ? failure.message : "";
+  const family = font
+    ? fontCSS(font, weight, style)
+    : fontStack(layer.fontFamily);
+  const tracking = (layer.fontSize > 50 ? -4 : 4) + letterSpacing;
+  // Kinetic type positions letters from real metrics once the face is loaded.
+  const measure = useMemo(
+    () =>
+      pending
+        ? null
+        : canvasMeasure(
+            `${style} ${weight} 100px ${family}`,
+            tracking / layer.fontSize,
+          ),
+    [pending, style, weight, family, tracking, layer.fontSize],
+  );
   return (
     <>
       <div
@@ -88,22 +104,22 @@ export function FontText({
         data-font-status={error ? "error" : pending ? "loading" : "ready"}
         style={{
           color: layer.color,
-          fontFamily: font
-            ? fontCSS(font, weight, style)
-            : fontStack(layer.fontFamily),
+          fontFamily: family,
           fontSize: layer.fontSize,
           fontWeight: weight,
           fontStyle: style,
           fontSynthesis: layer.fontId ? "none" : undefined,
           visibility: pending ? "hidden" : "visible",
-          letterSpacing: (layer.fontSize > 50 ? -4 : 4) + letterSpacing,
+          letterSpacing: tracking,
           lineHeight: 1.03,
           whiteSpace: "pre-wrap",
           textAlign: "left",
           textShadow: "0 4px 40px #0008",
         }}
       >
-        <AnimatedText layer={layer} effects={project.effects} time={time} />
+        <TextMetricsContext.Provider value={measure}>
+          <AnimatedText layer={layer} effects={project.effects} time={time} />
+        </TextMetricsContext.Provider>
       </div>
       {pending && (
         <div

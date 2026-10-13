@@ -4,6 +4,7 @@ import { orderedElements } from "./model";
 import { instanceAmountAt, resolveEffectInstanceAt } from "./effect-instance";
 import { animationTime } from "./keyframes";
 import { shapePath } from "./shapes";
+import { BackdropArt } from "./BackdropArt";
 import React from "react";
 import {
   AbsoluteFill,
@@ -11,10 +12,21 @@ import {
   Img,
   Video,
   Audio,
+  continueRender,
+  delayRender,
   useCurrentFrame,
   useVideoConfig,
 } from "remotion";
-import { layerAtTime, layerVolume, type Project, type Layer } from "./model";
+import {
+  artUses,
+  elementTime,
+  layerAtTime,
+  layerVolume,
+  type Project,
+  type Layer,
+} from "./model";
+import { isDecorArt, isFrameArt } from "./artwork";
+import { ArtworkStack } from "./ArtworkLayer";
 
 function Station({ width, height }: { width: number; height: number }) {
   // The artwork is drawn at 1920×1080 and covers other frame shapes.
@@ -155,9 +167,18 @@ function VisualLayer({
 }) {
   const frame = useCurrentFrame(),
     { fps } = useVideoConfig();
-  const t = frame / fps,
-    v = layerAtTime(layer, project.effects, t, project);
+  const t = frame / fps;
   const src = layer.src ? mediaOrigin + layer.src : "";
+  const uses = artUses(layer, project.effects, t);
+  // Copies and frames draw from the element's pixels; text has its own treatments.
+  const framed =
+    layer.type !== "title" && uses.some((u) => isFrameArt(u.art.kind));
+  const box = useArtworkBox(
+    layer,
+    src,
+    project,
+    framed && uses.some((u) => isDecorArt(u.art.kind)),
+  );
   if (missing)
     return layer.type === "audio" ? null : (
       <AbsoluteFill
@@ -184,21 +205,29 @@ function VisualLayer({
         startFrom={Math.round(layer.offset * fps)}
       />
     ) : null;
-  return (
-    <AbsoluteFill
-      style={{
-        justifyContent: "center",
-        alignItems: "center",
-        transform: `translate(${v.x}px,${v.y}px) scale(${v.scale}) rotate(${v.rotation}deg) perspective(${v.perspective}px) rotateX(${v.rotateX}deg) rotateY(${v.rotateY}deg) scale(${v.scaleX},${v.scaleY}) skewX(${v.skewX}deg)`,
-        opacity: v.opacity,
-        transformOrigin: `${50 + v.originX * 50}% ${50 + v.originY * 50}%`,
-        filter: `blur(${v.blur}px) brightness(${v.brightness}) contrast(${v.contrast}) saturate(${v.saturation})`,
-      }}
-    >
+  const style = (at: number): React.CSSProperties => {
+    const v = layerAtTime(layer, project.effects, at, project);
+    return {
+      justifyContent: "center",
+      alignItems: "center",
+      transform: `translate(${v.x}px,${v.y}px) scale(${v.scale}) rotate(${v.rotation}deg) perspective(${v.perspective}px) rotateX(${v.rotateX}deg) rotateY(${v.rotateY}deg) scale(${v.scaleX},${v.scaleY}) skewX(${v.skewX}deg)`,
+      opacity: v.opacity,
+      // Finishes blend with every layer below them.
+      ...(layer.backdrop && layer.backdrop.blend !== "normal"
+        ? { mixBlendMode: layer.backdrop.blend }
+        : {}),
+      transformOrigin: `${50 + v.originX * 50}% ${50 + v.originY * 50}%`,
+      filter: `blur(${v.blur}px) brightness(${v.brightness}) contrast(${v.contrast}) saturate(${v.saturation})${v.invert ? ` invert(${v.invert})` : ""}`,
+    };
+  };
+  // Stop-motion stutter holds effects and text animation along with the transform.
+  const content = (at: number, copy = false) => {
+    const tt = elementTime(layer, project.effects, at);
+    return (
       <GraphicEffects
         layer={layer}
         effects={project.effects}
-        time={t}
+        time={tt}
         width={project.width}
         height={project.height}
       >
@@ -210,8 +239,10 @@ function VisualLayer({
             layer={layer}
             project={project}
             mediaOrigin={mediaOrigin}
-            letterSpacing={v.letterSpacing}
-            time={t}
+            letterSpacing={
+              layerAtTime(layer, project.effects, at, project).letterSpacing
+            }
+            time={tt}
           />
         )}
         {layer.type === "image" && src && (
@@ -221,22 +252,36 @@ function VisualLayer({
           />
         )}
         {layer.type === "shape" && layer.shape && (
-          <ShapeArt layer={layer} time={t} project={project} />
+          <ShapeArt layer={layer} time={tt} project={project} />
+        )}
+        {layer.type === "backdrop" && layer.backdrop && (
+          <BackdropArt
+            backdrop={layer.backdrop}
+            t={Math.max(0, tt + layer.effectOffset)}
+            width={project.width}
+            height={project.height}
+            id={copy ? `${layer.id}-copy` : layer.id}
+          />
         )}
         {layer.type === "video" && src && (
           <Video
             src={src}
             startFrom={Math.round(layer.offset * fps)}
-            volume={(f) => layerVolume(layer, project.layers, f / fps)}
+            // Copies are silent: only the element itself plays its sound.
+            volume={
+              copy ? 0 : (f) => layerVolume(layer, project.layers, f / fps)
+            }
+            muted={copy}
             style={{ width: "100%", height: "100%", objectFit: "contain" }}
           />
         )}
         {layer.type !== "title" &&
           layer.type !== "shape" &&
+          layer.type !== "backdrop" &&
           layer.effects
             .filter((i) => i.enabled)
             .map((i) => {
-              const time = animationTime(layer, t);
+              const time = animationTime(layer, tt);
               const e = resolveEffectInstanceAt(i, project.effects, time);
               const amount = instanceAmountAt(i, time);
               return e && e.tint > 0 && amount > 0 ? (
@@ -252,8 +297,70 @@ function VisualLayer({
               ) : null;
             })}
       </GraphicEffects>
+    );
+  };
+  if (!framed)
+    return <AbsoluteFill style={style(t)}>{content(t)}</AbsoluteFill>;
+  return (
+    <AbsoluteFill>
+      <ArtworkStack
+        id={`art-${layer.id}`}
+        uses={uses}
+        t={t}
+        time={animationTime(layer, t)}
+        projectTime={layer.start + t}
+        duration={layer.effectDuration || layer.duration}
+        width={project.width}
+        height={project.height}
+        box={box}
+        start={layer.start}
+        frameStyle={style}
+        content={(at) => content(at, at !== t)}
+      />
     </AbsoluteFill>
   );
+}
+/** The visible box of an element in stage pixels, for framing decorations. */
+function useArtworkBox(
+  layer: Layer,
+  src: string,
+  project: Project,
+  measure: boolean,
+) {
+  const W = project.width,
+    H = project.height;
+  const image = measure && layer.type === "image" && !!src;
+  const [natural, setNatural] = React.useState<{
+    width: number;
+    height: number;
+  } | null>(null);
+  // Hold the frame until the artwork's size is known so exports frame it exactly.
+  const [handle] = React.useState(() =>
+    image ? delayRender(`Measuring ${layer.name}`) : null,
+  );
+  React.useEffect(() => {
+    if (!image) return;
+    const img = new Image();
+    img.onload = () =>
+      setNatural({ width: img.naturalWidth, height: img.naturalHeight });
+    img.onerror = () => setNatural({ width: W, height: H });
+    img.src = src;
+  }, [image, src, W, H]);
+  React.useEffect(() => {
+    if (handle !== null && natural) continueRender(handle);
+  }, [handle, natural]);
+  if (layer.type === "shape" && layer.shape) {
+    const outline = layer.shape.stroke ? (layer.shape.strokeWidth ?? 0) : 0;
+    return {
+      width: layer.shape.width + outline,
+      height: layer.shape.height + outline,
+    };
+  }
+  if (image && natural?.width && natural.height) {
+    const fit = Math.min(W / natural.width, H / natural.height);
+    return { width: natural.width * fit, height: natural.height * fit };
+  }
+  return { width: W, height: H };
 }
 /** A vector shape at its own size; effect tints color the shape, not the frame. */
 function ShapeArt({

@@ -68,8 +68,17 @@ test("every look renders without NaN and settles to plain, untransformed text", 
     // Continuous, whole-text and decorated looks have no neutral resting frame.
     if (
       [
-        "circle", "count", "odometer", "shimmer", "retype", "rotate", "typeloop",
-        "morph", "karaoke", "bubbles", "flap",
+        "circle",
+        "count",
+        "odometer",
+        "shimmer",
+        "retype",
+        "rotate",
+        "typeloop",
+        "morph",
+        "karaoke",
+        "bubbles",
+        "flap",
       ].includes(kind)
     )
       continue;

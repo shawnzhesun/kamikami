@@ -1,5 +1,8 @@
 import type { ShapePreset } from "./shapes";
 import { ShapeControls } from "./editor/ShapeControls";
+import { BackdropControls } from "./editor/BackdropControls";
+import { isFinishKind, type BackdropPreset } from "./backdrops";
+import { addFullLengthElement } from "./editor/tracks";
 import {
   DepthControls,
   TextMotionControls,
@@ -21,6 +24,11 @@ import {
 import { type TextEffect, textEffectNames } from "./text-effects";
 import { isTitleKind } from "./title-effects";
 import { TitleEffectControls } from "./editor/TitleEffectControls";
+import { ArtControls } from "./editor/ArtControls";
+import { artNames } from "./artwork";
+import { isKineticKind } from "./kinetic-type";
+import { isLookKind } from "./text-looks";
+import { isLayoutKind } from "./text-layouts";
 import { visualNames, type VisualPass } from "./visual-effects";
 import { isStyleKind, styleControls } from "./StyleGraphicEffects";
 import { isRevealKind, revealControls } from "./TransitionGraphicEffects";
@@ -59,6 +67,7 @@ import {
   Eye,
   EyeOff,
   Film,
+  FilePlus2,
   FolderOpen,
   Pause,
   Play,
@@ -75,7 +84,9 @@ import {
 } from "lucide-react";
 import { Composition } from "./Composition";
 import {
+  blankProject,
   initialProject,
+  makeBackdrop,
   makeLayer,
   makeShape,
   validateProject,
@@ -245,6 +256,12 @@ export function App() {
   const [mediaTrash, setMediaTrash] = useState<MediaAsset[]>([]);
   const [deleteProposal, setDeleteProposal] = useState<MediaAsset | null>(null);
   const deleteDialog = useRef<HTMLDialogElement>(null);
+  const [newProjectPrompt, setNewProjectPrompt] = useState(false);
+  const newProjectDialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    if (newProjectPrompt) newProjectDialog.current?.showModal();
+    else newProjectDialog.current?.close();
+  }, [newProjectPrompt]);
   const effectFile = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (deleteProposal) deleteDialog.current?.showModal();
@@ -371,6 +388,7 @@ export function App() {
       isGestureActive() ||
       !!previewProject ||
       !!deleteProposal ||
+      newProjectPrompt ||
       projectSettings ||
       effectModal ||
       !!layerSettings ||
@@ -974,8 +992,17 @@ export function App() {
       license,
       effect,
     };
-    const entry = await api("/api/effects/save", "POST", bundle);
-    await refreshEffects();
+    const entry: UserEffect = await api("/api/effects/save", "POST", bundle);
+    // Show the saved entry now: a library refresh that started earlier may
+    // still land after this one and must not drop it.
+    const merge = (entries: UserEffect[]) => [
+      ...entries.filter((e) => e.bundle.effect.id !== entry.bundle.effect.id),
+      entry,
+    ];
+    setUserEffects(merge);
+    const listed = await refreshEffects();
+    if (!listed.some((e) => e.bundle.effect.id === entry.bundle.effect.id))
+      setUserEffects(merge);
     setTab("effects");
     setStatus(`Saved ${effect.name} to My effects`);
     return entry;
@@ -1052,6 +1079,51 @@ export function App() {
       );
     } catch (e) {
       setStatus(`Save failed: ${(e as Error).message}`);
+    } finally {
+      fileOperation.current = false;
+      setFileBusy(false);
+    }
+  }
+  /** Work that New project would discard: edits not in the project file, or any edited recovery copy. */
+  function unsavedWork() {
+    const json = projectJson(current.current);
+    return fileSnapshot.current !== null
+      ? json !== fileSnapshot.current
+      : json !== projectJson(initialProject);
+  }
+  function requestNewProject() {
+    if (!ready || !fileAccessReady || fileOperation.current) return;
+    if (unsavedWork()) setNewProjectPrompt(true);
+    else void newProject();
+  }
+  async function saveThenNewProject() {
+    setNewProjectPrompt(false);
+    await save();
+    // Canceled or failed saves keep the current project open.
+    if (!unsavedWork()) await newProject();
+  }
+  async function newProject() {
+    setNewProjectPrompt(false);
+    if (!ready || !fileAccessReady || fileOperation.current) return;
+    fileOperation.current = true;
+    setFileBusy(true);
+    player.current?.pause();
+    try {
+      // Forget the old file first so Save can never overwrite it with the new project.
+      await projectFiles.current.forget();
+      projectFilenameRef.current = null;
+      setProjectFilename(null);
+      const next = blankProject(current.current);
+      if (!commit(next))
+        throw new Error("The new project could not be created.");
+      fileSnapshot.current = projectJson(current.current);
+      selectLayers([]);
+      setSelectedTrack(null);
+      seekPlayhead(0);
+      await checkpoint();
+      setStatus("New project · Undo brings back the previous one");
+    } catch (e) {
+      setStatus(`New project failed: ${(e as Error).message}`);
     } finally {
       fileOperation.current = false;
       setFileBusy(false);
@@ -1397,6 +1469,30 @@ export function App() {
         : preset.shape;
     addElement(makeShape(shape, preset.label, color));
   }
+  /** Backgrounds get a new bottom layer, finishes a new top layer, full length. */
+  function addBackdrop(preset: BackdropPreset) {
+    const finish = isFinishKind(preset.backdrop.kind);
+    const element = makeBackdrop(preset.backdrop, preset.label);
+    try {
+      if (
+        commit(
+          addFullLengthElement(
+            current.current,
+            element,
+            finish ? "top" : "bottom",
+          ),
+        )
+      ) {
+        selectLayer(element.id);
+        setRightTab("inspector");
+        setStatus(
+          `Added ${preset.label.toLowerCase()} on a new ${finish ? "top" : "bottom"} layer`,
+        );
+      }
+    } catch (e) {
+      setStatus((e as Error).message);
+    }
+  }
   /** Insert a new element at the playhead on the selected layer (or a new one). */
   function addElement(element: Layer) {
     const base = current.current;
@@ -1496,6 +1592,23 @@ export function App() {
       </section>
       {!effectReadOnly && (
         <>
+          {editingEffect.art &&
+            (() => {
+              const art = editingEffect.art;
+              return (
+                <section className="effect-settings-section">
+                  <h3>{artNames[art.kind]}</h3>
+                  <div className="visual-pass-fields">
+                    <ArtControls
+                      art={art}
+                      onChange={(patch) =>
+                        updateEffect({ art: { ...art, ...patch } })
+                      }
+                    />
+                  </div>
+                </section>
+              );
+            })()}
           {editingEffect.depth && (
             <DepthControls
               value={editingEffect.depth}
@@ -1518,7 +1631,10 @@ export function App() {
               return (
                 <section className="effect-settings-section">
                   <h3>{textEffectNames[text.kind]}</h3>
-                  {isTitleKind(text.kind) ? (
+                  {isTitleKind(text.kind) ||
+                  isKineticKind(text.kind) ||
+                  isLookKind(text.kind) ||
+                  isLayoutKind(text.kind) ? (
                     <div className="visual-pass-fields">
                       <TitleEffectControls text={text} onChange={change} />
                     </div>
@@ -2411,6 +2527,30 @@ export function App() {
       )}
 
       <dialog
+        ref={newProjectDialog}
+        className="duration-dialog new-project-dialog"
+        aria-labelledby="new-project-title"
+        onCancel={() => setNewProjectPrompt(false)}
+      >
+        <h2 id="new-project-title">Save changes to “{project.name}”?</h2>
+        <p>
+          {!projectFilename
+            ? "This project hasn’t been saved to a file."
+            : fileSnapshot.current === null
+              ? `Changes recovered from your last session may not be in ${projectFilename}.`
+              : `Your latest changes aren’t saved to ${projectFilename}.`}{" "}
+          A new project replaces it in the editor. Undo can still bring it back
+          in this session.
+        </p>
+        <div className="dialog-actions">
+          <button onClick={() => setNewProjectPrompt(false)}>Cancel</button>
+          <button onClick={() => void newProject()}>Don’t save</button>
+          <button className="primary" onClick={() => void saveThenNewProject()}>
+            {projectFilename ? "Save" : "Save…"}
+          </button>
+        </div>
+      </dialog>
+      <dialog
         ref={deleteDialog}
         className="duration-dialog"
         onCancel={() => setDeleteProposal(null)}
@@ -2449,16 +2589,38 @@ export function App() {
         </div>
       </dialog>
       <header>
-        <div className="brand">
-          <img
-            className="brand-symbol"
-            src="/kamikami-icon-64.png?v=20261007-1332"
-            alt=""
-            width={32}
-            height={32}
-            draggable={false}
-          />
-          KamiKami<span className="version">LOCAL / 0.1</span>
+        <div className="header-start">
+          <div className="brand">
+            <img
+              className="brand-symbol"
+              src="/kamikami-icon-64.png?v=20261007-1332"
+              alt=""
+              width={32}
+              height={32}
+              draggable={false}
+            />
+            KamiKami<span className="version">LOCAL / 0.1</span>
+          </div>
+          <div className="header-file-actions">
+            <button
+              onClick={requestNewProject}
+              disabled={!ready || !fileAccessReady || fileBusy}
+              title="Start an empty project"
+              aria-label="New project"
+            >
+              <FilePlus2 size={15} />
+              <span className="header-label">New project</span>
+            </button>
+            <button
+              onClick={() => void openProject()}
+              disabled={!ready || !fileAccessReady || fileBusy}
+              title="Open project JSON"
+              aria-label="Open project"
+            >
+              <FolderOpen size={15} />
+              <span className="header-label">Open project</span>
+            </button>
+          </div>
         </div>
         <button
           className="project-name"
@@ -2489,15 +2651,6 @@ export function App() {
             <Redo2 size={17} />
           </button>
           <span className="divider" />
-          <button
-            className="open-project-button"
-            onClick={() => void openProject()}
-            disabled={!ready || !fileAccessReady || fileBusy}
-            title="Open project JSON"
-          >
-            <FolderOpen size={15} />
-            Open project
-          </button>
           <button
             onClick={() => void save()}
             disabled={!ready || !fileAccessReady || fileBusy}
@@ -2848,6 +3001,7 @@ export function App() {
             }}
             onAddText={addTitle}
             onAddShape={addShape}
+            onAddBackdrop={addBackdrop}
             onApplyEffect={applyEffect}
           />
         </main>
@@ -3160,6 +3314,21 @@ export function App() {
                       }
                     />
                   )}
+                  {selected.type === "backdrop" && selected.backdrop && (
+                    <BackdropControls
+                      layer={selected}
+                      onChange={(patch, group) => {
+                        const latest = current.current.layers.find(
+                          (l) => l.id === selected.id,
+                        );
+                        if (latest?.backdrop)
+                          updateLayer(
+                            { backdrop: { ...latest.backdrop, ...patch } },
+                            group,
+                          );
+                      }}
+                    />
+                  )}
                   {selected.type !== "audio" && (
                     <>
                       <div className="section-line">
@@ -3304,9 +3473,6 @@ export function App() {
         <span role="status" aria-live="polite" title={status}>
           <span className="status-dot" />
           {status}
-        </span>
-        <span>
-          KAMIKAMI LAB <span className="divider" /> LOCAL PROTOTYPE
         </span>
       </footer>
       {exportJob && (

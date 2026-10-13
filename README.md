@@ -42,7 +42,7 @@ Codex/Claude Code integration remains available as an advanced option through th
 - Drag clips to see their destination time before release. Escape cancels a drag. The timeline ruler supports click/drag scrubbing, arrow keys for one-frame steps, Shift+arrows for one-second steps, and Home/End.
 - Click the project name in the header to open the project settings dialog. The preview fits its window automatically.
 - The header palette button opens four app themes: Original, Olive, Daylight, and Dusk. Each option shows its four palette colors; changes apply immediately and persist across reloads. Project artwork and effect colors remain independent of the app theme. Selected cards use a full background fill without left-edge accents.
-- Drag the divider beside the library to resize it. Width persists across reloads; double-click resets it. Media includes Add media, delete and trash recovery controls. Open project sits next to Save in the header, with the project title centered. Add text from the Timeline toolbar.
+- Drag the divider beside the library to resize it. Width persists across reloads; double-click resets it. Media includes Add media, delete and trash recovery controls. New project and Open project sit right of the logo, with the project title centered; on narrow windows they shrink to icons. Add text from the Timeline toolbar.
 
 ## Canvas, timeline, and media tools
 
@@ -57,7 +57,7 @@ See [the videoplayback.mp4 re-creation case study](docs/videoplayback-recreation
 
 ## Storage
 
-`.kamikami/project.json` is the current autosaved project. `.kamikami/media/` holds imported copies, and `.kamikami/library.json` persists their names and metadata. `.kamikami/exports/` holds rendered videos and agent-review PNG frames. `.kamikami/effects.json` stores reusable user effects. `.kamikami/fonts/` holds imported font files, and `.kamikami/fonts.json` stores the font catalog shared by projects in the workspace. Projects store snapshots of their custom font definitions; font bytes remain in the workspace. Keep the fonts directory when moving a project. Bundled fonts and their copyright/license notices live in `public/fonts/`. Favorites and recent font choices are local browser preferences. Deleted media is hidden in Media trash with its source bytes retained for recovery. `.kamikami/assistant.json` stores local conversations and connection metadata (never the API key). All workspace data is gitignored. Project writes use atomic rename. Header Save (⌘/Ctrl+S) writes project JSON to a chosen file: the first save opens a location picker, later saves overwrite that file. Open project in the header makes the opened JSON the current save destination after validation. The destination is remembered across app sessions; a missing file prompts for a location again. Background autosave continues to update the local recovery copy without modifying the chosen JSON. Desktop mode uses native file dialogs; browser mode requires file access APIs (Chrome/Edge) and may ask to renew file permission after reopening. Project JSON references workspace media and fonts; it does not embed those files. The agent save_project command continues to flush the local recovery copy without opening a file dialog. Undo history is in memory and resets on reload.
+`.kamikami/project.json` is the current autosaved project. `.kamikami/media/` holds imported copies, and `.kamikami/library.json` persists their names and metadata. `.kamikami/exports/` holds rendered videos and agent-review PNG frames. `.kamikami/effects.json` stores reusable user effects. `.kamikami/fonts/` holds imported font files, and `.kamikami/fonts.json` stores the font catalog shared by projects in the workspace. Projects store snapshots of their custom font definitions; font bytes remain in the workspace. Keep the fonts directory when moving a project. Bundled fonts and their copyright/license notices live in `public/fonts/`. Favorites and recent font choices are local browser preferences. Deleted media is hidden in Media trash with its source bytes retained for recovery. `.kamikami/assistant.json` stores local conversations and connection metadata (never the API key). All workspace data is gitignored. Project writes use atomic rename. Header Save (⌘/Ctrl+S) writes project JSON to a chosen file: the first save opens a location picker, later saves overwrite that file. Open project in the header makes the opened JSON the current save destination after validation. New project replaces the editor contents with an empty project that keeps the canvas size and frame rate. If the current project has changes not in its file, it first asks to Save, Don’t save or Cancel. It also forgets the save destination, so the next Save asks for a new file and never overwrites the previous project; Undo brings the previous project back within the session. The destination is remembered across app sessions; a missing file prompts for a location again. Background autosave continues to update the local recovery copy without modifying the chosen JSON. Desktop mode uses native file dialogs; browser mode requires file access APIs (Chrome/Edge) and may ask to renew file permission after reopening. Project JSON references workspace media and fonts; it does not embed those files. The agent save_project command continues to flush the local recovery copy without opening a file dialog. Undo history is in memory and resets on reload.
 
 Keep the entire `.kamikami` directory to preserve media when moving this prototype. There is currently one active project per workspace. Rendering is local at the project's size and frame rate (1920×1080 at 24 fps by default), with one export at a time. Long projects may be slow; start with short scenes.
 
@@ -203,3 +203,37 @@ The bundled `ffmpeg-static` build is GPL with nonfree components. It is fine for
 - Times are checked against each asset's duration. Unprobed files get the free local probe first.
 - Written fields are marked manual. Later automatic analysis keeps them and skips the paid stages they replace (summary, transcription, image description). Use `clear` to remove them.
 - **Details** shows the description and which fields were written by you or the assistant.
+
+## Kinetic type and lyric-video fonts — October 12, 2026
+
+A new **Kinetic type** category adds 36 cards for lyric-video typography. They are reimplemented from a study of the techniques in [JIZURA](https://github.com/852wa/JIZURA) (MIT); no code was copied.
+- **Entrances (20):** spring, hop, roll, hinge drop, word spin, word slam, fan open, drum unroll, shuffle, card flip, ripple, magnifier sweep, glint, brush, ink drop, decode, matrix rain, push in, word flash and inertia slide. Each can also play backwards as an exit.
+- **Exits (7):** word kick, launch, flutter away, domino topple, close the gap, burn away and tornado.
+- **Holds (9):** plucked string, beat hop, color run, dangle, counter rock, word ride, gap breath, word pulse and beat lean. Holds loop on a **Tempo (BPM)** setting, start once the element's entrances finish and stop before its exits, so one title can stack an entrance, a hold and an exit.
+- **Word** units move whole words as one rigid piece (hinges, spins, slams); **Whole title** moves the entire text. Stagger order gains **Center out** and **Edges in**.
+- Motions use the element's real letter positions, measured from the loaded font.
+- They need `kamikami-visual-v8`; restart the desktop app after updating.
+
+Sixteen font families are added, all under the SIL Open Font License: Dela Gothic One, Zen Kaku Gothic New, Zen Old Mincho, Shippori Mincho B1, Kaisei Tokumin, M PLUS Rounded 1c, Kiwi Maru, Mochiy Pop One, DotGothic16, Reggae One, Rampart One, Potta One, Klee One, Yuji Syuku, IBM Plex Sans and IBM Plex Mono. The Japanese families ship as Latin-only WOFF2 subsets (about 680 KB in total); IBM Plex ships unchanged because its license reserves the name. Notices are in `public/fonts/LICENSES.txt`. See [kinetic type](docs/kinetic-type.md).
+
+## Text treatments and backdrops — October 12, 2026
+
+JIZURA's frames look rich because every shot stacks motion, a paint treatment, decorations, a full-frame background, a finish and one shared palette. KamiKami has each of those as separate pieces, so they can be combined freely rather than picked as presets.
+- **Text treatments** (23 cards): outline only, keyline, double outline, extrude, long shadow, offset shadow, neon tube, chrome, sticker, shadow stack, halftone fill, accent word, color ghosts that trail any motion, reflection, cut and shift, word boxes, word plates, corner brackets, rules, an index label, a text ticker, caution tape and a ray burst. They combine with kinetic type and each other.
+- **+ Backdrop** adds full-frame, animated elements on their own full-length layers. Backgrounds go under everything: soft gradient, concentric rings, halftone fade, sunburst rays, stripes, dot grid, starfield, equalizer bars, scan bands, retro grid, text wall and split color. Finishes go on top and blend with every layer below: film grain, scanlines, vignette and light leak. The assistant uses `add_backdrop`.
+- Requires `kamikami-visual-v8` and the `backdrop` element type; restart the desktop app after updating. Projects with backdrops are saved as version 3. See [text treatments and backdrops](docs/text-treatments.md).
+
+## Artwork treatments — October 12, 2026
+
+Fourteen **Artwork** cards treat your own images, video, shapes and backdrops, so artwork moves with the same energy as the type. Each is one piece to combine, not a preset.
+- **Camera and beat:** handheld drift, beat punch, beat jolt, beat strobe and stop-motion stutter. Beat cards share one tempo counted from the project start, so every element hits together. Camera cards work on text too.
+- **Copies:** color ghost trails that follow any motion, and slice shifts that knock on the beat or slide in and out.
+- **Framing:** print border, block shadow, offset frame, corner brackets, crop marks, an index label and tape corners, laid out around the artwork's visible box.
+- Requires `kamikami-visual-v8`; restart the desktop app after updating. See [artwork treatments](docs/artwork.md).
+
+## Kinetic layouts — October 12, 2026
+
+Ten **Kinetic layouts** cards compose a whole lyric line instead of moving letters in place: each word moves as one piece from the normal line into a designed arrangement, and the move is the animation.
+- Justified slam stack, key word split, size steps and cropped giant word (the key word huge and cropped behind the readable line).
+- Word swap (one word per beat in the center, then the full line), type then slam, flow then snap, seesaw on the beat, arc ride and band reveal.
+- Layouts stack with kinetic motions and text treatments. Requires `kamikami-visual-v8`. See [kinetic type](docs/kinetic-type.md#kinetic-layouts).

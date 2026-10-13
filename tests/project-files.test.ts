@@ -13,7 +13,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { initialProject } from "../src/model";
+import { blankProject, initialProject, validateProject } from "../src/model";
 import {
   ProjectFileAccess,
   projectJson,
@@ -32,7 +32,7 @@ test("desktop startup registers project IPC before loading the editor and Save r
     let loaded = false;
     let dialogs = 0;
     const assertHandlers = () => {
-      for (const name of ["info", "open", "accept", "save"])
+      for (const name of ["info", "open", "accept", "save", "forget"])
         assert.ok(
           handlers.has(`project-file:${name}`),
           `Missing ${name} handler`,
@@ -211,6 +211,46 @@ test("desktop Save chooses a JSON once, overwrites atomically, and restores the 
     await unlink(filename);
     await reopened.save(projectJson(initialProject), initialProject.name);
     assert.equal(prompts, 2, "A removed file asks for a destination again");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("New project forgets the desktop destination so Save cannot overwrite the old file", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "kamikami-project-new-"));
+  try {
+    const old = path.join(dir, "Old movie.json");
+    const fresh = path.join(dir, "Untitled project.json");
+    const metadata = path.join(dir, "preferences", "destination.json");
+    let target = old;
+    const dialogs = { save: async () => target, open: async () => old };
+    const files = new ProjectFiles(metadata, dialogs);
+    await files.restore();
+    await files.save(projectJson(initialProject), "Old movie");
+    await files.forget();
+    assert.equal(files.info(), null);
+    const reopened = new ProjectFiles(metadata, dialogs);
+    assert.equal(await reopened.restore(), null, "forgetting persists");
+    target = fresh;
+    const blank = blankProject({
+      ...initialProject,
+      width: 1080,
+      height: 1920,
+    });
+    await files.save(projectJson(blank), blank.name);
+    assert.equal(
+      JSON.parse(await readFile(old, "utf8")).name,
+      initialProject.name,
+      "the old file is untouched",
+    );
+    assert.equal(JSON.parse(await readFile(fresh, "utf8")).layers.length, 0);
+    // The blank project keeps the canvas format and starts with one empty layer.
+    assert.deepEqual(
+      [blank.width, blank.height, blank.fps, blank.layers, blank.effects],
+      [1080, 1920, initialProject.fps, [], []],
+    );
+    assert.equal(blank.tracks!.length, 1);
+    assert.deepEqual(validateProject(blank), blank);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

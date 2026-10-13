@@ -14,6 +14,7 @@ declare global {
       open(): Promise<{ text: string; name: string; token: string } | null>;
       accept(token: string): Promise<FileInfo>;
       save(text: string, name: string): Promise<FileResult | null>;
+      forget(): Promise<void>;
     };
     showSaveFilePicker?: (options: {
       suggestedName: string;
@@ -37,7 +38,7 @@ const abort = (error: unknown) =>
 function projectFileError(error: unknown): unknown {
   if (
     error instanceof Error &&
-    /No handler registered for ['"]project-file:(info|open|accept|save)['"]/.test(
+    /No handler registered for ['"]project-file:(info|open|accept|save|forget)['"]/.test(
       error.message,
     )
   ) {
@@ -50,8 +51,9 @@ function projectFileError(error: unknown): unknown {
 export const projectJson = (project: Project) =>
   JSON.stringify(validateProject(project), null, 2) + "\n";
 
+/** A handle stores it, `null` forgets it, no argument reads it. */
 async function handleStore(
-  handle?: ProjectFileHandle,
+  handle?: ProjectFileHandle | null,
 ): Promise<ProjectFileHandle | undefined> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open("kamikami-project-files", 1);
@@ -61,15 +63,21 @@ async function handleStore(
       const db = request.result;
       const transaction = db.transaction(
         "files",
-        handle ? "readwrite" : "readonly",
+        handle !== undefined ? "readwrite" : "readonly",
       );
       const store = transaction.objectStore("files");
       const operation = handle
         ? store.put(handle, "current")
-        : store.get("current");
+        : handle === null
+          ? store.delete("current")
+          : store.get("current");
       transaction.oncomplete = () => {
         db.close();
-        resolve(handle ?? operation.result);
+        resolve(
+          handle === null
+            ? undefined
+            : (handle ?? (operation.result as ProjectFileHandle)),
+        );
       };
       transaction.onabort = () => {
         db.close();
@@ -155,6 +163,21 @@ export class ProjectFileAccess {
       return { project, file: this.file };
     } catch (error) {
       if (abort(error)) return null;
+      throw projectFileError(error);
+    } finally {
+      this.busy = false;
+    }
+  }
+  /** Detach from the current file so the next Save asks for a new location. */
+  async forget() {
+    this.lock();
+    try {
+      if (window.kamikamiProjectFiles)
+        await window.kamikamiProjectFiles.forget();
+      else await handleStore(null);
+      this.handle = undefined;
+      this.file = null;
+    } catch (error) {
       throw projectFileError(error);
     } finally {
       this.busy = false;

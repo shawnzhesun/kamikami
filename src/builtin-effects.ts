@@ -7,6 +7,7 @@ import {
 import { builtinTextSettings, TextEffectSchema } from "./text-effects";
 import { DepthSchema, FieldSchema, ParticleSchema } from "./motion";
 import { type VisualPass } from "./visual-effects";
+import { makeArt, type Art, type ArtKind } from "./artwork";
 
 const pass = (
   kind: VisualPass["kind"],
@@ -467,7 +468,7 @@ export const legacyBuiltinEffects: Effect[] = [
 
 type EffectParameters = Pick<
   Effect,
-  "channels" | "passes" | "color" | "tint" | "text" | "depth" | "origin"
+  "channels" | "passes" | "color" | "tint" | "text" | "depth" | "origin" | "art"
 >;
 type EffectVariation = {
   id: string;
@@ -488,6 +489,7 @@ const parameters = (effect: Effect): EffectParameters => ({
   ...(effect.text ? { text: effect.text } : {}),
   ...(effect.depth ? { depth: effect.depth } : {}),
   ...(effect.origin ? { origin: effect.origin } : {}),
+  ...(effect.art ? { art: effect.art } : {}),
   color: effect.color,
   tint: effect.tint,
 });
@@ -2683,6 +2685,1407 @@ export const packEffectFamilies: EffectFamily[] = packCards
   }));
 for (const card of packCards) styleCategories.set(card.id, card.category);
 
+/** Kinetic type (kamikami-visual-v8): rigid-word and letter motion inspired by lyric videos. */
+const kin = (kind: string, patch: Record<string, unknown> = {}) =>
+  title({ kind, ...patch });
+const out = { motion: { order: "forward", direction: "out" } };
+const kineticCards: StyleCard[] = [
+  {
+    id: "kinetic-spring",
+    name: "Spring in",
+    category: "Kinetic type",
+    description:
+      "Letters or words spring in from below and land exactly at rest, stretching along their speed like a rubber toy. Text elements only.",
+    variations: [
+      [
+        "spring-letters",
+        "Letters",
+        kin("spring", { seconds: 1.1, stagger: 0.45 }),
+      ],
+      [
+        "spring-words",
+        "Words",
+        kin("spring", {
+          unit: "word",
+          seconds: 1.2,
+          stagger: 0.4,
+          distance: 0.9,
+        }),
+      ],
+      [
+        "spring-side",
+        "Sideways",
+        kin("spring", { direction: "left", seconds: 1.1, stagger: 0.4 }),
+      ],
+    ],
+  },
+  {
+    id: "kinetic-hop",
+    name: "Hop in",
+    category: "Kinetic type",
+    description:
+      "Each letter jumps up from below the line, lands with a squash and settles with two small hops. Text elements only.",
+    variations: [
+      ["hop-letters", "Letters", kin("hop", { seconds: 1.3, stagger: 0.5 })],
+      [
+        "hop-words",
+        "Words",
+        kin("hop", { unit: "word", seconds: 1.4, stagger: 0.4 }),
+      ],
+    ],
+  },
+  {
+    id: "kinetic-roll",
+    name: "Roll in",
+    category: "Kinetic type",
+    description:
+      "Letters roll in like wheels, turning exactly as far as they travel, and settle upright. Text elements only.",
+    variations: [
+      [
+        "roll-left",
+        "From the left",
+        kin("wheel", { direction: "left", seconds: 1.2, stagger: 0.45 }),
+      ],
+      [
+        "roll-right",
+        "From the right",
+        kin("wheel", {
+          direction: "right",
+          seconds: 1.2,
+          stagger: 0.45,
+          motion: { order: "reverse", direction: "in" },
+        }),
+      ],
+    ],
+  },
+  {
+    id: "kinetic-hinge",
+    name: "Hinge drop",
+    category: "Kinetic type",
+    description:
+      "Each word swings down from one corner like a sign on a hinge and bounces to rest. Text elements only.",
+    variations: [
+      [
+        "hinge-left",
+        "Left hinge",
+        kin("hinge", {
+          unit: "word",
+          direction: "left",
+          seconds: 1.2,
+          stagger: 0.4,
+        }),
+      ],
+      [
+        "hinge-right",
+        "Right hinge",
+        kin("hinge", {
+          unit: "word",
+          direction: "right",
+          seconds: 1.2,
+          stagger: 0.4,
+        }),
+      ],
+    ],
+  },
+  {
+    id: "kinetic-spin",
+    name: "Word spin",
+    category: "Kinetic type",
+    description:
+      "Every word spins in as one piece from a tiny size, alternating direction, with an overshoot. Text elements only.",
+    variations: [
+      [
+        "word-spin",
+        "Spin",
+        kin("spin", { unit: "word", seconds: 1, stagger: 0.45 }),
+      ],
+    ],
+  },
+  {
+    id: "kinetic-slam",
+    name: "Word slam",
+    category: "Kinetic type",
+    description:
+      "Words drop onto the page from huge and tilted, one after another, with an accelerating hit. Text elements only.",
+    variations: [
+      [
+        "slam-words",
+        "Words",
+        kin("slam", { unit: "word", seconds: 1, stagger: 0.55 }),
+      ],
+      [
+        "slam-title",
+        "Whole title",
+        kin("slam", { unit: "title", seconds: 0.45, stagger: 0 }),
+      ],
+    ],
+  },
+  {
+    id: "kinetic-fan",
+    name: "Fan open",
+    category: "Kinetic type",
+    description:
+      "The letters start stacked on one rib and fan open around a pivot below the line, like a folding fan. Text elements only.",
+    variations: [
+      ["fan-open", "Fan", kin("fan", { seconds: 1.2, stagger: 0.15 })],
+    ],
+  },
+  {
+    id: "kinetic-drum",
+    name: "Drum unroll",
+    category: "Kinetic type",
+    description:
+      "Letters ride a spinning drum, wrapping around its back, then unroll flat into the line. Text elements only.",
+    variations: [
+      ["drum-unroll", "Drum", kin("drum", { seconds: 1.4, stagger: 0 })],
+    ],
+  },
+  {
+    id: "kinetic-shuffle",
+    name: "Shuffle",
+    category: "Kinetic type",
+    description:
+      "Letters start scrambled and trade places along arcs, shell-game style, until the word reads. Text elements only.",
+    variations: [
+      [
+        "shuffle",
+        "Shuffle",
+        kin("shuffle", {
+          seconds: 1.3,
+          stagger: 0.3,
+          motion: { order: "random", direction: "in" },
+        }),
+      ],
+    ],
+  },
+  {
+    id: "kinetic-cardflip",
+    name: "Card flip",
+    category: "Kinetic type",
+    description:
+      "Colored tiles pop up and flip over one by one to reveal the letters on their backs. Text elements only.",
+    variations: [
+      [
+        "cardflip-coral",
+        "Coral tiles",
+        kin("cardflip", {
+          seconds: 1.3,
+          stagger: 0.55,
+          color: "#f2765e",
+          secondary: "#1a1410",
+        }),
+      ],
+      [
+        "cardflip-ink",
+        "Ink tiles",
+        kin("cardflip", {
+          seconds: 1.3,
+          stagger: 0.55,
+          color: "#141414",
+          secondary: "#000000",
+        }),
+      ],
+    ],
+  },
+  {
+    id: "kinetic-ripple",
+    name: "Ripple in",
+    category: "Kinetic type",
+    description:
+      "A wave spreads out from the middle of the title; letters swell and push outward as it passes. Text elements only.",
+    variations: [
+      [
+        "ripple-in",
+        "Ripple",
+        kin("ripple", {
+          seconds: 1.4,
+          stagger: 0,
+          motion: { order: "center", direction: "in" },
+        }),
+      ],
+    ],
+  },
+  {
+    id: "kinetic-lens",
+    name: "Magnifier sweep",
+    category: "Kinetic type",
+    description:
+      "A magnifier passes along the line; letters swell under it and light up once it has passed. Text elements only.",
+    variations: [
+      ["lens-sweep", "Sweep", kin("lens", { seconds: 1.6, stagger: 0 })],
+    ],
+  },
+  {
+    id: "kinetic-glint",
+    name: "Glint reveal",
+    category: "Kinetic type",
+    description:
+      "A slanted light band sweeps across, uncovering the text; a faint ghost of the title waits ahead of it. Text elements only.",
+    variations: [
+      [
+        "glint-white",
+        "White glint",
+        kin("glint", { seconds: 1.3, stagger: 0, color: "#ffffff" }),
+      ],
+      [
+        "glint-gold",
+        "Gold glint",
+        kin("glint", { seconds: 1.3, stagger: 0, color: "#ffd36b" }),
+      ],
+    ],
+  },
+  {
+    id: "kinetic-brush",
+    name: "Brush reveal",
+    category: "Kinetic type",
+    description:
+      "A dry brush paints each line in turn; bristle strips lag behind the stroke for a ragged edge. Text elements only.",
+    variations: [
+      ["brush-reveal", "Brush", kin("brush", { seconds: 1.4, stagger: 0 })],
+    ],
+  },
+  {
+    id: "kinetic-ink",
+    name: "Ink drop",
+    category: "Kinetic type",
+    description:
+      "An ink drop lands on each letter and spreads into a wobbly blot that reveals it. Text elements only.",
+    variations: [
+      [
+        "ink-drop",
+        "Ink",
+        kin("ink", {
+          seconds: 1.5,
+          stagger: 0.6,
+          motion: { order: "random", direction: "in" },
+        }),
+      ],
+    ],
+  },
+  {
+    id: "kinetic-decode",
+    name: "Decode",
+    category: "Kinetic type",
+    description:
+      "A cursor block decodes the text; noisy signs run ahead of it and each letter flashes as it resolves. Text elements only.",
+    variations: [
+      ["decode", "Decode", kin("decode", { seconds: 1.6, stagger: 0 })],
+    ],
+  },
+  {
+    id: "kinetic-rain",
+    name: "Matrix rain",
+    category: "Kinetic type",
+    description:
+      "Letters fall as glowing signs trailing copies of themselves, lower lines first, then cool into the real text. Text elements only.",
+    variations: [
+      [
+        "rain-green",
+        "Green",
+        kin("rain", { seconds: 1.8, stagger: 0.55, color: "#7dff9a" }),
+      ],
+      [
+        "rain-amber",
+        "Amber",
+        kin("rain", { seconds: 1.8, stagger: 0.55, color: "#ffb347" }),
+      ],
+    ],
+  },
+  {
+    id: "kinetic-push",
+    name: "Push in",
+    category: "Kinetic type",
+    description:
+      "Each word slides in at the end of its line and shoves the words before it back into place. Text elements only.",
+    variations: [
+      [
+        "push-in",
+        "Push",
+        kin("push", { unit: "word", seconds: 1.4, stagger: 0 }),
+      ],
+    ],
+  },
+  {
+    id: "kinetic-flash",
+    name: "Word flash",
+    category: "Kinetic type",
+    description:
+      "Words flash big in the center one at a time, then the whole line flies into place, a lyric-video staple. Text elements only.",
+    variations: [
+      [
+        "word-flash",
+        "Flash",
+        kin("flash", { unit: "word", seconds: 2, stagger: 0 }),
+      ],
+    ],
+  },
+  {
+    id: "kinetic-inertia",
+    name: "Inertia slide",
+    category: "Kinetic type",
+    description:
+      "The line slides in and stops front first; trailing letters bunch up and stretch with their speed. Text elements only.",
+    variations: [
+      [
+        "inertia-left",
+        "From the left",
+        kin("inertia", {
+          direction: "left",
+          seconds: 1.1,
+          stagger: 0.32,
+          motion: { order: "reverse", direction: "in" },
+        }),
+      ],
+      [
+        "inertia-right",
+        "From the right",
+        kin("inertia", { direction: "right", seconds: 1.1, stagger: 0.32 }),
+      ],
+    ],
+  },
+  {
+    id: "kinetic-kick",
+    name: "Word kick",
+    category: "Kinetic type",
+    description:
+      "Exit: words get kicked up and down alternately, tumbling out of frame. Plays over the end of the clip. Text elements only.",
+    variations: [
+      [
+        "word-kick",
+        "Kick",
+        kin("kick", { unit: "word", seconds: 0.9, stagger: 0.35, ...out }),
+      ],
+    ],
+  },
+  {
+    id: "kinetic-launch",
+    name: "Launch",
+    category: "Kinetic type",
+    description:
+      "Exit: a small wind-up, then the line accelerates away with the leading letter first, stretched by speed. Text elements only.",
+    variations: [
+      [
+        "launch-right",
+        "To the right",
+        kin("launch", {
+          direction: "right",
+          seconds: 0.9,
+          stagger: 0.32,
+          motion: { order: "reverse", direction: "out" },
+        }),
+      ],
+      [
+        "launch-left",
+        "To the left",
+        kin("launch", {
+          direction: "left",
+          seconds: 0.9,
+          stagger: 0.32,
+          ...out,
+        }),
+      ],
+    ],
+  },
+  {
+    id: "kinetic-flutter",
+    name: "Flutter away",
+    category: "Kinetic type",
+    description:
+      "Exit: letters come loose like leaves or paper, swaying, flipping over and falling faster. Text elements only.",
+    variations: [
+      [
+        "flutter-away",
+        "Flutter",
+        kin("flutter", {
+          seconds: 1.6,
+          stagger: 0.5,
+          secondary: "#c9b48a",
+          motion: { order: "random", direction: "out" },
+        }),
+      ],
+    ],
+  },
+  {
+    id: "kinetic-domino",
+    name: "Domino topple",
+    category: "Kinetic type",
+    description:
+      "Exit: letters topple over their bottom corners one after another like dominoes. Text elements only.",
+    variations: [
+      [
+        "domino-topple",
+        "Topple",
+        kin("domino", {
+          direction: "right",
+          seconds: 1.2,
+          stagger: 0.55,
+          ...out,
+        }),
+      ],
+    ],
+  },
+  {
+    id: "kinetic-closegap",
+    name: "Close the gap",
+    category: "Kinetic type",
+    description:
+      "Exit: words disappear from both ends towards the middle while the rest slide together. Text elements only.",
+    variations: [
+      [
+        "close-gap",
+        "Close",
+        kin("closegap", { unit: "word", seconds: 1.2, stagger: 0, ...out }),
+      ],
+    ],
+  },
+  {
+    id: "kinetic-burn",
+    name: "Burn away",
+    category: "Kinetic type",
+    description:
+      "Exit: letters heat up, char and burn away from the bottom, throwing off embers. Text elements only.",
+    variations: [
+      [
+        "burn-away",
+        "Burn",
+        kin("burn", {
+          seconds: 1.4,
+          stagger: 0.5,
+          color: "#ff8a3d",
+          secondary: "#2a1a12",
+          motion: { order: "random", direction: "out" },
+        }),
+      ],
+    ],
+  },
+  {
+    id: "kinetic-tornado",
+    name: "Tornado",
+    category: "Kinetic type",
+    description:
+      "Exit: the letters are pulled into a spinning column that lifts off, shrinking as they pass behind it. Text elements only.",
+    variations: [
+      [
+        "tornado",
+        "Tornado",
+        kin("tornado", { seconds: 1.4, stagger: 0.2, ...out }),
+      ],
+    ],
+  },
+  {
+    id: "kinetic-pluck",
+    name: "Plucked string",
+    category: "Kinetic type",
+    description:
+      "Hold: the line vibrates like a plucked string, re-plucked every four beats. Waits for entrances, stops before exits. Text elements only.",
+    variations: [["pluck", "Pluck", kin("pluck", { tempo: 120 })]],
+  },
+  {
+    id: "kinetic-beathop",
+    name: "Beat hop",
+    category: "Kinetic type",
+    description:
+      "Hold: one letter or word hops on every beat, nudging its neighbors. Set the tempo to your song. Text elements only.",
+    variations: [
+      ["beathop-letters", "Letters", kin("beathop", { tempo: 120 })],
+      [
+        "beathop-words",
+        "Words",
+        kin("beathop", { unit: "word", tempo: 120, distance: 0.8 }),
+      ],
+    ],
+  },
+  {
+    id: "kinetic-colorrun",
+    name: "Color run",
+    category: "Kinetic type",
+    description:
+      "Hold: a soft accent highlight runs along the text over and over. Text elements only.",
+    variations: [
+      ["color-run", "Run", kin("colorrun", { speed: 1, color: "#ffd36b" })],
+    ],
+  },
+  {
+    id: "kinetic-dangle",
+    name: "Dangle",
+    category: "Kinetic type",
+    description:
+      "Hold: every letter hangs from its top edge and swings gently at its own pace. Text elements only.",
+    variations: [["dangle", "Dangle", kin("dangle", { tempo: 100 })]],
+  },
+  {
+    id: "kinetic-rock",
+    name: "Counter rock",
+    category: "Kinetic type",
+    description:
+      "Hold: neighboring words rock in opposite directions on the beat. Text elements only.",
+    variations: [
+      ["counter-rock", "Rock", kin("rock", { unit: "word", tempo: 100 })],
+    ],
+  },
+  {
+    id: "kinetic-ride",
+    name: "Word ride",
+    category: "Kinetic type",
+    description:
+      "Hold: a wave travels through the line; each word bobs and tilts as it rides it. Text elements only.",
+    variations: [
+      ["word-ride", "Ride", kin("ride", { unit: "word", tempo: 100 })],
+    ],
+  },
+  {
+    id: "kinetic-breathe",
+    name: "Gap breath",
+    category: "Kinetic type",
+    description:
+      "Hold: the spaces between words slowly widen and narrow while the words themselves stay still. Text elements only.",
+    variations: [
+      ["gap-breath", "Breathe", kin("breathe", { unit: "word", tempo: 90 })],
+    ],
+  },
+  {
+    id: "kinetic-pulse",
+    name: "Word pulse",
+    category: "Kinetic type",
+    description:
+      "Hold: one word swells on each beat, cycling through the line. Text elements only.",
+    variations: [
+      ["word-pulse", "Pulse", kin("pulse", { unit: "word", tempo: 120 })],
+    ],
+  },
+  {
+    id: "kinetic-lean",
+    name: "Beat lean",
+    category: "Kinetic type",
+    description:
+      "Hold: words lean into each beat and spring back, alternating sides. Text elements only.",
+    variations: [
+      ["beat-lean", "Lean", kin("lean", { unit: "word", tempo: 120 })],
+    ],
+  },
+];
+export const kineticEffects: Effect[] = kineticCards.map((card) =>
+  EffectSchema.parse({
+    id: card.id,
+    name: card.name,
+    description: card.description,
+    channels: [],
+    color: "#f2765e",
+    tint: 0,
+    ...card.variations[0][2],
+  }),
+);
+export const kineticEffectFamilies: EffectFamily[] = kineticCards
+  .filter((card) => card.variations.length > 1)
+  .map((card) => ({
+    id: card.id,
+    name: card.name,
+    category: card.category,
+    description: card.description,
+    variations: card.variations.map(([id, name, patch]) => ({
+      id,
+      name,
+      parameters: parameters(
+        EffectSchema.parse({
+          ...kineticEffects.find((e) => e.id === card.id)!,
+          ...patch,
+        }),
+      ),
+    })),
+  }));
+for (const card of kineticCards) styleCategories.set(card.id, card.category);
+
+/** Text looks (kamikami-visual-v8): treatments and decorations for art-directed titles. */
+const look = (kind: string, patch: Record<string, unknown> = {}) =>
+  title({ kind, ...patch });
+const lookCards: StyleCard[] = [
+  {
+    id: "look-outline",
+    name: "Outline only",
+    category: "Text treatments",
+    description: "Hollow letters drawn as a clean stroke in the text color.",
+    variations: [
+      ["outline-fine", "Fine", look("outlined", { distance: 0.2 })],
+      ["outline-bold", "Bold", look("outlined", { distance: 1.2 })],
+    ],
+  },
+  {
+    id: "look-keyline",
+    name: "Keyline",
+    category: "Text treatments",
+    description:
+      "A thick colored rim drawn behind the letters, the classic poster and sticker outline.",
+    variations: [
+      ["keyline-coral", "Coral", look("keyline", { color: "#f2765e" })],
+      [
+        "keyline-ink",
+        "Ink",
+        look("keyline", { color: "#141414", distance: 0.8 }),
+      ],
+    ],
+  },
+  {
+    id: "look-double-outline",
+    name: "Double outline",
+    category: "Text treatments",
+    description:
+      "An inner gap stroke and an outer outline, like a road sign or a vintage label.",
+    variations: [
+      [
+        "double-outline",
+        "Double",
+        look("doubleline", { color: "#f5c84c", secondary: "#141414" }),
+      ],
+    ],
+  },
+  {
+    id: "look-extrude",
+    name: "Extrude",
+    category: "Text treatments",
+    description:
+      "Solid 3D letters stepped back along an angle in a darker side color.",
+    variations: [
+      [
+        "extrude-down",
+        "Down right",
+        look("extrude", { color: "#8a2b1f", angle: 45 }),
+      ],
+      [
+        "extrude-up",
+        "Up left",
+        look("extrude", { color: "#1d3b6b", angle: -135 }),
+      ],
+    ],
+  },
+  {
+    id: "look-long-shadow",
+    name: "Long shadow",
+    category: "Text treatments",
+    description:
+      "A long flat shadow that fades into the background, the flat-design favorite.",
+    variations: [
+      [
+        "long-shadow",
+        "Long",
+        look("longshadow", {
+          color: "#000000",
+          secondary: "#000000",
+          angle: 45,
+        }),
+      ],
+    ],
+  },
+  {
+    id: "look-offset",
+    name: "Offset shadow",
+    category: "Text treatments",
+    description:
+      "One hard accent copy offset behind the letters, like misregistered screen print.",
+    variations: [
+      ["offset-coral", "Coral", look("offset", { color: "#f2765e" })],
+      ["offset-cyan", "Cyan", look("offset", { color: "#39f2c8", angle: 135 })],
+    ],
+  },
+  {
+    id: "look-neon",
+    name: "Neon tube",
+    category: "Text treatments",
+    description:
+      "Glass tube letters with a colored glow and an occasional flicker.",
+    variations: [
+      ["neon-pink", "Pink", look("neontube", { color: "#ff4fd8", speed: 1 })],
+      ["neon-cyan", "Cyan", look("neontube", { color: "#22e6ff", speed: 1 })],
+    ],
+  },
+  {
+    id: "look-chrome",
+    name: "Chrome",
+    category: "Text treatments",
+    description:
+      "Mirrored metal letters with a horizon line and a dark keyline, straight from an 80s logo.",
+    variations: [
+      ["chrome-steel", "Steel", look("chrome", { color: "#66a3bf" })],
+      ["chrome-sunset", "Sunset", look("chrome", { color: "#ff7a30" })],
+    ],
+  },
+  {
+    id: "look-sticker",
+    name: "Sticker",
+    category: "Text treatments",
+    description:
+      "A thick paper border and a soft drop shadow, as if the word were a die-cut sticker.",
+    variations: [
+      [
+        "sticker",
+        "Sticker",
+        look("sticker", { color: "#ffffff", secondary: "#000000" }),
+      ],
+    ],
+  },
+  {
+    id: "look-shadow-stack",
+    name: "Shadow stack",
+    category: "Text treatments",
+    description:
+      "Three hard copies step down and right in alternating palette colors.",
+    variations: [
+      [
+        "shadow-stack",
+        "Stack",
+        look("stack", { color: "#ff4a86", secondary: "#22e6ff" }),
+      ],
+    ],
+  },
+  {
+    id: "look-halftone",
+    name: "Halftone fill",
+    category: "Text treatments",
+    description: "Letters printed as a halftone dot screen in the text color.",
+    variations: [["halftone", "Dots", look("halftone", { distance: 0.3 })]],
+  },
+  {
+    id: "look-accent",
+    name: "Accent word",
+    category: "Text treatments",
+    description:
+      "The longest word takes the accent color, or each line's first letter grows and takes it.",
+    variations: [
+      [
+        "accent-word",
+        "Key word",
+        look("accent", { unit: "word", color: "#f5c84c" }),
+      ],
+      [
+        "accent-initial",
+        "Initial letter",
+        look("accent", { unit: "character", color: "#f2765e" }),
+      ],
+    ],
+  },
+  {
+    id: "look-ghosts",
+    name: "Color ghosts",
+    category: "Text treatments",
+    description:
+      "Two flat-colored copies trail a frame or two behind the text, so any motion leaves a misregistered color echo.",
+    variations: [
+      [
+        "ghosts-amber-cyan",
+        "Amber and cyan",
+        look("ghost", { color: "#f5a50c", secondary: "#16f4d4" }),
+      ],
+      [
+        "ghosts-magenta-blue",
+        "Magenta and blue",
+        look("ghost", { color: "#ff3b8d", secondary: "#2b5bff" }),
+      ],
+    ],
+  },
+  {
+    id: "look-reflection",
+    name: "Reflection",
+    category: "Text treatments",
+    description:
+      "A fading mirrored copy of the text below it, like a glossy floor.",
+    variations: [
+      ["reflection", "Reflection", look("reflection", { distance: 0.1 })],
+    ],
+  },
+  {
+    id: "look-cut-shift",
+    name: "Cut and shift",
+    category: "Text treatments",
+    description:
+      "Every line is sliced through; the lower half slides sideways along an accent cut line.",
+    variations: [
+      [
+        "cut-shift",
+        "Cut",
+        look("cutshift", { color: "#f2765e", seconds: 0.8 }),
+      ],
+    ],
+  },
+  {
+    id: "look-word-boxes",
+    name: "Word boxes",
+    category: "Text treatments",
+    description: "Each word pops into its own outlined box, one after another.",
+    variations: [
+      [
+        "word-boxes",
+        "Boxes",
+        look("wordbox", { color: "#f5c84c", seconds: 0.9, stagger: 0.6 }),
+      ],
+    ],
+  },
+  {
+    id: "look-word-plates",
+    name: "Word plates",
+    category: "Text treatments",
+    description:
+      "Each word sits on a slightly tilted solid plate with knocked-out letters, like label tape.",
+    variations: [
+      [
+        "plates-violet",
+        "Violet tape",
+        look("plate", {
+          color: "#8a6fd6",
+          secondary: "#141414",
+          seconds: 0.9,
+          stagger: 0.5,
+        }),
+      ],
+      [
+        "plates-ink",
+        "Ink plates",
+        look("plate", {
+          color: "#141414",
+          secondary: "#f1eee7",
+          seconds: 0.9,
+          stagger: 0.5,
+        }),
+      ],
+    ],
+  },
+  {
+    id: "look-brackets",
+    name: "Corner brackets",
+    category: "Text treatments",
+    description: "Four corner brackets open out around the text block.",
+    variations: [
+      [
+        "corner-brackets",
+        "Brackets",
+        look("brackets", { color: "#f1eee7", seconds: 0.8 }),
+      ],
+    ],
+  },
+  {
+    id: "look-rules",
+    name: "Rules",
+    category: "Text treatments",
+    description:
+      "A heavy rule above and a hairline below draw in from opposite sides, editorial style.",
+    variations: [
+      ["rules", "Rules", look("rules", { color: "#f5c84c", seconds: 0.9 })],
+    ],
+  },
+  {
+    id: "look-label",
+    name: "Index label",
+    category: "Text treatments",
+    description:
+      "A small monospaced label types in under the text: an index and the clip's time, or your own words.",
+    variations: [
+      ["index-label", "Label", look("label", { color: "#a5c3c0", seconds: 1 })],
+    ],
+  },
+  {
+    id: "look-ticker",
+    name: "Text ticker",
+    category: "Text treatments",
+    description:
+      "Rows of the same words, repeated small, scroll behind the text in opposite directions.",
+    variations: [
+      ["text-ticker", "Ticker", look("ticker", { color: "#f1eee7", speed: 1 })],
+    ],
+  },
+  {
+    id: "look-tape",
+    name: "Caution tape",
+    category: "Text treatments",
+    description:
+      "A striped warning tape strip slaps in behind the text at an angle.",
+    variations: [
+      [
+        "caution-tape",
+        "Caution",
+        look("tape", { color: "#f5c84c", secondary: "#141414", seconds: 0.6 }),
+      ],
+    ],
+  },
+  {
+    id: "look-burst",
+    name: "Ray burst",
+    category: "Text treatments",
+    description: "Comic-style speed rays turn slowly behind the text.",
+    variations: [
+      [
+        "ray-burst",
+        "Rays",
+        look("burst", { color: "#f1eee7", speed: 1, seconds: 0.5 }),
+      ],
+    ],
+  },
+];
+export const lookEffects: Effect[] = lookCards.map((card) =>
+  EffectSchema.parse({
+    id: card.id,
+    name: card.name,
+    description: card.description,
+    channels: [],
+    color: "#f2765e",
+    tint: 0,
+    ...card.variations[0][2],
+  }),
+);
+export const lookEffectFamilies: EffectFamily[] = lookCards
+  .filter((card) => card.variations.length > 1)
+  .map((card) => ({
+    id: card.id,
+    name: card.name,
+    category: card.category,
+    description: card.description,
+    variations: card.variations.map(([id, name, patch]) => ({
+      id,
+      name,
+      parameters: parameters(
+        EffectSchema.parse({
+          ...lookEffects.find((e) => e.id === card.id)!,
+          ...patch,
+        }),
+      ),
+    })),
+  }));
+for (const card of lookCards) styleCategories.set(card.id, card.category);
+
+/** Kinetic typographic layouts (kamikami-visual-v8): whole-phrase word arrangements. */
+const layout = (kind: string, patch: Record<string, unknown> = {}) =>
+  title({ kind, unit: "word", ...patch });
+const layoutCards: StyleCard[] = [
+  {
+    id: "layout-stack",
+    name: "Justified slam stack",
+    category: "Kinetic layouts",
+    description:
+      "Every word gets its own row, scaled so all rows share one width, and slams down into the stack one after another.",
+    variations: [
+      [
+        "stack-forward",
+        "In order",
+        layout("slamstack", { seconds: 1.6, stagger: 0.7 }),
+      ],
+      [
+        "stack-center",
+        "From the middle",
+        layout("slamstack", {
+          seconds: 1.6,
+          stagger: 0.7,
+          motion: { order: "center" },
+        }),
+      ],
+    ],
+  },
+  {
+    id: "layout-keyword",
+    name: "Key word split",
+    category: "Kinetic layouts",
+    description:
+      "The longest word fills the frame; the words before and after it sit small above and below, flush with its left edge.",
+    variations: [
+      ["keyword-pop", "Pop", layout("keyword", { seconds: 1, stagger: 0.4 })],
+    ],
+  },
+  {
+    id: "layout-steps",
+    name: "Size steps",
+    category: "Kinetic layouts",
+    description:
+      "Words stack left-aligned, each a step smaller than the last, rising in one by one.",
+    variations: [
+      [
+        "steps-falling",
+        "Falling",
+        layout("steps", { seconds: 1.4, distance: 0.6 }),
+      ],
+      [
+        "steps-gentle",
+        "Gentle",
+        layout("steps", { seconds: 1.4, distance: 0.3 }),
+      ],
+    ],
+  },
+  {
+    id: "layout-giant",
+    name: "Cropped giant word",
+    category: "Kinetic layouts",
+    description:
+      "The key word grows huge behind the line, cropped to the text block, while the rest of the line stays readable in front.",
+    variations: [
+      [
+        "giant-coral",
+        "Coral",
+        layout("giant", { seconds: 0.9, secondary: "#f2765e" }),
+      ],
+      [
+        "giant-shadow",
+        "Shadow",
+        layout("giant", { seconds: 0.9, secondary: "#3a3f4a" }),
+      ],
+    ],
+  },
+  {
+    id: "layout-swap",
+    name: "Word swap",
+    category: "Kinetic layouts",
+    description:
+      "One word at a time pops alone in the center on each beat, then every word flies into the full line.",
+    variations: [
+      ["swap-120", "120 BPM", layout("swap", { tempo: 120, seconds: 0.5 })],
+      ["swap-90", "90 BPM", layout("swap", { tempo: 90, seconds: 0.6 })],
+    ],
+  },
+  {
+    id: "layout-typeslam",
+    name: "Type then slam",
+    category: "Kinetic layouts",
+    description:
+      "Words appear small, as if typed, then the whole line slams up to full size.",
+    variations: [
+      [
+        "typeslam-default",
+        "Slam",
+        layout("typeslam", { seconds: 1.2, distance: 0.6 }),
+      ],
+    ],
+  },
+  {
+    id: "layout-flowsnap",
+    name: "Flow then snap",
+    category: "Kinetic layouts",
+    description:
+      "Words drift loose and tilted around the frame, then snap into the line one by one.",
+    variations: [
+      [
+        "flowsnap-default",
+        "Loose",
+        layout("flowsnap", { seconds: 1.6, stagger: 0.5, distance: 0.6 }),
+      ],
+      [
+        "flowsnap-wide",
+        "Scattered",
+        layout("flowsnap", { seconds: 1.8, stagger: 0.5, distance: 1.2 }),
+      ],
+    ],
+  },
+  {
+    id: "layout-seesaw",
+    name: "Seesaw",
+    category: "Kinetic layouts",
+    description:
+      "The line tips from side to side on every beat, springing into each tilt, between the entrance and exit.",
+    variations: [
+      ["seesaw-gentle", "Gentle", layout("seesaw", { tempo: 120, angle: 7 })],
+      ["seesaw-big", "Big tilt", layout("seesaw", { tempo: 120, angle: 14 })],
+    ],
+  },
+  {
+    id: "layout-arc",
+    name: "Arc ride",
+    category: "Kinetic layouts",
+    description:
+      "Words ride in along a curved path and settle on an arch, each turned to follow the curve.",
+    variations: [
+      ["arc-soft", "Soft arch", layout("arc", { seconds: 1.2, distance: 0.6 })],
+      ["arc-deep", "Deep arch", layout("arc", { seconds: 1.2, distance: 1.2 })],
+    ],
+  },
+  {
+    id: "layout-band",
+    name: "Band reveal",
+    category: "Kinetic layouts",
+    description:
+      "A solid band sweeps across the line, leaving each word behind it as it passes.",
+    variations: [
+      [
+        "band-coral",
+        "Coral",
+        layout("bandhide", { seconds: 1, color: "#f2765e" }),
+      ],
+      [
+        "band-light",
+        "Light",
+        layout("bandhide", { seconds: 1, color: "#f1eee7" }),
+      ],
+    ],
+  },
+];
+export const layoutEffects: Effect[] = layoutCards.map((card) =>
+  EffectSchema.parse({
+    id: card.id,
+    name: card.name,
+    description: card.description,
+    channels: [],
+    color: "#f2765e",
+    tint: 0,
+    ...card.variations[0][2],
+  }),
+);
+export const layoutEffectFamilies: EffectFamily[] = layoutCards
+  .filter((card) => card.variations.length > 1)
+  .map((card) => ({
+    id: card.id,
+    name: card.name,
+    category: card.category,
+    description: card.description,
+    variations: card.variations.map(([id, name, patch]) => ({
+      id,
+      name,
+      parameters: parameters(
+        EffectSchema.parse({
+          ...layoutEffects.find((e) => e.id === card.id)!,
+          ...patch,
+        }),
+      ),
+    })),
+  }));
+for (const card of layoutCards) styleCategories.set(card.id, card.category);
+
+/** Artwork treatments (kamikami-visual-v8): camera, beat, copy and framing recipes for artwork. */
+const artwork = (kind: ArtKind, patch: Partial<Art> = {}) => ({
+  art: makeArt(kind, patch),
+});
+const artCards: StyleCard[] = [
+  {
+    id: "art-drift",
+    name: "Handheld drift",
+    category: "Artwork",
+    description:
+      "A slow, unsteady camera float. It overscans slightly so full-frame artwork never shows its edges.",
+    variations: [
+      ["drift-gentle", "Gentle", artwork("drift")],
+      [
+        "drift-nervous",
+        "Nervous",
+        artwork("drift", { distance: 0.022, speed: 1.8, strength: 0.7 }),
+      ],
+    ],
+  },
+  {
+    id: "art-punch",
+    name: "Beat punch",
+    category: "Artwork",
+    description:
+      "A quick zoom hit on every beat at the tempo you set; beats count from the project start so layers hit together.",
+    variations: [
+      ["punch-beat", "Every beat", artwork("punch")],
+      ["punch-hard", "Hard", artwork("punch", { strength: 1, seconds: 0.14 })],
+      ["punch-half", "Half time", artwork("punch", { tempo: 60 })],
+    ],
+  },
+  {
+    id: "art-jolt",
+    name: "Beat jolt",
+    category: "Artwork",
+    description:
+      "The artwork is knocked a short way in a new direction on every beat and settles back.",
+    variations: [
+      ["jolt-snap", "Snap", artwork("jolt")],
+      [
+        "jolt-heavy",
+        "Heavy",
+        artwork("jolt", { distance: 0.04, strength: 0.9, seconds: 0.26 }),
+      ],
+    ],
+  },
+  {
+    id: "art-stutter",
+    name: "Stop-motion",
+    category: "Artwork",
+    description:
+      "Holds the element's motion and effects for whole steps, like animation shot on twos or threes.",
+    variations: [
+      ["stutter-twelve", "12 steps/s", artwork("stutter", { count: 12 })],
+      ["stutter-eight", "8 steps/s", artwork("stutter")],
+      ["stutter-four", "Choppy", artwork("stutter", { count: 4 })],
+    ],
+  },
+  {
+    id: "art-strobe",
+    name: "Beat strobe",
+    category: "Artwork",
+    description:
+      "Flashes the artwork to its negative for a frame or two on the downbeat.",
+    variations: [
+      ["strobe-bar", "Every bar", artwork("strobe")],
+      [
+        "strobe-beat",
+        "Every beat",
+        artwork("strobe", { count: 1, strength: 0.85, seconds: 0.05 }),
+      ],
+    ],
+  },
+  {
+    id: "art-trail",
+    name: "Color ghost trail",
+    category: "Artwork",
+    description:
+      "Tinted copies trail a few frames behind the artwork and sit slightly offset, so every move leaves a chroma echo.",
+    variations: [
+      ["trail-chroma", "Magenta and cyan", artwork("trail")],
+      [
+        "trail-signal",
+        "Red and blue",
+        artwork("trail", { color: "#ff3b30", secondary: "#2f6bff" }),
+      ],
+      [
+        "trail-echo",
+        "Long echo",
+        artwork("trail", {
+          count: 4,
+          seconds: 0.1,
+          distance: 0.006,
+          color: "#f5c84c",
+          secondary: "#f2765e",
+        }),
+      ],
+    ],
+  },
+  {
+    id: "art-slices",
+    name: "Slice shift",
+    category: "Artwork",
+    description:
+      "Cuts the artwork into bands that knock sideways on the beat, slide together as it enters or apart as it leaves.",
+    variations: [
+      ["slices-beat", "On the beat", artwork("slices")],
+      [
+        "slices-in",
+        "Slide in",
+        artwork("slices", { timing: "in", seconds: 0.8, distance: 0.08 }),
+      ],
+      [
+        "slices-out",
+        "Slide out",
+        artwork("slices", { timing: "out", seconds: 0.8, distance: 0.08 }),
+      ],
+      [
+        "slices-drift",
+        "Drifting columns",
+        artwork("slices", {
+          timing: "constant",
+          direction: "vertical",
+          count: 5,
+          distance: 0.02,
+          speed: 0.4,
+        }),
+      ],
+    ],
+  },
+  {
+    id: "art-print",
+    name: "Print border",
+    category: "Artwork",
+    description:
+      "A paper border and soft shadow around the artwork, like a print pinned to the frame.",
+    variations: [
+      ["print-white", "White", artwork("print")],
+      [
+        "print-cream",
+        "Wide cream",
+        artwork("print", { color: "#efe4cc", distance: 0.06 }),
+      ],
+    ],
+  },
+  {
+    id: "art-block-shadow",
+    name: "Block shadow",
+    category: "Artwork",
+    description:
+      "A hard, solid offset shadow behind the artwork, pop-poster style.",
+    variations: [
+      ["block-ink", "Ink", artwork("shadowblock")],
+      [
+        "block-coral",
+        "Coral",
+        artwork("shadowblock", { color: "#f2765e", angle: 135 }),
+      ],
+    ],
+  },
+  {
+    id: "art-offset-frame",
+    name: "Offset frame",
+    category: "Artwork",
+    description:
+      "An outline rectangle that slides out from behind the artwork.",
+    variations: [
+      ["frame-coral", "Coral", artwork("offsetframe")],
+      [
+        "frame-mint",
+        "Mint",
+        artwork("offsetframe", { color: "#16f4d4", angle: -45 }),
+      ],
+    ],
+  },
+  {
+    id: "art-brackets",
+    name: "Corner brackets",
+    category: "Artwork",
+    description: "Viewfinder corners close in around the artwork.",
+    variations: [
+      ["brackets-light", "Light", artwork("brackets")],
+      ["brackets-ink", "Ink", artwork("brackets", { color: "#141414" })],
+    ],
+  },
+  {
+    id: "art-crop-marks",
+    name: "Crop marks",
+    category: "Artwork",
+    description:
+      "Printer's crop marks and registration targets around the artwork.",
+    variations: [["crop-light", "Light", artwork("cropmarks")]],
+  },
+  {
+    id: "art-label",
+    name: "Index label",
+    category: "Artwork",
+    description:
+      "A small monospaced caption under the artwork: an index and the clip's start time, or your own text.",
+    variations: [["label-index", "Index", artwork("label")]],
+  },
+  {
+    id: "art-tape",
+    name: "Tape corners",
+    category: "Artwork",
+    description:
+      "Two strips of tape hold the artwork's top corners, scrapbook style.",
+    variations: [
+      ["tape-masking", "Masking", artwork("tape")],
+      ["tape-pink", "Pink", artwork("tape", { color: "#ff9ec7" })],
+    ],
+  },
+];
+export const artEffects: Effect[] = artCards.map((card) =>
+  EffectSchema.parse({
+    id: card.id,
+    name: card.name,
+    description: card.description,
+    channels: [],
+    color: "#f2765e",
+    tint: 0,
+    ...card.variations[0][2],
+  }),
+);
+export const artEffectFamilies: EffectFamily[] = artCards
+  .filter((card) => card.variations.length > 1)
+  .map((card) => ({
+    id: card.id,
+    name: card.name,
+    category: card.category,
+    description: card.description,
+    variations: card.variations.map(([id, name, patch]) => ({
+      id,
+      name,
+      parameters: parameters(
+        EffectSchema.parse({
+          ...artEffects.find((e) => e.id === card.id)!,
+          ...patch,
+        }),
+      ),
+    })),
+  }));
+for (const card of artCards) styleCategories.set(card.id, card.category);
+
 /** Gallery contains one card per family; legacy definitions remain resolvable. */
 export const builtinEffects: Effect[] = [
   ...legacyBuiltinEffects.flatMap((effect) => {
@@ -2698,6 +4101,10 @@ export const builtinEffects: Effect[] = [
   ...styleEffects,
   ...titleEffects,
   ...packEffects,
+  ...kineticEffects,
+  ...lookEffects,
+  ...layoutEffects,
+  ...artEffects,
 ];
 export const allBuiltinEffects: Effect[] = [
   ...builtinEffects,
@@ -2711,6 +4118,10 @@ export function getEffectFamily(id: string) {
     ...styleEffectFamilies,
     ...titleEffectFamilies,
     ...packEffectFamilies,
+    ...kineticEffectFamilies,
+    ...lookEffectFamilies,
+    ...layoutEffectFamilies,
+    ...artEffectFamilies,
   ].find((f) => f.id === id || f.variations.some((v) => v.id === id));
 }
 
@@ -2722,6 +4133,7 @@ const parameterSchema = EffectSchema.pick({
   text: true,
   depth: true,
   origin: true,
+  art: true,
 });
 const parameterKey = (value: EffectParameters) =>
   JSON.stringify(parameterSchema.parse(value));
@@ -2761,6 +4173,7 @@ export function effectVariationPatch(
         ...(effect.origin && !variation.parameters.origin
           ? { origin: undefined }
           : {}),
+        ...(effect.art && !variation.parameters.art ? { art: undefined } : {}),
       })
     : undefined;
 }

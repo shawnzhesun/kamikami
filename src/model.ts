@@ -10,6 +10,8 @@ import {
 import { z } from "zod";
 import { DepthSchema, bounceOut, depthFrame } from "./motion";
 import { ShapeSchema, type Shape } from "./shapes";
+import { BackdropSchema, type Backdrop } from "./backdrops";
+import { ArtSchema, artCamera, steppedTime, type ArtUse } from "./artwork";
 export { bounceOut } from "./motion";
 import { TextEffectSchema, builtinTextSettings } from "./text-effects";
 import { VisualPassSchema, effectRandom } from "./visual-effects";
@@ -100,6 +102,8 @@ export const EffectSchema = z.object({
   tint: z.number().min(0).max(1),
   passes: z.array(VisualPassSchema).max(6).optional(),
   text: TextEffectSchema.optional(),
+  /** Artwork treatment: camera, beat, copy or framing recipe (v8). */
+  art: ArtSchema.optional(),
   /** Transform pivot in canvas units (−1 left/top … 1 right/bottom), for hinged 3D moves. */
   origin: z
     .object({ x: z.number().min(-1).max(1), y: z.number().min(-1).max(1) })
@@ -121,7 +125,15 @@ export const LayerSchema = z.object({
   trackId: z.string().min(1).max(100).optional(),
   id: z.string().max(100),
   name: z.string().max(100),
-  type: z.enum(["scene", "title", "image", "video", "audio", "shape"]),
+  type: z.enum([
+    "scene",
+    "title",
+    "image",
+    "video",
+    "audio",
+    "shape",
+    "backdrop",
+  ]),
   src: z.string().max(500),
   text: z.string().max(2000),
   start: z.number().min(0).max(LIMITS.seconds),
@@ -152,6 +164,8 @@ export const LayerSchema = z.object({
   fadeOut: z.number().min(0).max(30).optional(),
   /** Geometry of a shape element; its fill is `color`. */
   shape: ShapeSchema.optional(),
+  /** Full-frame background or finishing overlay of a backdrop element. */
+  backdrop: BackdropSchema.optional(),
 });
 export const TimelineLayerSchema = z.object({
   id: z.string().min(1).max(100),
@@ -269,6 +283,14 @@ export function validateProject(input: unknown): Project {
       );
     if (l.type === "shape" && l.src)
       throw new Error(`Shape element “${l.name}” cannot reference media`);
+    if (l.type === "backdrop" ? !l.backdrop : l.backdrop)
+      throw new Error(
+        l.backdrop
+          ? `Only backdrop elements have backdrop settings (“${l.name}”)`
+          : `Backdrop element “${l.name}” needs backdrop settings`,
+      );
+    if (l.type === "backdrop" && l.src)
+      throw new Error(`Backdrop element “${l.name}” cannot reference media`);
     if (new Set(l.effects.map((e) => e.effectId)).size !== l.effects.length)
       throw new Error("An effect preset can only be applied once per element");
     if (l.start + l.duration > p.duration + 0.001)
@@ -293,7 +315,9 @@ export function validateProject(input: unknown): Project {
   }
   for (const l of p.layers) validateKeyframes(l);
   // Shapes also need version 3, so older readers reject them instead of failing oddly.
-  p.version = p.layers.some((l) => allTracks(l).length || l.type === "shape")
+  p.version = p.layers.some(
+    (l) => allTracks(l).length || l.type === "shape" || l.type === "backdrop",
+  )
     ? 3
     : 2;
   const tracks = p.tracks ? [...p.tracks] : [];
@@ -450,12 +474,30 @@ export function channelValue(c: Channel, t: number, duration: number) {
   return c.from + (c.to - c.from) * f;
 }
 /** `stage` is the composition size, used to scale depth travel to the frame. */
+/** Enabled artwork treatments of an element at clip-local time `t`. */
+export function artUses(layer: Layer, effects: Effect[], t: number): ArtUse[] {
+  const time = animationTime(layer, t);
+  const uses: ArtUse[] = [];
+  for (const instance of layer.effects) {
+    if (!instance.enabled) continue;
+    const art = resolveEffectInstanceAt(instance, effects, time)?.art;
+    const amount = instanceAmountAt(instance, time);
+    if (art && amount > 0) uses.push({ art, amount });
+  }
+  return uses;
+}
+/** Clip-local time after stop-motion stutter holds it to whole steps. */
+export function elementTime(layer: Layer, effects: Effect[], t: number) {
+  return steppedTime(artUses(layer, effects, t), t);
+}
 export function layerAtTime(
   layer: Layer,
   effects: Effect[],
-  t: number,
+  clipTime: number,
   stage: { width: number; height: number } = { width: 1920, height: 1080 },
 ) {
+  const uses = artUses(layer, effects, clipTime);
+  const t = steppedTime(uses, clipTime);
   const v = {
     x: propertyAt(layer, "x", t),
     y: propertyAt(layer, "y", t),
@@ -475,6 +517,7 @@ export function layerAtTime(
     skewX: 0,
     originX: 0,
     originY: 0,
+    invert: 0,
   };
   const time = animationTime(layer, t);
   for (const instance of layer.effects.filter((e) => e.enabled)) {
@@ -520,6 +563,14 @@ export function layerAtTime(
         v[c.property] *= Math.max(0, 1 + (value - 1) * amount);
       else v[c.property] += value * amount;
     }
+  }
+  if (uses.length) {
+    const camera = artCamera(uses, time, layer.start + t, stage);
+    v.x += camera.x;
+    v.y += camera.y;
+    v.scale *= camera.scale;
+    v.rotation += camera.rotation;
+    v.invert = camera.invert;
   }
   v.opacity = Math.max(0, Math.min(1, v.opacity * fadeGain(layer, t)));
   v.blur = Math.max(0, Math.min(100, v.blur));
@@ -571,6 +622,15 @@ export function makeShape(shape: Shape, name: string, color: string): Layer {
     shape: structuredClone(shape),
   };
 }
+/** A full-frame backdrop (background or finish) element. */
+export function makeBackdrop(backdrop: Backdrop, name: string): Layer {
+  return {
+    ...makeLayer("backdrop", name),
+    text: "",
+    color: backdrop.color,
+    backdrop: structuredClone(backdrop),
+  };
+}
 /** Gain of a clip's fade-in/fade-out at clip-local seconds. */
 export function fadeGain(layer: Layer, localTime: number) {
   const fadeIn = Math.min(layer.fadeIn ?? 0, layer.duration / 2);
@@ -617,6 +677,20 @@ export function layerVolume(layer: Layer, layers: Layer[], localTime?: number) {
     fadeGain(layer, localTime) *
     Math.max(0, Math.min(rampIn, rampOut))
   );
+}
+/** An empty project that keeps the canvas size and frame rate of `base`. */
+export function blankProject(base: Project): Project {
+  return validateProject({
+    version: 2,
+    name: "Untitled project",
+    width: base.width,
+    height: base.height,
+    fps: base.fps,
+    duration: 15,
+    tracks: [{ id: "layer-1", name: "Layer 1" }],
+    layers: [],
+    effects: [],
+  });
 }
 export const initialProject: Project = validateProject({
   version: 2,

@@ -4,6 +4,9 @@ import { instanceAmountAt, resolveEffectInstanceAt } from "./effect-instance";
 import type { Effect, Layer } from "./model";
 import { projectDepth, seeded, unit, ease } from "./motion";
 import { titleKinds, titleNames } from "./title-effects";
+import { kineticKinds, kineticNames } from "./kinetic-type";
+import { lookKinds, lookNames } from "./text-looks";
+import { layoutKinds, layoutNames } from "./text-layouts";
 
 export const textEffectKinds = [
   "typewriter",
@@ -14,10 +17,19 @@ export const textEffectKinds = [
   "neon",
   "glitch",
 ] as const;
-export const allTextKinds = [...textEffectKinds, ...titleKinds] as const;
+export const allTextKinds = [
+  ...textEffectKinds,
+  ...titleKinds,
+  ...kineticKinds,
+  ...lookKinds,
+  ...layoutKinds,
+] as const;
 export const textEffectNames: Record<(typeof allTextKinds)[number], string> =
   {
     ...titleNames,
+    ...kineticNames,
+    ...lookNames,
+    ...layoutNames,
     typewriter: "Typewriter",
     scramble: "Text scramble",
     stagger: "Staggered text",
@@ -42,7 +54,10 @@ export const TextEffectSchema = z
         depth: z.number().min(-0.8).max(8).default(3),
         spread: z.number().min(0).max(8).default(2),
         rotation: z.number().min(0).max(360).default(90),
-        order: z.enum(["forward", "reverse", "random"]).default("forward"),
+        // center/edges stagger by distance from the block center (kamikami-visual-v8).
+        order: z
+          .enum(["forward", "reverse", "random", "center", "edges"])
+          .default("forward"),
         direction: z.enum(["in", "out"]).default("in"),
         easing: z.enum(["linear", "smooth", "ease-out"]).default("smooth"),
       })
@@ -83,6 +98,12 @@ export const TextEffectSchema = z
       .regex(/^#[0-9a-fA-F]{6}$/)
       .default("#66a3bf"),
     seed: z.number().int().min(0).max(65535).default(17),
+    /** Kinetic holds: beats per minute (kamikami-visual-v8; default 120). */
+    tempo: z.number().min(30).max(240).optional(),
+    /** Text looks: shadow/extrusion direction in degrees (v8; default 45). */
+    angle: z.number().min(-180).max(180).optional(),
+    /** Index label text (v8); empty uses an index and the clip time. */
+    label: z.string().max(60).optional(),
   })
   .strict();
 export type TextEffect = z.infer<typeof TextEffectSchema>;

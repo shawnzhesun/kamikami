@@ -29,11 +29,19 @@ import {
   ProjectSchema,
   makeLayer,
   makeShape,
+  makeBackdrop,
   validateProject,
   type Project,
 } from "./model";
 import { EffectBundleSchema } from "./effect-bundle";
 import { ShapeSchema } from "./shapes";
+import {
+  BackdropSchema,
+  backdropNames,
+  isFinishKind,
+  makeBackdropSettings,
+} from "./backdrops";
+import { addFullLengthElement } from "./editor/tracks";
 import {
   moveClips,
   trimClip,
@@ -299,6 +307,13 @@ export const AgentCommandSchema = z.discriminatedUnion("action", [
     duration: z.number().min(0.1).optional(),
     x: z.number().min(-4096).max(4096).optional(),
     y: z.number().min(-4096).max(4096).optional(),
+    ...revision,
+  }),
+  z.object({
+    action: z.literal("add_backdrop"),
+    /** Missing fields take the pattern's defaults. */
+    backdrop: BackdropSchema.partial().required({ kind: true }),
+    name: z.string().min(1).max(100).optional(),
     ...revision,
   }),
   z.object({
@@ -627,6 +642,16 @@ export function applyAgentEdit(
         },
       ],
     };
+  } else if (command.action === "add_backdrop") {
+    const settings = makeBackdropSettings(
+      command.backdrop.kind,
+      command.backdrop,
+    );
+    next = addFullLengthElement(
+      project,
+      makeBackdrop(settings, command.name ?? backdropNames[settings.kind]),
+      isFinishKind(settings.kind) ? "top" : "bottom",
+    );
   } else if (command.action === "apply_project") next = command.project;
   else if (command.action === "reorder_layers")
     next = reorderLayers(project, command.layerIds);

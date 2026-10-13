@@ -1,3 +1,6 @@
+import { isKineticKind } from "./kinetic-type";
+import { isLookKind } from "./text-looks";
+import { isLayoutKind } from "./text-layouts";
 import { z } from "zod";
 import { FieldSchema, ParticleSchema } from "./motion";
 import { titleKinds } from "./title-effects";
@@ -218,6 +221,7 @@ export const effectEngines = [
   "kamikami-visual-v5",
   "kamikami-visual-v6",
   "kamikami-visual-v7",
+  "kamikami-visual-v8",
 ] as const;
 export type EffectEngine = (typeof effectEngines)[number];
 export const engineAtLeast = (engine: unknown, minimum: EffectEngine) =>
@@ -263,5 +267,24 @@ export function usesV7Features(value: unknown): boolean {
           "lumaOrder",
         ].some((key) => p[key] !== undefined),
     )
+  );
+}
+
+/** Kinetic type, text treatments, artwork treatments, holds' tempo and center/edges stagger need kamikami-visual-v8. */
+export function usesV8Features(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  if ((value as { art?: unknown }).art !== undefined) return true;
+  const text = (value as { text?: Record<string, unknown> }).text;
+  const order = (text?.motion as { order?: unknown } | undefined)?.order;
+  return (
+    !!text &&
+    (isKineticKind(String(text.kind)) ||
+      isLookKind(String(text.kind)) ||
+      isLayoutKind(String(text.kind)) ||
+      text.tempo !== undefined ||
+      text.angle !== undefined ||
+      text.label !== undefined ||
+      order === "center" ||
+      order === "edges")
   );
 }

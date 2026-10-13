@@ -4,6 +4,7 @@ import {
   engineAtLeast,
   usesV6Features,
   usesV7Features,
+  usesV8Features,
 } from "./visual-effects";
 import { z } from "zod";
 
@@ -64,6 +65,9 @@ export async function api(url: string, method = "GET", body?: unknown) {
   const needsShapes = !!project?.layers?.some(
     (layer) => (layer as { type?: string }).type === "shape",
   );
+  const needsBackdrops = !!project?.layers?.some(
+    (layer) => (layer as { type?: string }).type === "backdrop",
+  );
   const definitions = Array.isArray(body)
     ? body
     : (project?.effects ?? (payload?.effect ? [payload.effect] : []));
@@ -78,6 +82,9 @@ export async function api(url: string, method = "GET", body?: unknown) {
     ) ?? [];
   const needsV7Engine = [...definitions, ...instanceSettings].some(
     usesV7Features,
+  );
+  const needsV8Engine = [...definitions, ...instanceSettings].some(
+    usesV8Features,
   );
   const needsV6Engine = [...definitions, ...instanceSettings].some(
     usesV6Features,
@@ -100,8 +107,10 @@ export async function api(url: string, method = "GET", body?: unknown) {
         needsInstanceSupport ||
         needsKeyframes ||
         needsShapes ||
+        needsBackdrops ||
         needsV6Engine ||
         needsV7Engine ||
+        needsV8Engine ||
         needsMotionEngine))
   ) {
     const health = await api("/api/health");
@@ -110,6 +119,13 @@ export async function api(url: string, method = "GET", body?: unknown) {
     if (needsInstanceSupport && !(health.projectVersion >= 2))
       throw new Error(
         "The local service is outdated. Restart KamiKami's development process before saving independent effect settings.",
+      );
+    if (
+      needsV8Engine &&
+      !engineAtLeast(health.effectEngine, "kamikami-visual-v8")
+    )
+      throw new Error(
+        "The local service is outdated. Restart KamiKami with npm run desktop before saving or rendering kinetic type effects.",
       );
     if (
       needsV7Engine &&
@@ -124,6 +140,10 @@ export async function api(url: string, method = "GET", body?: unknown) {
     )
       throw new Error(
         "The local service is outdated. Restart KamiKami with npm run desktop before saving or rendering spring, illustration and 3D-look effects.",
+      );
+    if (needsBackdrops && !health.elementTypes?.includes("backdrop"))
+      throw new Error(
+        "The local service is outdated. Restart KamiKami with npm run desktop before saving or rendering backdrops.",
       );
     if (needsShapes && !health.elementTypes?.includes("shape"))
       throw new Error(

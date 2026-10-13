@@ -17,6 +17,7 @@
     "test:ui": "node --import tsx tests/timeline-ui-smoke.mjs",
     "test:ui:keyframes": "node --import tsx tests/keyframes-ui-smoke.mjs",
     "test:text-render": "node --import tsx tests/text-effects-render-smoke.mjs",
+    "test:kinetic-render": "node --import tsx tests/kinetic-render-smoke.mjs",
     "test:mcp:full": "node --import tsx tests/mcp-comprehensive.ts"
   },
   "dependencies": {

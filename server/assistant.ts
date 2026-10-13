@@ -57,6 +57,7 @@ const labels: Record<string, string> = {
   update_layer: "Updating a clip",
   add_text: "Adding a title",
   add_shape: "Adding a shape",
+  add_backdrop: "Adding a backdrop",
   apply_project: "Updating the composition",
   reorder_layers: "Reordering layers",
   select_layers: "Selecting clips",
