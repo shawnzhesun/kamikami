@@ -7,7 +7,7 @@ const require = createRequire(import.meta.url);
  * Bundled ffmpeg/ffprobe (ffmpeg-static / ffprobe-static), overridable with
  * KAMIKAMI_FFMPEG / KAMIKAMI_FFPROBE. The bundled builds are GPL (ffmpeg also
  * nonfree): fine for development, but swap in a redistributable build before
- * shipping. See docs/asset-analysis-design.md.
+ * shipping. See docs/media-analysis.md.
  */
 export function ffmpegPath(): string {
   if (process.env.KAMIKAMI_FFMPEG) return process.env.KAMIKAMI_FFMPEG;

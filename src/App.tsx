@@ -20,6 +20,7 @@ import {
   allBuiltinEffects,
   builtinEffectCategory,
   effectSearchText,
+  effectVariationPatch,
 } from "./builtin-effects";
 import { type TextEffect, textEffectNames } from "./text-effects";
 import { isTitleKind } from "./title-effects";
@@ -64,6 +65,7 @@ import {
   moveElementsToTrack,
 } from "./editor/tracks";
 import {
+  EffectSchema,
   LIMITS,
   projectTracks,
   elementTrackId,
@@ -634,9 +636,23 @@ export function App() {
       if (!effect) throw new Error("Effect not found.");
       if (revisionToken() !== command.expectedRevision)
         throw new Error("Project changed. Read it again.");
+      let settings = effect;
+      if (command.variationId) {
+        const patch = effectVariationPatch(effect, command.variationId);
+        if (!patch)
+          throw new Error(
+            `${effect.name} has no variation ${command.variationId}. describe_effect lists its variations.`,
+          );
+        settings = EffectSchema.parse({ ...effect, ...patch });
+      }
       if (
         !commit(
-          applyEffectToLayers(current.current, effect, command.layerIds),
+          applyEffectToLayers(
+            current.current,
+            effect,
+            command.layerIds,
+            settings,
+          ),
           group,
         )
       )
@@ -652,7 +668,7 @@ export function App() {
           (id) => !current.current.layers.some((l) => l.id === id),
         )
       )
-        throw new Error("Layer not found.");
+        throw new Error("Element not found. Read the project again.");
       setSelectedIds(command.layerIds);
       return { ...snapshot(), selectedLayerIds: command.layerIds };
     }

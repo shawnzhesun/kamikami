@@ -1,3 +1,13 @@
+import { agentConventions } from "./agent-conventions";
+import {
+  catalogEntries,
+  describeEffect,
+  findEffects,
+  FindEffectsSchema,
+  libraryOverview,
+} from "../src/effect-catalog";
+import { editorTools } from "./editor-tools";
+import { effectEngines } from "../src/visual-effects";
 import { z } from "zod";
 import { EffectLibrary } from "./effect-library";
 import { EffectBundleSchema } from "../src/effect-bundle";
@@ -24,10 +34,19 @@ import express from "express";
 import multer from "multer";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { mkdir, readFile, writeFile, rename, rm, stat } from "node:fs/promises";
+import {
+  copyFile,
+  mkdir,
+  readFile,
+  writeFile,
+  rename,
+  rm,
+  stat,
+} from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { EditorBridge } from "./editor-bridge";
 import { AssistantService } from "./assistant";
+import { runTool, toolError } from "./tool-runner";
 
 import { bundle } from "@remotion/bundler";
 import {
@@ -41,6 +60,7 @@ import {
   ProjectSchema,
   EffectSchema,
   LIMITS,
+  frameRates,
 } from "../src/model";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -147,6 +167,9 @@ app.use(
     setHeaders: (res) => res.setHeader("X-Content-Type-Options", "nosniff"),
   }),
 );
+const importable = /\.(png|jpg|jpeg|webp|gif|mp4|webm|mov|mp3|wav|m4a|ogg)$/i;
+const importHint =
+  "Import PNG, JPG, WebP, GIF, MP4, WebM, MOV, MP3, WAV, M4A, or OGG";
 const upload = multer({
   storage: multer.diskStorage({
     destination: path.join(data, "media"),
@@ -155,16 +178,7 @@ const upload = multer({
   }),
   limits: { fileSize: LIMITS.importBytes, files: 1 },
   fileFilter: (_req, file, cb) => {
-    if (
-      !/\.(png|jpg|jpeg|webp|gif|mp4|webm|mov|mp3|wav|m4a|ogg)$/i.test(
-        file.originalname,
-      )
-    )
-      return cb(
-        new Error(
-          "Import PNG, JPG, WebP, GIF, MP4, WebM, MOV, MP3, WAV, M4A, or OGG",
-        ),
-      );
+    if (!importable.test(file.originalname)) return cb(new Error(importHint));
     cb(null, true);
   },
 });
@@ -173,7 +187,7 @@ app.get("/api/health", (_req, res) =>
     ok: true,
     workspace: root,
     node: process.execPath,
-    effectEngine: "kamikami-visual-v8",
+    effectEngine: effectEngines.at(-1),
     projectVersion: 3,
     effectLibraryVersion: 2,
     elementTypes: [
@@ -188,7 +202,13 @@ app.get("/api/health", (_req, res) =>
   }),
 );
 const bridge = new EditorBridge();
-const assistant = new AssistantService(bridge, data);
+const assistant = new AssistantService(
+  bridge,
+  data,
+  undefined,
+  undefined,
+  importLocalFile,
+);
 analysisConnection = () => assistant.analysisConnection();
 await assistant.load();
 await analysisQueue.load();
@@ -245,6 +265,35 @@ app.post("/api/agents/disconnect", (req, res) => {
 app.post("/api/agents/command", async (req, res) =>
   res.json(await bridge.request(req.body.id, req.body.command)),
 );
+/** MCP tool calls run through the same dispatcher as the native assistant. */
+app.post("/api/agents/tool", async (req, res) => {
+  const id = String(req.body.id);
+  bridge.heartbeat(id);
+  const local = async (route: string, init?: RequestInit) => {
+    const response = await fetch("http://127.0.0.1:4318" + route, {
+      ...init,
+      headers: { "Content-Type": "application/json", "X-KamiKami": "mcp" },
+    });
+    const value = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(value.error || "KamiKami request failed");
+    return value;
+  };
+  try {
+    res.json(
+      await runTool(String(req.body.name), req.body.args, {
+        command: (action, args = {}) =>
+          bridge.request(id, { ...args, action } as never),
+        get: (route) => local(route),
+        post: (route, body) =>
+          local(route, { method: "POST", body: JSON.stringify(body) }),
+        importFile: importLocalFile,
+        by: "mcp",
+      }),
+    );
+  } catch (e) {
+    res.status(400).json({ error: toolError(e) });
+  }
+});
 app.post("/api/editor/poll", (req, res) => {
   if (typeof req.body.editorId !== "string" || req.body.editorId.length > 100)
     throw new Error("Invalid editor session");
@@ -555,12 +604,24 @@ app.post("/api/effects/save", async (req, res) =>
 app.post("/api/effects/delete", async (req, res) =>
   res.json(await effects.delete(req.body.effectId)),
 );
+// The assistant's catalog: compact search rows and one card in depth.
+app.post("/api/effects/find", async (req, res) =>
+  res.json(
+    findEffects(
+      catalogEntries(await effects.list()),
+      FindEffectsSchema.parse(req.body ?? {}),
+    ),
+  ),
+);
+app.get("/api/effects/describe/:id", async (req, res) =>
+  res.json(describeEffect(catalogEntries(await effects.list()), req.params.id)),
+);
 app.post("/api/effects/sync", async (req, res) =>
   res.json(await effects.syncProjectEffects(req.body)),
 );
-app.get("/api/capabilities", (_req, res) =>
+app.get("/api/capabilities", async (_req, res) =>
   res.json({
-    version: 1,
+    version: 2,
     project: z.toJSONSchema(ProjectSchema),
     effect: z.toJSONSchema(EffectSchema),
     effectBundle: z.toJSONSchema(EffectBundleSchema),
@@ -569,12 +630,15 @@ app.get("/api/capabilities", (_req, res) =>
       elements: LIMITS.elements,
       layers: LIMITS.tracks,
       effectsPerProject: LIMITS.effects,
-      effectsPerLayer: 8,
+      effectsPerLayer: LIMITS.elementEffects,
       durationSeconds: LIMITS.seconds,
       importBytes: LIMITS.importBytes,
+      frameRates,
     },
-    conventions:
-      "Project version 2 stores complete independent settings on each applied effect instance; version 3 is written when keyframes exist. Keyframes: element.keyframes.{x,y,scale,rotation,opacity,volume} and instance.keyframes.{amount,parameters[numeric settings path]} are arrays of {time,value,easing,bezier?}; times are animation seconds (clip-local time + effectOffset); easing (linear/ease-in/ease-out/ease-in-out/hold/bezier) shapes the segment leaving a key; an animated value replaces the static one and effects still layer on top. Prefer set_keyframes, which takes clip-local times. version-1 projects migrate with their current appearance preserved. update_effect_instance changes one element; update_effect changes only a preset for future uses. tracks are independent timeline layers ordered bottom to top; layers is the legacy JSON array of elements, each referencing a trackId. Same-track elements cannot overlap; seconds for clip times; x/y from canvas center; source offsets and effect offsets preserve trim continuity. Frequency is cycles per second and phase is cycles. Channels add x/y/rotation/blur/letterSpacing/rotateX/rotateY/skewX and multiply scale/scaleX/scaleY/opacity/brightness/contrast/saturation. Curves include linear/ease/ease-out/sine/pulse/shake/steps plus spring back/anticipate (phase = extra overshoot), elastic (frequency = oscillations), bounce (frequency = bounces) and damped (frequency Hz, phase = extra damping); shake frequency is held samples per second, steps frequency is the number of steps. Optional channel seconds runs the curve over that span from the clip start, or from the end with align end. Optional visual passes provide alpha-aware lighting, texture, cutout and transition treatments; timing is constant, in, out or pulse. Optional text recipes animate title elements with typewriter, scramble, stagger (rise/flip/pop), wave, gradient and neon modes. Text seconds are entrance duration; stagger controls relative unit delays or wave phase; distance is in em. Text effects apply only to title elements. Blinds passes support horizontal/vertical strip direction and count. Tint remains a rectangular screen blend on non-text layers. Optional depth settings animate a flat element through perspective and focus. Text glitch adds seeded per-unit bursts; stagger supports depth/scatter/spiral entrances and exits. Particle passes can include particles settings for depth emitters and trails; repeat passes can include field settings for volume/tunnel/orbit and word/character repetition. These require kamikami-visual-v5. Passes warp (warpMode boil/liquid/melt), bevel, extrude, sheen (sheenStyle gloss/foil), paper, ink, pixel (pixelMode pixelate/dither/gameboy), dissolve, goo, glow and lens, the new channels/curves and channel spans require kamikami-visual-v6. Title text kinds mask (direction up/down/left/right), focus (variant soft/slam), stretch, swipe (direction left/right), slot, bounce (variant bounce/elastic), turn (direction left/right), highlight (variant marker/block; color = box), underline (color = line), outline, echo (color = outline), split, draw (color = stroke), flicker, count and circle (distance = spacing, speed = rotation) require kamikami-visual-v7; blurrise, karaoke (color = sung), shimmer (color/secondary), prism, bubbles, flap, roll, odometer and the line-sequence kinds retype, rotate, typeloop and morph (each text line is one step) are also v7. seconds/stagger/unit set timing and motion.direction out plays them as exits. Kinetic type kinds require kamikami-visual-v8: entrances spring, hop, wheel (direction left/right), hinge (word; direction = hinge corner), spin, slam, fan, drum, shuffle, cardflip (color = tile), ripple, lens, glint (color = band), brush, ink (color = drop), decode (color = cursor), rain (color = hot), push, flash (word), inertia, gather (distance = scatter; shards assemble), plates (cyan/magenta/yellow copies snap into register), inkstroke (color = paint; a bristle stroke paints each line); exit-only kinds kick, launch, flutter (secondary = paper back), domino, closegap, burn (color = heat, secondary = soot), tornado, blast (shards explode; color = flash), crumble (shards fall), wipeoff (color = bar), aperture (color = ring; an iris closes), channels (red/green/blue split), melt (drips) play over the last seconds of the clip; holds pluck, beathop, colorrun, dangle, rock, ride, breathe, pulse, lean, afterimage (color/secondary echoes of a figure-eight drift), gust (wind every four beats), lubdub (color = flush; a heartbeat every two beats) loop on text.tempo (BPM, default 120) between the element's entrances and exits. unit word moves whole words as rigid pieces and unit title moves the whole text; motion.order also accepts center and edges (v8). Text treatment kinds (v8) paint or decorate text and can stack with motions: outlined, keyline (color), doubleline (color outer, secondary gap), extrude/longshadow/offset (color, angle degrees), neontube, chrome (color = horizon tint), sticker, stack, halftone, accent (unit word = longest word, character = line initials), ghost (color/secondary lagged copies), reflection, cutshift, wordbox, plate (color plate, secondary knockout text), rules, ticker, tape, burst; seconds/stagger time their draw-in. Passes shape (shapeMode), doors (doorMode), clock (clockMode, count = blades), feather (angle = direction), lumawipe (lumaOrder), reflection, tiltshift, oldfilm, ripple (rippleMode) and cells (cellMode) are v7; for reveals strength 1 is fully hidden, so timing in reveals. Effect origin {x,y} in -1..1 sets the transform pivot for hinged 3D moves. Projects support 23.976–60 fps and even sizes 256–4096 px; elements may set fadeIn/fadeOut seconds (audio edges get automatic 20 ms de-click ramps). Media analysis sidecars (get_asset_analysis) give asset-relative seconds: transcript words/segments (source asr or aligned lyrics), shots, captioned frames, silences, loudness, image descriptions. Shape elements (type shape, created with add_shape) carry shape {kind rectangle/ellipse/polygon/star/arrow/heart, width, height, filled, stroke, strokeWidth, radius, sides, innerRadius}; color is the fill and they transform, take effects and keyframe like images (tint colors the shape only). Projects with shapes are written as version 3. Backdrop elements (type backdrop, created with add_backdrop) carry backdrop {kind, color, secondary, accent, density 0–1, speed, angle, blend normal/screen/multiply/overlay/soft-light, text, seed}: background kinds gradient/rings/halftone/rays/stripes/dots/stars/bars/scan/grid/ticker/split fill the frame under other layers; finish kinds grain/scanlines/vignette/leak sit on top and blend with everything below. They also write version 3. Kinetic layout kinds (v8; unit word) move whole words into a phrase arrangement and stack with kinetic motions and treatments: slamstack (justified rows, motion.order), keyword (longest word large, the rest small above/below), steps (distance = how fast sizes fall), giant (longest word huge and cropped behind the line; secondary = its color), swap (one word per beat at text.tempo, then assemble over seconds), typeslam (distance = typed size), flowsnap (distance = scatter), seesaw (hold; tempo, angle = tilt), arc (distance = bend), bandhide (color = band). Artwork treatments (v8) are effect.art {kind, color, secondary, strength 0–1, tempo BPM, speed, distance (fraction of the shorter frame side), count, angle, seconds, timing constant/beat/in/out, direction horizontal/vertical, seed}; camera kinds drift, punch, jolt (tempo; seconds = decay), stutter (count = steps per second; holds motion, effects and text animation) and strobe (count = every n beats) work on any visual element including text; copy kinds trail (count copies, seconds lag each, distance/angle offset, color/secondary) and slices (count bands, timing beat/in/out/constant) apply to images, video, shapes, scenes and backdrops, not text. Overlays (v8) are effect.overlay {kind, color, secondary, strength 0–1, anchor block/keyword/lines/words/initial (keyword = the longest word; lines and words repeat the mark one after another with stagger 0–1; initial = the first letter), placement auto/top/bottom/left/right (auto picks the side with the most free space), pad, size, weight, angle, count, seconds, timing envelope/in/out/constant (envelope draws on at the start and retracts at the end; out draws near the end), speed, wobble 0–1 (hand-drawn), boil (redraws per second), label? (live readouts {time} {start} {clock} {length} {pct} {index} {x} {y} {w} {h} {bpm} {text} {word}), seed, variant 0–7 (the kind's shape list), stroke plain/marker/pencil/sketch/brush/chalk/dashed/dotted/double/neon, roughness 0–3, fill auto/none/solid/hatch/crosshatch/zigzag/dots/halftone with fillColor?, fillOpacity, density, enter draw/fade/pop/zoom/drop/slide/wipe/flicker, exit match (entrance reversed) or an entrance style, loop none/pulse/spin/sway/bob/breathe/flicker/jitter with tempo BPM and loopDepth, offsetX/offsetY (units), rotate, mirror, layer auto/behind/front, blend auto/normal/multiply/screen/overlay/difference, font auto/mono/sans/serif/hand/element, caps, shadow 0–1}: vector marks drawn around any visual element, text included. 75 kinds by section — frame: print, shadowblock, offsetframe, brackets, cropmarks, label, tape; annotate: circle, underline, highlight, strike, arrow, tick, cross, star, box, braces, scribble, squiggle, swoosh, margin; emotion (manga marks): sweat, vein, blush, gloom; comic: focuslines, shake, balloon (label = words; variant speech/thought/shout/whisper), badge; drafting: dimension, crosshair, ruler, callout, typeguides, selection, anglearc, dotgrid; interface: reticle, scan, datacolumn, progressring (clip progress), bearing; paper: torn, photocorners, pin, sticker, ticket; ornament: quotes, flourish, footnote, initial; broadcast: viewfinder, safearea, sprockets, slate, lowerthird; print: registration, colorbars, stamp; geometry: orbit, wireframe, polygons, confetti, bauhaus; energy: speedlines (angle = travel direction), impact, sparkle, shockwave (rings every beat), zap; atmosphere: glyphrain and letterburst (the element's own letters), fireflies; connect: route, mappin, thread (links to the nearest other element on screen). Earlier artwork framing kinds and the text-look brackets/label migrate to overlays. Gallery roles: every effect has one role — in (arrival), throughout (while on screen), out (departure), overlay, style (surface), arrange (word layout), between (shot hand-offs) or finish (whole-frame grade and texture); compose a shot by stacking cards across roles, usually one per role. Reversible entrances also exist as exits with the ID suffix -out (motion.direction out). Beat kinds count beats from the project start so elements on one tempo hit together. User- or assistant-written asset metadata (set_asset_metadata) is marked manual and is never overwritten by automatic analysis. Animation remains deterministic and instance-scoped. Recipes are declarative, no executable code.",
+    effectEngine: effectEngines.at(-1),
+    effectLibrary: libraryOverview(catalogEntries(await effects.list())),
+    tools: editorTools.map((t) => ({ name: t.name, access: t.access })),
+    conventions: agentConventions,
   }),
 );
 app.post("/api/media/relink", async (req, res) => {
@@ -586,11 +650,16 @@ app.put("/api/media/:filename", async (req, res) => {
 });
 app.post("/api/import", upload.single("file"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file supplied" });
-  const asset = await library.register(
-    req.file.filename,
-    req.file.originalname,
-    req.file.size,
+  res.json(
+    await registerImport(
+      req.file.filename,
+      req.file.originalname,
+      req.file.size,
+    ),
   );
+});
+async function registerImport(filename: string, name: string, size: number) {
+  const asset = await library.register(filename, name, size);
   // The probe is free and local, so every import gets one automatically;
   // transcription on import is a separate opt-in.
   const settings = await analysisSettings.read();
@@ -602,8 +671,20 @@ app.post("/api/import", upload.single("file"), async (req, res) => {
       ? "transcribe"
       : "probe",
   );
-  res.json(asset);
-});
+  return asset;
+}
+/** import_media: copies a local file the agent named into the library. */
+async function importLocalFile(filePath: string) {
+  const name = path.basename(filePath);
+  if (!importable.test(name)) throw new Error(importHint);
+  const info = await stat(filePath).catch(() => null);
+  if (!info?.isFile()) throw new Error("File not found: " + filePath);
+  if (info.size > LIMITS.importBytes)
+    throw new Error("Choose a file up to 4 GB.");
+  const filename = randomUUID() + path.extname(name).toLowerCase();
+  await copyFile(filePath, path.join(data, "media", filename));
+  return registerImport(filename, name, info.size);
+}
 app.get("/api/exports/:id", async (req, res) => {
   if (!/^[a-f0-9-]+\.mp4$/.test(req.params.id)) return res.sendStatus(404);
   res.download(path.join(data, "exports", req.params.id), "kamikami.mp4", {

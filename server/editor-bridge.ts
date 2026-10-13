@@ -96,9 +96,7 @@ export class EditorBridge {
     const command = AgentCommandSchema.parse(input);
     if (!this.status().editorConnected)
       return Promise.reject(
-        new Error(
-          "Open KamiKami and wait for the editor session to connect.",
-        ),
+        new Error("Open KamiKami and wait for the editor session to connect."),
       );
     if (this.requests.size >= 20)
       return Promise.reject(

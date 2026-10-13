@@ -1,0 +1,67 @@
+# AGENTS.md
+
+How to work on KamiKami's code. This file is for coding agents. To edit a *video project* through the app, read the [editing skill](.agents/skills/kamikami-editor/SKILL.md) instead.
+
+## Code map
+
+| Area | Files |
+| --- | --- |
+| Project schema, limits, migration | `src/model.ts` (`ProjectSchema`, `LIMITS`, `validateProject`), `src/effect-instance.ts`, `src/keyframes.ts`, `src/history.ts` |
+| Rendering (preview = export) | `src/Composition.tsx`, `src/AnimatedText.tsx` (text), `src/ArtworkLayer.tsx` (pictures), `src/*GraphicEffects.tsx` (passes), `src/OverlayLayer.tsx`, `src/BackdropArt.tsx`, `src/FontText.tsx` |
+| Effect engines | `src/visual-effects.ts` (passes, engine ladder), `src/text-effects.ts`, `src/title-effects.ts`, `src/kinetic-type.ts`, `src/text-looks.ts`, `src/text-layouts.ts`, `src/artwork.ts`, `src/motion.ts`, `src/backdrops.ts`, `src/shapes.ts` |
+| Overlays | `src/overlays.ts` (schema, dispatcher), `src/overlay-kinds/*.ts` (one file per section), `src/overlay-kit.ts`, `src/overlay-style.ts`, `src/overlay-cards.ts` |
+| Effect library | `src/builtin-effects.ts` (cards, families), `src/effect-roles.ts` (role, feel, target), `src/effect-bundle.ts` (apply, bundles, `effectEngine`), `src/effect-catalog.ts` (agent search and describe) |
+| Editor UI | `src/App.tsx` (state, history, autosave, agent commands), `src/editor/*` (timeline, canvas, dialogs, controls, `editing.ts` for ripple/edit-list operations, `tracks.ts`) |
+| Agent tools | `server/editor-tools.ts` (the one tool list), `server/tool-runner.ts` (the one dispatcher), `server/agent-conventions.ts` (rules every agent gets), `src/agent-protocol.ts` (validated editor commands, revisions), `server/editor-bridge.ts` |
+| Service | `server/index.ts` (endpoints, storage, renders, capabilities), `server/assistant.ts`, `server/assistant-model.ts`, `server/mcp.mjs` → `server/mcp-server.ts`, `server/media-library.ts`, `server/effect-library.ts`, `server/font-library.ts`, `server/analysis/*` |
+| Desktop shell | `electron/main.cjs` (sandboxed window), `electron/preload.cjs`, `electron/project-files.cjs`, `electron/assistant-credentials.cjs` |
+
+## Conventions
+
+- **Determinism.** Every effect is a pure function of the frame, settings and seed. No `Math.random()`, `Date.now()` or browser state in rendering; use `effectRandom(seed, n)`. Previews and exports must draw the same frame.
+- **Schemas are the contract.** Zod schemas in `src/` validate projects, effects, bundles and agent commands. New effect fields need defaults, so older saved data still parses.
+- **Engine gating.** A recipe's minimum engine is computed by `effectEngine` (`src/effect-bundle.ts`) from the `usesV*Features` checks in `src/visual-effects.ts`. A new field or kind must be added to the right check. The ladder is `effectEngines`; the last entry is the current engine.
+- **Migrations.** Never break saved projects or bundles. Convert old shapes in `validateProject` or the bundle preprocess; see `migrateLegacyDecor` in `src/overlays.ts`.
+- **Effects are declarative.** No `eval`, user code, shaders or plugins.
+- **Text rules.** Text-only effects (`effect.text`) and picture-only effects (artwork `trail`/`slices`) are enforced by `targetMismatch` (`src/effect-roles.ts`) and `applyEffectToLayers`.
+- **Values live in code.** Docs and tool descriptions don't restate counts, kind lists or ranges; they name the source (`LIMITS`, `overlayKinds`, a schema) or the tool that reports it (`get_capabilities`, `find_effects`, `describe_effect`).
+- **Style.** Match surrounding code. Prettier (`npm run format`). Comments explain why, not what.
+- **Original work.** Reimplement from observed technique; don't copy code from studied projects (see the license notes in [docs/roadmap.md](docs/roadmap.md#third-party-sources)).
+
+## Adding things
+
+- **An overlay kind:**
+  1. Add the name to `overlayKinds` in `src/overlays.ts`.
+  2. Add a `KindSpec` (name, feel, description, defaults, controls, variants, `draw`) in the matching `src/overlay-kinds/*.ts` file.
+  3. Add a card with 3–5 variations in `src/overlay-cards.ts`.
+
+  `tests/overlays.test.ts` renders every variation and checks for finite values and unique keys.
+- **A text or kinetic kind:**
+  1. Add the kind list, names and controls in its engine file.
+  2. Add the render logic.
+  3. Add a role and feel in `src/effect-roles.ts`.
+  4. Add a card in `src/builtin-effects.ts`.
+
+  Entrances get a reversed `-out` card automatically.
+- **A card or variation:** use `src/builtin-effects.ts` or `src/overlay-cards.ts`. IDs must be unique across the whole library; existing IDs never change, because projects reference them.
+- **An agent tool:**
+  1. Add the definition to `server/editor-tools.ts` with its `access` (`read`, `add` or `edit`). Take enums and limits from the source schemas instead of writing values into the description.
+  2. Editor tools: add a command with the same parameters to `src/agent-protocol.ts` and handle it in `src/App.tsx`. Service tools: add a case to `runTool` in `server/tool-runner.ts` and list it in `serviceTools` in `tests/agent-tools.test.ts`.
+
+  Both transports pick it up; there's no per-transport routing, count or doc table to update.
+
+## Testing rules
+
+- Run `npm test` and `npm run build` for every change. Run `test:ui` for editor UI changes. Run `test:kinetic-render` / `test:text-render` for rendering changes.
+- **Do not run `test:service`, `test:mcp` or `test:mcp:full` unprompted.** They edit the user's live workspace.
+- For visual checks, render contact sheets to a scratch directory with Remotion's `openBrowser`; never write into `.kamikami/`.
+- `.kamikami/` is the user's workspace (project, media, effects, analysis). Tests and scripts must not write to it.
+
+## Gotchas
+
+- The Electron app and the service cache schemas. After engine or schema changes, the desktop app needs a full restart.
+- MCP clients start `server/mcp.mjs` once; restart the MCP server (or the client) after changing tool definitions. It loads TypeScript through `tsx`, so it must not print to stdout.
+- `project.layers` holds **elements**; timeline rows are `project.tracks`. Tool parameters named `layerId` refer to elements.
+- Each element holds at most `LIMITS.elementEffects` effects; validation errors are turned into readable sentences in `validateProject`.
+- Card IDs can differ from their kind: `kinetic-roll` uses kind `wheel`, and `kinetic-burst` uses kind `blast` (`burst` is a text look).
+- The overlay kits (Rough.js, perfect-freehand) expect pixel-sized coordinates; `src/overlay-style.ts` scales paths up and back.

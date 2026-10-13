@@ -4,7 +4,7 @@ import { z } from "zod";
  * Agent-friendly media analysis, stored per content hash in
  * `.kamikami/analysis/<sha256>.json`. Times are asset-relative seconds
  * (3 decimals, half-open [start, end)). Each section records its provenance so
- * only stale sections are recomputed. See docs/asset-analysis-design.md.
+ * only stale sections are recomputed. See docs/media-analysis.md.
  */
 export const ANALYSIS_SCHEMA_VERSION = 1;
 export const PROBE_ANALYZER_VERSION = "probe-1.0.0";
@@ -22,7 +22,6 @@ export const analysisStatuses = [
   "running",
   "ready",
   "partial",
-  "stale",
   "error",
 ] as const;
 export type AnalysisStatus = (typeof analysisStatuses)[number];

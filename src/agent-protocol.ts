@@ -249,6 +249,8 @@ export const AgentCommandSchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("apply_effect"),
     effectId: z.string(),
+    /** One of the card's named variations. */
+    variationId: z.string().optional(),
     layerIds: z.array(z.string()).min(1),
     ...revision,
   }),
@@ -388,7 +390,7 @@ export function applyAgentEdit(
     "layerIds" in command &&
     command.layerIds.some((id) => !project.layers.some((l) => l.id === id))
   )
-    throw new Error("Layer not found.");
+    throw new Error("Element not found. Read the project again.");
   if (command.action === "delete_layers")
     next = {
       ...project,
@@ -423,7 +425,7 @@ export function applyAgentEdit(
   }
   if (command.action === "set_keyframes") {
     const layer = project.layers.find((l) => l.id === command.layerId);
-    if (!layer) throw new Error("Layer not found. Read the project again.");
+    if (!layer) throw new Error("Element not found. Read the project again.");
     if (!!command.property === !!command.effectId)
       throw new Error("Provide either property or effectId.");
     if (command.parameter && !command.effectId)
@@ -456,7 +458,7 @@ export function applyAgentEdit(
   }
   if (command.action === "trim_clip") {
     const layer = project.layers.find((l) => l.id === command.layerId);
-    if (!layer) throw new Error("Layer not found.");
+    if (!layer) throw new Error("Element not found. Read the project again.");
     next = trimClip(
       project,
       layer.id,
@@ -599,7 +601,7 @@ export function applyAgentEdit(
   }
   if (command.action === "update_layer") {
     if (!project.layers.some((l) => l.id === command.layerId))
-      throw new Error("Layer not found. Read the project again.");
+      throw new Error("Element not found. Read the project again.");
     next = {
       ...project,
       layers: project.layers.map((l) =>

@@ -2724,7 +2724,6 @@ button[aria-pressed="true"] {
   background: var(--coral);
 }
 .analysis-badge.partial,
-.analysis-badge.stale,
 .analysis-badge.error {
   color: var(--brown);
   background: color-mix(in srgb, var(--coral) 25%, var(--cream));

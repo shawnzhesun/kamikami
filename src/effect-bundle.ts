@@ -143,10 +143,15 @@ export function effectCollections(_project: Project, entries: UserEffect[]) {
   ];
   return { mine, library };
 }
+/**
+ * Applies `effect` to elements. `settings` gives each new instance different
+ * settings from the definition, such as one of the card's named variations.
+ */
 export function applyEffectToLayers(
   project: Project,
   effect: Effect,
   layerIds: string[],
+  settings: Effect = effect,
 ) {
   project = validateProject(project);
   if (
@@ -201,7 +206,7 @@ export function applyEffectToLayers(
                     effectId: effect.id,
                     amount: 1,
                     enabled: true,
-                    settings: effectSettings(effect),
+                    settings: effectSettings(settings),
                   },
                 ],
           }

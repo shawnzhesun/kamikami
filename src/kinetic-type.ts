@@ -177,7 +177,7 @@ export function canvasMeasure(font: string, tracking: number): Measure {
   };
 }
 
-/** Per-grapheme and per-word boxes for left-aligned, explicit-line text. */
+/** Per-grapheme and per-word boxes for explicit-line text, each line centered. */
 export function textGeometry(
   text: string,
   measure: Measure = estimateWidth,

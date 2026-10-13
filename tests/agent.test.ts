@@ -41,7 +41,7 @@ test("agent mutations preserve unrelated content and reject invalid layers/sourc
         }),
         [],
       ),
-    /Layer not found/,
+    /Element not found/,
   );
   assert.throws(
     () =>

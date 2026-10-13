@@ -3,11 +3,11 @@
 Requires `kamikami-visual-v8`. An effect with an `overlay` recipe draws vector marks around any visual element — text, images, video, shapes, scenes and backdrops. One engine serves both: every kind is a pure function from the element's box and time to SVG parts, so previews and exports draw the same frame.
 
 - `src/overlays.ts` — schema, the kind list, timing, anchors, entrances, loops and placement.
-- `src/overlay-kinds/*.ts` — the 75 kinds, one file per gallery section. Each kind is a spec: name, section, defaults, control labels, shape variants and a `draw(ctx)` function.
+- `src/overlay-kinds/*.ts` — the kinds, one file per gallery section (`overlayKinds` is the list). Each kind is a spec: name, section, defaults, control labels, shape variants and a `draw(ctx)` function.
 - `src/overlay-kit.ts` — shared geometry (curves, arcs, polygons, arrowheads) and the drawing context.
 - `src/overlay-style.ts` — the shared line and fill styles.
 - `src/OverlayLayer.tsx` — the SVG renderer (patterns, glows, chalk grain, draw-on masks, wipe clips).
-- `src/overlay-cards.ts` — the 76 gallery cards and their variations.
+- `src/overlay-cards.ts` — the gallery cards and their variations.
 
 ## Placement and units
 
@@ -25,62 +25,22 @@ Requires `kamikami-visual-v8`. An effect with an `overlay` recipe draws vector m
   - `in`: draws on at the start and stays.
   - `out`: draws near the clip end, so the element can still leave after the mark lands (as in **Cross out**).
   - `constant`: always shown.
-- `enter` chooses how the mark arrives: `draw` (the kind's own draw-on), `fade`, `pop`, `zoom`, `drop`, `slide`, `wipe` or `flicker`. `exit` is `match` (the entrance played backwards) or any entrance style.
-- `loop` adds `pulse`, `spin`, `sway`, `bob`, `breathe`, `flicker` or `jitter` while the mark is shown. Loops are timed to `tempo` (BPM) and sized by `loopDepth`. Use one tempo per song so marks hit with beat-timed motions.
+- `enter` chooses how the mark arrives (`draw` is the kind's own draw-on; others fade, pop, slide…). `exit` is `match` (the entrance played backwards) or any entrance style.
+- `loop` adds motion while the mark is shown. Loops are timed to `tempo` (BPM) and sized by `loopDepth`. Use one tempo per song so marks hit with beat-timed motions.
 - `wobble` makes lines hand-drawn and `boil` redraws them several times a second, like pencil animation. Everything is seeded and deterministic.
 
 ## Shared styles
 
-| Setting | Options |
-| --- | --- |
-| `stroke` | `plain`, `marker`, `pencil`, `sketch`, `brush` (pressure-tapered), `chalk` (grainy), `dashed`, `dotted`, `double`, `neon` (glow) |
-| `fill` (closed shapes) | `auto` (as designed), `none` (outline only), `solid`, `hatch`, `crosshatch`, `zigzag`, `dots`, `halftone` |
-| `fillColor`, `fillOpacity`, `density` | Fill color, opacity and pattern spacing |
-| `roughness` | Pencil and sketch roughness |
-| `blend` | `auto`, `normal`, `multiply`, `screen`, `overlay`, `difference` |
-| `font`, `caps` | Label typeface (`mono`, `sans`, `serif`, `hand`, `element`) and capitals |
-| `shadow` | A soft drop shadow, 0–1 |
-| `variant` | The kind's own shape list: balloon types, badge shapes, wire solids, palettes and so on |
+Every kind takes the same style fields from `OverlaySchema` (`src/overlays.ts`), so any line style or fill works on any mark. `describe_effect` lists them with their options; the groups are:
 
-- Styled lines draw on through a mask along their centerline, so draw-on works for every style.
-- Fills of outlines that surround the element go behind it, so hatching never covers the words.
-- With pencil or sketch lines, hatching and dots are drawn by hand as well.
+- **Line:** `stroke` (plain, hand-drawn, brush, chalk, dashed, neon and more), `roughness`.
+- **Fill** (closed shapes): `fill` (as designed, none, solid or a pattern), `fillColor`, `fillOpacity`, `density`.
+- **Look:** `blend`, `shadow`, label `font` and `caps`, and `variant`, the kind's own shape list (balloon types, badge shapes, palettes…).
+- **Labels** fill in live readouts such as `{time}`, `{pct}` or `{word}`; the full list is in the `label` setting's description.
 
-Labels fill in live readouts:
+Styled lines draw on through a mask along their centerline, so draw-on works for every style. Fills of outlines that surround the element go behind it, so hatching never covers the words. With pencil or sketch lines, hatching and dots are drawn by hand as well.
 
-| Placeholder | Value |
-| --- | --- |
-| `{time}` | Clip time |
-| `{start}` | Clip start |
-| `{clock}` | Project time |
-| `{length}` | Clip length |
-| `{pct}` | Clip progress |
-| `{index}` | The count, zero-padded |
-| `{x}` `{y}` | Position on the frame |
-| `{w}` `{h}` | Size in pixels |
-| `{bpm}` | Tempo |
-| `{text}` `{word}` | The element's text and its key word |
-
-## Kinds
-
-| Section | Kinds |
-| --- | --- |
-| Frame | print (square, rounded, deckled), shadowblock (block, extruded, stepped), offsetframe (count echoes), brackets (square, rounded, ticks), cropmarks, label, tape (count strips) |
-| Annotate | circle (count loops), underline, highlight, strike, arrow (bowed, straight, loop), tick, cross, star (count points), box (loose, two passes, rounded, cloud), braces (curly, square, round, bar; placement picks sides), scribble (zigzag, loops, hatch), squiggle (wave, zigzag, loops, double; speed travels), swoosh (under, swatch, arc over, ensō), margin (!!, ?, asterisk, NB, margin bar) |
-| Emotion | sweat (single, pair, flying), vein (vein, steam puffs, scribble cloud), blush (hatching, cheeks, hearts), gloom (hanging, wavy, rain cloud, dizzy spirals) |
-| Comic | focuslines (wedges, hairlines, short ring), shake (arcs, ticks, zigzag), balloon (speech, thought, shout, whisper; label = words), badge (starburst, seal, ribbon, roundel) |
-| Drafting | dimension, crosshair, ruler, callout, typeguides (cap, x-height, baseline and descender guides per line; thirds on pictures), selection (handles and size readout), anglearc (arc, protractor), dotgrid (dots, lines, crosses, isometric) |
-| Interface | reticle (brackets, ring, diamond), scan (line, radar, framed), datacolumn (hex, telemetry, binary), progressring (dial, around, segments, bar; follows clip progress), bearing (compass, altitude ladder, timecode strip) |
-| Paper | torn (strip, patch, two layers), photocorners (mounts, clear, lace), pin (round, thumbtack, paper clip), sticker (circle, label, star, heart), ticket (stub, postage stamp, coupon) |
-| Ornament | quotes (curly, guillemets, corner brackets, single), flourish (diamond, curls, dots, double rule), footnote (a mark on the key word and a note at the foot of the frame), initial (boxed, rings, vines, block) |
-| Broadcast | viewfinder (camcorder, minimal, cinema), safearea, sprockets (35 mm, Super 8, contact sheet), slate (clapper, hanging tag, camera tape), lowerthird (bar and kicker, underline and tag, box) |
-| Print | registration, colorbars (process, grey ramp, broadcast), stamp (box, round seal, dated) |
-| Geometry | orbit (rings, atom, Saturn; the far side passes behind the element), wireframe (cube, octahedron, pyramid, icosahedron), polygons, confetti (Memphis, mono, pastel), bauhaus (primary, mono, warm) |
-| Energy | speedlines, impact (spiky, cloud, double), sparkle (four-point, six-point, plus, ring), shockwave (rings per beat), zap (bolts, crackle, single strike) |
-| Atmosphere | glyphrain (the element's own letters fall), letterburst (letters fly out every beat), fireflies (fireflies, dust, bubbles, snow) |
-| Connect | route (dot, plane, pulse), mappin (pin, flag, pulsing dot; label = place), thread (thread, dotted, leader) |
-
-**Cross out** (Out role) is a strike or scribble timed `out`, plus a short opacity channel at the clip end.
+Kinds and their variants are browsed with `find_effects role:"overlay"` (feels are the gallery sections) or in the Overlay tab. **Cross out** (Out role) is a strike or scribble timed `out`, plus a short opacity channel at the clip end.
 
 ## Sources
 

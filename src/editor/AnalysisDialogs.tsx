@@ -11,7 +11,6 @@ export const badgeLabel: Record<string, string> = {
   running: "Analyzing…",
   ready: "Analyzed",
   partial: "Partly analyzed",
-  stale: "Stale",
   error: "Analysis failed",
 };
 

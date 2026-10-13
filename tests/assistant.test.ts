@@ -6,11 +6,12 @@ import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { AssistantService, assistantTools } from "../server/assistant";
 import type { ModelRequest, ModelReply } from "../server/assistant-model";
-import { definitions } from "../server/editor-tools.mjs";
+import { editorTools } from "../server/editor-tools";
 import { EditorBridge } from "../server/editor-bridge";
 import { applyAgentEdit, type EditorRequest } from "../src/agent-protocol";
 import { initialProject } from "../src/model";
 import { EditHistory } from "../src/history";
+import type { MediaAsset } from "../src/media";
 
 async function until(condition: () => boolean) {
   const deadline = Date.now() + 3000;
@@ -40,6 +41,7 @@ function done(request: ModelRequest, text = "The edit is ready."): ModelReply {
 async function harness(
   model: (r: ModelRequest) => Promise<ModelReply>,
   fetcher?: typeof fetch,
+  importFile?: (filePath: string) => Promise<MediaAsset>,
 ) {
   const data = await mkdtemp(path.join(tmpdir(), "kamikami-assistant-test-"));
   const bridge = new EditorBridge();
@@ -83,7 +85,13 @@ async function harness(
   const timer = setInterval(() => {
     for (const request of bridge.poll("editor").requests) handle(request);
   }, 3);
-  const service = new AssistantService(bridge, data, model, fetcher);
+  const service = new AssistantService(
+    bridge,
+    data,
+    model,
+    fetcher,
+    importFile,
+  );
   service.configure({
     model: "test-model",
     apiKey: "test-secret-do-not-persist",
@@ -121,12 +129,15 @@ function latest(request: ModelRequest) {
     : undefined;
 }
 
-test("native tools share the MCP catalog; file access is supplied by the attachment chooser", () => {
+test("native and MCP agents see the same tool list", () => {
   assert.deepEqual(
     assistantTools.map((t) => t.name),
-    definitions.filter((d) => d[0] !== "import_media").map((d) => d[0]),
+    editorTools.map((t) => t.name),
   );
-  assert.equal(assistantTools.length, 57);
+  assert.equal(
+    new Set(editorTools.map((t) => t.name)).size,
+    editorTools.length,
+  );
 });
 
 test("multi-step native edits use live revisions and one undo group, and history excludes credentials", async () => {
@@ -585,5 +596,104 @@ test("native layer deletion confirms affected elements and preserves complete Un
     } finally {
       await h.cleanup();
     }
+  }
+});
+
+test("the assistant browses the effect catalog through the local service", async () => {
+  let round = 0;
+  const seen: string[] = [];
+  const h = await harness(
+    async (r) => {
+      if (round++ === 0)
+        return call("find_effects", { role: "overlay", elementType: "title" });
+      if (round === 2) {
+        assert.match(JSON.stringify(r.input), /overlay-balloon/);
+        return call("describe_effect", { effectId: "overlay-balloon" });
+      }
+      assert.match(JSON.stringify(r.input), /Thought/);
+      return done(r, "Found a balloon.");
+    },
+    async (url, init) => {
+      const route = String(url).replace("http://127.0.0.1:4318", "");
+      if (!route.startsWith("/api/effects/"))
+        return new Response("{}", { status: 200 });
+      seen.push(`${init?.method ?? "GET"} ${route}`);
+      const { catalogEntries, describeEffect, findEffects } =
+        await import("../src/effect-catalog");
+      const body = route.startsWith("/api/effects/find")
+        ? findEffects(catalogEntries(), JSON.parse(String(init!.body)))
+        : describeEffect(
+            catalogEntries(),
+            decodeURIComponent(route.split("/").pop()!),
+          );
+      return new Response(JSON.stringify(body), { status: 200 });
+    },
+  );
+  try {
+    h.start("Pick an overlay for this title");
+    await until(() => !h.service.state().active);
+    assert.deepEqual(seen, [
+      "POST /api/effects/find",
+      "GET /api/effects/describe/overlay-balloon",
+    ]);
+  } finally {
+    await h.cleanup();
+  }
+});
+
+test("timeline range views reach the native conversation as images", async () => {
+  let round = 0;
+  const h = await harness(
+    async (r) => {
+      if (round++ === 0)
+        return call("view_timeline_range", { start: 0, end: 2 });
+      assert.match(JSON.stringify(r.input), /data:image\/png;base64/);
+      return done(r, "The cut flows.");
+    },
+    async (url) =>
+      new Response(
+        String(url).endsWith(".png")
+          ? new Uint8Array([1, 2, 3])
+          : JSON.stringify({ url: "/api/range/t.png", start: 0, end: 2 }),
+        { status: 200 },
+      ),
+  );
+  try {
+    h.start("Check the cut");
+    await until(() => !h.service.state().active);
+    const message = h.service.state().messages.at(-1)!;
+    assert.equal(message.status, "done");
+    assert.equal(message.artifacts[0].url, "/api/range/t.png");
+  } finally {
+    await h.cleanup();
+  }
+});
+
+test("native import_media asks the user and a declined import reads nothing", async () => {
+  const imported: string[] = [];
+  let round = 0;
+  const h = await harness(
+    async (r) => {
+      if (round++ === 0)
+        return call("import_media", { path: "/Users/someone/clip.mov" });
+      assert.match(latest(r).error, /declined/);
+      return done(r, "Skipped the import.");
+    },
+    undefined,
+    async (file) => {
+      imported.push(file);
+      throw new Error("unreachable");
+    },
+  );
+  try {
+    h.start("Import my clip");
+    await until(() => !!h.service.state().confirmation);
+    const confirmation = h.service.state().confirmation!;
+    assert.match(confirmation.description, /clip\.mov/);
+    h.service.approve(confirmation.id, false);
+    await until(() => !h.service.state().active);
+    assert.deepEqual(imported, []);
+  } finally {
+    await h.cleanup();
   }
 });

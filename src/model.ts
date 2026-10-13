@@ -189,8 +189,8 @@ export type TimelineLayer = z.infer<typeof TimelineLayerSchema>;
 export const ProjectSchema = z.object({
   fonts: z.array(FontAssetSchema).max(100).optional(),
   tracks: z.array(TimelineLayerSchema).max(LIMITS.tracks).optional(),
-  // Version 3 is written only when keyframes exist, so older readers reject
-  // animated projects instead of silently discarding their keyframes.
+  // Version 3 is written only when keyframes, shapes or backdrops exist, so
+  // older readers reject those projects instead of silently dropping data.
   version: z.union([z.literal(2), z.literal(3)]),
   name: z.string().min(1).max(100),
   width: z.number().int().min(256).max(4096).multipleOf(2),
