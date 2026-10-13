@@ -1,4 +1,3 @@
-import { isLayoutKind } from "../src/text-layouts";
 import test from "node:test";
 import assert from "node:assert/strict";
 import React from "react";
@@ -57,7 +56,7 @@ const renderText = (
 
 test("scene-inspired recipes add seven distinct cards without changing old definitions", () => {
   assert.equal(remotionSceneEffects.length, 7);
-  assert.equal(builtinEffects.length, 252);
+  assert.equal(builtinEffects.length, 302);
   assert.equal(
     new Set(builtinEffects.map((effect) => effect.id)).size,
     builtinEffects.length,
@@ -212,10 +211,8 @@ test("title thumbnails use Title, and transition masks keep one source and neutr
       effect.text?.kind === "count" || effect.text?.kind === "odometer"
         ? "1,250"
         : effect.text?.kind === "circle"
-          ? "KAMI·KAMI·"
-          : effect.text && isLayoutKind(effect.text.kind)
-            ? "love is loud"
-            : "Title";
+          ? "YOUR STORY STARTS HERE · "
+          : "Your story\nstarts here";
     // Words may be split into units; the run's label keeps the whole text.
     assert.ok(
       html.includes(sample) || html.includes(`aria-label="${sample}"`),

@@ -7,6 +7,8 @@ import {
   layerAtTime,
   type Channel,
 } from "../src/model";
+import { builtinEffects } from "../src/builtin-effects";
+import { applyEffectToLayers } from "../src/effect-bundle";
 test("starter project is valid", () => {
   assert.equal(validateProject(initialProject).duration, 15);
 });
@@ -63,4 +65,47 @@ test("eased camera push reaches exact start and end values", () => {
   const c = initialProject.effects[0].channels[0];
   assert.equal(channelValue(c, 0, 15), 1);
   assert.equal(channelValue(c, 15, 15), 1.12);
+});
+
+test("an element holds up to 16 effects and says so plainly when full", () => {
+  const p = validateProject(initialProject);
+  const title = p.layers.find((l) => l.type === "title")!;
+  const cards = builtinEffects.filter((e) => e.overlay).slice(0, 17);
+  let next = p;
+  for (const effect of cards.slice(0, 16 - title.effects.length))
+    next = applyEffectToLayers(next, effect, [title.id]);
+  assert.equal(next.layers.find((l) => l.id === title.id)!.effects.length, 16);
+  const extra = cards[16];
+  assert.throws(
+    () => applyEffectToLayers(next, extra, [title.id]),
+    (e: Error) =>
+      e.message ===
+      `“${title.name}” already has 16 effects, the most one element can hold. Remove one to add ${extra.name}.`,
+  );
+  // Re-applying an effect it already has is not a new one.
+  const again = cards[0];
+  assert.doesNotThrow(() => applyEffectToLayers(next, again, [title.id]));
+  // Projects that arrive over the limit name the element in one sentence.
+  const over = {
+    ...next,
+    effects: [...next.effects, extra],
+    layers: next.layers.map((l) =>
+      l.id === title.id
+        ? {
+            ...l,
+            effects: [
+              ...l.effects,
+              { effectId: extra.id, amount: 1, enabled: true },
+            ],
+          }
+        : l,
+    ),
+  };
+  assert.throws(
+    () => validateProject(over),
+    (e: Error) =>
+      e.message ===
+        `“${title.name}”: An element can hold up to 16 effects. Remove one first.` &&
+      !e.message.includes("{"),
+  );
 });

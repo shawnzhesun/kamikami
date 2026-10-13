@@ -20,6 +20,7 @@ import {
 import {
   artUses,
   elementTime,
+  overlayPeers,
   overlayUses,
   layerAtTime,
   layerVolume,
@@ -321,6 +322,11 @@ function VisualLayer({
         uses={uses}
         overlays={overlays}
         position={{ x: layer.x, y: layer.y }}
+        peers={
+          overlays.length
+            ? overlayPeers(project.layers, layer, layer.start + t, 1)
+            : undefined
+        }
         t={t}
         time={animationTime(layer, t)}
         projectTime={layer.start + t}

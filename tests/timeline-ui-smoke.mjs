@@ -1179,26 +1179,26 @@ try {
       ),
   );
   await save();
-  await wait(() =>
-    exists(`[data-element-id="${titleId}"] .phase-handle.in`),
-  );
+  await wait(() => exists(`[data-element-id="${titleId}"] .phase-handle.in`));
   const springSeconds = () =>
     project.layers
       .find((l) => l.id === titleId)
       .effects.find((i) => i.effectId === "kinetic-spring")?.settings?.text
       ?.seconds;
   await wait(() => springSeconds() === 1.1);
-  await page.evaluate((id) =>
-    document
-      .querySelector(`[data-element-id="${id}"] .phase-handle.in`)
-      .dispatchEvent(
-        new KeyboardEvent("keydown", {
-          key: "ArrowRight",
-          shiftKey: true,
-          bubbles: true,
-        }),
-      ),
-  titleId);
+  await page.evaluate(
+    (id) =>
+      document
+        .querySelector(`[data-element-id="${id}"] .phase-handle.in`)
+        .dispatchEvent(
+          new KeyboardEvent("keydown", {
+            key: "ArrowRight",
+            shiftKey: true,
+            bubbles: true,
+          }),
+        ),
+    titleId,
+  );
   await save();
   await wait(() => Math.abs(springSeconds() - 1.2) < 1e-6);
   const phases = await client.send("Page.captureScreenshot", {
@@ -1212,6 +1212,56 @@ try {
   await click('header button[aria-label="Undo"]');
   await save();
   await wait(() => springSeconds() === undefined);
+  // Overlays: feel sections, then a balloon's shape and shared style settings.
+  await fill('input[aria-label="Search effects"]', "");
+  await page.evaluate(() =>
+    [...document.querySelectorAll('.effect-roles [role="tab"]')]
+      .find((e) => e.textContent === "Overlay")
+      .click(),
+  );
+  for (const feel of ["Annotate", "Emotion", "Comic", "Interface", "Connect"])
+    await wait(() => exists(`.effect-section[aria-label="${feel}"]`));
+  const gallery = await client.send("Page.captureScreenshot", {
+    format: "png",
+  });
+  await writeFile(
+    path.join(output, "overlays.png"),
+    Buffer.from(gallery.value.data, "base64"),
+  );
+  await fill('input[aria-label="Search effects"]', "Speech balloon");
+  await wait(() => exists('.effect-card[aria-label^="Speech balloon."]'));
+  await page.evaluate(() =>
+    document
+      .querySelector('.effect-card[aria-label^="Speech balloon."]')
+      .dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+      ),
+  );
+  await save();
+  await wait(() =>
+    project.layers
+      .find((l) => l.id === titleId)
+      .effects.some((i) => i.effectId === "overlay-balloon"),
+  );
+  await page.evaluate(() =>
+    [
+      ...document.querySelectorAll(
+        '.inspector .instance button[title="Edit effect settings"]',
+      ),
+    ]
+      .at(-1)
+      .click(),
+  );
+  await wait(() => exists('[aria-label="Overlay line style"]'));
+  assert.ok(await exists('[aria-label="Overlay shape"]'));
+  assert.ok(await exists('[aria-label="Overlay entrance"]'));
+  const settings = await client.send("Page.captureScreenshot", {
+    format: "png",
+  });
+  await writeFile(
+    path.join(output, "overlay-settings.png"),
+    Buffer.from(settings.value.data, "base64"),
+  );
   assert.deepEqual(errors, []);
   console.log(`Browser checks passed. Screenshots: ${output}`);
 } finally {

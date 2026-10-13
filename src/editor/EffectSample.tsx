@@ -7,26 +7,31 @@ import React from "react";
 import { GraphicEffects } from "../GraphicEffects";
 import { layerAtTime, makeLayer, type Effect } from "../model";
 import { isFrameArt } from "../artwork";
-import { type OverlayKind } from "../overlays";
+import { effectRole } from "../effect-roles";
+import { phaseSeconds } from "./envelope";
+import { overlaySpecs, type Overlay, type OverlayKind } from "../overlays";
 import { ArtworkStack } from "../ArtworkLayer";
 
 const sample = { ...makeLayer("scene", "Preview"), duration: 6 };
+export const SAMPLE_TEXT = "Your story\nstarts here";
+/**
+ * Where a hover preview starts its loop: exits loop over the end of the
+ * six-second sample so they play right away instead of after a long wait.
+ */
+/** Thumbnails are a tenth of the frame: thicken picture marks so they read. */
+const previewOverlay = (o: Overlay): Overlay => ({
+  ...o,
+  weight: Math.min(5, o.weight * 3),
+  size: Math.min(5, o.size * 1.5),
+  pad: Math.min(10, o.pad * 1.5),
+});
+export function previewStart(effect: Effect) {
+  if (effectRole(effect).role !== "out") return 0;
+  const seconds = phaseSeconds(effect) ?? 1.5;
+  return Math.max(0, 6 - Math.min(6, seconds + 1.2));
+}
 /** Overlays previewed around a word; the rest frame a small picture. */
-const textOverlays: readonly OverlayKind[] = [
-  "circle",
-  "underline",
-  "highlight",
-  "strike",
-  "arrow",
-  "tick",
-  "cross",
-  "star",
-  "impact",
-  "sparkle",
-  "speedlines",
-  "callout",
-  "stamp",
-];
+const textOverlay = (kind: OverlayKind) => !!overlaySpecs[kind].text;
 export function effectPosterTime(effect: Effect) {
   if (effect.text?.kind === "glitch") return 0.04;
   // Layouts read best once arranged; swaps mid-sequence; holds after a beat.
@@ -124,7 +129,7 @@ export function effectPosterTime(effect: Effect) {
 export function isTextEffectPreview(effect: Effect) {
   return (
     !!effect.text ||
-    (!!effect.overlay && textOverlays.includes(effect.overlay.kind)) ||
+    (!!effect.overlay && textOverlay(effect.overlay.kind)) ||
     !!effect.passes?.some(
       (pass) => pass.field && pass.field.unit !== "whole",
     ) ||
@@ -142,27 +147,13 @@ export function EffectSample({
   time: number;
 }) {
   const title = isTextEffectPreview(effect);
-  // Counters need digits; a circle needs a full ring of letters at thumbnail size.
-  const sampleText =
-    effect.text?.kind === "count"
-      ? "1,250"
-      : effect.text?.kind === "circle"
-        ? "KAMI·KAMI·"
-        : effect.text?.kind === "retype"
-          ? "Draft\nTitle"
-          : ["rotate", "typeloop", "morph"].includes(effect.text?.kind ?? "")
-            ? "Title\nMotion\nStory"
-            : effect.text?.kind === "odometer"
-              ? "1,250"
-              : effect.text && isLayoutKind(effect.text.kind)
-                ? "love is loud"
-                : "Title";
-  const fontSize =
-    effect.text?.kind === "circle"
-      ? 12
-      : (effect.text && isLayoutKind(effect.text.kind)) || effect.overlay
-        ? 22
-        : 34;
+  // One phrase for every text preview; counters still need digits to count.
+  const sampleText = ["count", "odometer"].includes(effect.text?.kind ?? "")
+    ? "1,250"
+    : effect.text?.kind === "circle"
+      ? "YOUR STORY STARTS HERE · "
+      : SAMPLE_TEXT;
+  const fontSize = effect.text?.kind === "circle" ? 9 : 22;
   const layer = {
     ...sample,
     type: title ? ("title" as const) : ("scene" as const),
@@ -218,7 +209,8 @@ export function EffectSample({
               color: "#fff7e9",
               font: `bold ${fontSize}px Georgia, serif`,
               letterSpacing: (letterSpacing * 180) / 1920,
-              whiteSpace: "nowrap",
+              whiteSpace: "pre",
+              textAlign: "center",
               lineHeight: 1.15,
             }}
           >
@@ -288,7 +280,9 @@ export function EffectSample({
               id={`sample-${effect.id}`}
               uses={art ? [{ art, amount: 1 }] : []}
               overlays={
-                framedPrint ? [{ overlay: effect.overlay!, amount: 1 }] : []
+                framedPrint
+                  ? [{ overlay: previewOverlay(effect.overlay!), amount: 1 }]
+                  : []
               }
               t={time}
               time={time}
@@ -302,6 +296,7 @@ export function EffectSample({
                   : { width: 180, height: 96 }
               }
               start={8.5}
+              peers={[[-74, -30]]}
               frameStyle={frameStyle}
               content={content}
             />

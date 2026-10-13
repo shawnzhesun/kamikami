@@ -5,6 +5,7 @@ import {
   EffectSample,
   effectPosterTime,
   isTextEffectPreview,
+  previewStart,
 } from "./EffectSample";
 import { startGesture } from "./gesture";
 import { effectTarget } from "../effect-roles";
@@ -34,6 +35,8 @@ export function EffectCard({
     () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
   );
   const playing = !paused && (pinned || (hover && !reduced));
+  // Exits loop over the end of the sample so they show right away.
+  const from = previewStart(effect);
   useEffect(() => {
     if (!playing) {
       setTime(0);
@@ -42,12 +45,12 @@ export function EffectCard({
     let id: number, start: number | undefined;
     const tick = (now: number) => {
       start ??= now;
-      setTime(((now - start) / 1000) % 6);
+      setTime(from + (((now - start) / 1000) % (6 - from)));
       id = requestAnimationFrame(tick);
     };
     id = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(id);
-  }, [playing]);
+  }, [playing, from]);
   return (
     <div
       className={`effect-card ${dragging ? "effect-dragging" : ""} ${mismatch ? "effect-mismatch" : ""}`}

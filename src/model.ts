@@ -51,6 +51,8 @@ export const LIMITS = {
   elements: 500,
   tracks: 40,
   effects: 200,
+  /** Effects stacked on one element. */
+  elementEffects: 16,
   seconds: 3600,
   importBytes: 4 * 1024 * 1024 * 1024,
 } as const;
@@ -164,7 +166,12 @@ export const LayerSchema = z.object({
   fontWeight: z.number().int().min(1).max(1000).optional(),
   fontStyle: z.enum(["normal", "italic"]).optional(),
   visible: z.boolean(),
-  effects: z.array(InstanceSchema).max(8),
+  effects: z
+    .array(InstanceSchema)
+    .max(
+      LIMITS.elementEffects,
+      `An element can hold up to ${LIMITS.elementEffects} effects. Remove one first.`,
+    ),
   keyframes: ElementKeyframesSchema.optional(),
   /** Fade from/to transparent and silent over these seconds at the clip edges. */
   fadeIn: z.number().min(0).max(30).optional(),
@@ -206,6 +213,32 @@ export type EffectInstance = z.infer<typeof InstanceSchema>;
 export function effectSettings(effect: Effect): EffectSettings {
   const { id: _id, ...settings } = effect;
   return EffectSettingsSchema.parse(settings);
+}
+/**
+ * One readable sentence for a schema failure, naming the element it's on,
+ * instead of the validator's JSON.
+ */
+function projectIssue(
+  input: unknown,
+  issue: { message: string; path: PropertyKey[] },
+) {
+  const [root, index, ...rest] = issue.path;
+  const layers = (input as { layers?: { name?: unknown }[] } | null)?.layers;
+  const name =
+    root === "layers" && typeof index === "number"
+      ? layers?.[index]?.name
+      : undefined;
+  const where =
+    typeof name === "string" && name
+      ? `“${name}”`
+      : issue.path.length
+        ? issue.path.join(".")
+        : "";
+  // Our own messages are already sentences; the validator's are not.
+  const message = /^[A-Z].*\.$/.test(issue.message)
+    ? issue.message
+    : `${issue.message[0]?.toUpperCase() ?? ""}${issue.message.slice(1)}${rest.length ? ` (${rest.join(".")})` : ""}.`;
+  return where ? `${where}: ${message}` : message;
 }
 export function validateProject(input: unknown): Project {
   input = migrateProjectDecor(input);
@@ -260,7 +293,10 @@ export function validateProject(input: unknown): Project {
       ),
     };
   }
-  const p = ProjectSchema.parse(input);
+  const parsed = ProjectSchema.safeParse(input);
+  if (!parsed.success)
+    throw new Error(projectIssue(input, parsed.error.issues[0]));
+  const p = parsed.data;
   const fonts = p.fonts ?? [];
   if (new Set(fonts.map((font) => font.id)).size !== fonts.length)
     throw new Error("Font IDs must be unique");
@@ -510,6 +546,32 @@ export function overlayUses(
     const amount = instanceAmountAt(instance, animation);
     return overlay && amount > 0 ? [{ overlay, amount }] : [];
   });
+}
+/**
+ * Centers of the other visual elements on screen at `projectTime`, in overlay
+ * units from `layer`'s center, for overlays that link elements.
+ */
+export function overlayPeers(
+  layers: Layer[] | undefined,
+  layer: Layer,
+  projectTime: number,
+  unitPx: number,
+): [number, number][] {
+  return (layers ?? []).flatMap((l) =>
+    l.id !== layer.id &&
+    l.visible &&
+    l.type !== "audio" &&
+    l.type !== "backdrop" &&
+    projectTime >= l.start &&
+    projectTime < l.start + l.duration
+      ? [
+          [(l.x - layer.x) / unitPx, (l.y - layer.y) / unitPx] as [
+            number,
+            number,
+          ],
+        ]
+      : [],
+  );
 }
 /** Clip-local time after stop-motion stutter holds it to whole steps. */
 export function elementTime(layer: Layer, effects: Effect[], t: number) {

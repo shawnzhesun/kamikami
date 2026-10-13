@@ -1230,7 +1230,8 @@ button[aria-pressed="true"] {
   min-height: 100px;
   margin-bottom: 10px;
   border-radius: 5px;
-  background: color-mix(in srgb, var(--blue) 10%, var(--cream));
+  /* One dark stage for every preview, so light marks and text both read. */
+  background: #17232e;
   overflow: hidden;
 }
 .effect-sample-art {
@@ -1522,7 +1523,8 @@ button[aria-pressed="true"] {
 
 /* Compact, draggable recipes and recoverable media deletion. */
 .effects-grid {
-  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
+  /* auto-fill keeps empty tracks, so short sections don't stretch their cards. */
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
   gap: 8px;
   padding: 6px 10px 10px;
 }
@@ -2422,6 +2424,25 @@ button[aria-pressed="true"] {
 .visual-pass-fields label {
   min-width: 0;
 }
+.visual-pass-fields .overlay-group {
+  grid-column: 1 / -1;
+  margin: 6px 0 -2px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.visual-pass-fields .check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.visual-pass-fields .check input {
+  width: auto;
+}
 
 @media (max-width: 1250px) {
   header {
@@ -2589,9 +2610,6 @@ button[aria-pressed="true"] {
 }
 
 /* A fixed dark stage preserves typography and glow contrast across app themes. */
-.effect-sample.is-text {
-  background: #17232e;
-}
 .effect-preset-picker {
   display: grid;
   gap: 8px;

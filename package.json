@@ -23,6 +23,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.1",
     "@remotion/bundler": "4.0.533",
+    "@remotion/paths": "^4.0.533",
     "@remotion/player": "4.0.533",
     "@remotion/renderer": "4.0.533",
     "express": "^5.1.0",
@@ -31,9 +32,11 @@
     "lucide-react": "^0.468.0",
     "multer": "^2.0.2",
     "openai": "^7.30.0",
+    "perfect-freehand": "^1.2.3",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "remotion": "4.0.533",
+    "roughjs": "^4.6.6",
     "zod": "4.6.5"
   },
   "devDependencies": {

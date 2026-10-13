@@ -4,6 +4,7 @@ import { usesSpatialMotion } from "./motion";
 import { z } from "zod";
 import {
   EffectSchema,
+  LIMITS,
   effectSettings,
   validateProject,
   type Effect,
@@ -171,6 +172,16 @@ export function applyEffectToLayers(
   )
     throw new Error(
       "Artwork copies and slices apply to images, video, shapes and backdrops. Use a text treatment for text.",
+    );
+  const full = project.layers.find(
+    (l) =>
+      layerIds.includes(l.id) &&
+      !l.effects.some((i) => i.effectId === effect.id) &&
+      l.effects.length >= LIMITS.elementEffects,
+  );
+  if (full)
+    throw new Error(
+      `“${full.name}” already has ${LIMITS.elementEffects} effects, the most one element can hold. Remove one to add ${effect.name}.`,
     );
   const existing = project.effects.find((e) => e.id === effect.id);
   // The catalog recipe can differ from a historical project definition.

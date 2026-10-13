@@ -38,6 +38,7 @@ export function ArtworkStack({
   uses,
   overlays = [],
   position,
+  peers,
   t,
   time,
   projectTime,
@@ -54,6 +55,8 @@ export function ArtworkStack({
   overlays?: OverlayUse[];
   /** Element center relative to the frame center, pixels. */
   position?: { x: number; y: number };
+  /** Centers of the other elements on screen, pixels from this one. */
+  peers?: [number, number][];
   /** Clip-local time. */
   t: number;
   /** Animation time (clip-local plus effect offset). */
@@ -88,6 +91,7 @@ export function ArtworkStack({
         },
         start,
         position,
+        peers: peers?.map(([x, y]) => [x / u, y / u] as [number, number]),
       })
     : [];
   const marks = (behind: boolean) =>

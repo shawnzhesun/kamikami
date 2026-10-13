@@ -109,7 +109,7 @@ test("motion presets add only two cards, remain independent and support forked s
         }),
       );
       assert.doesNotMatch(sample, /NaN|Infinity/);
-      if (effect.text) assert.match(sample, /Title/);
+      if (effect.text) assert.match(sample, /Your story/);
     }
   assert.equal(JSON.stringify(motionEffectFamilies), before);
 });

@@ -58,7 +58,7 @@ import {
 } from "./text-looks";
 import { isLayoutKind, layoutFrames, layoutHolds } from "./text-layouts";
 import { overlayStack } from "./overlays";
-import { overlayUses } from "./model";
+import { overlayPeers, overlayUses } from "./model";
 import { OverlaySvg } from "./OverlayLayer";
 
 const MONO = 'ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace';
@@ -177,8 +177,9 @@ export function AnimatedText({
   layer: Layer;
   effects: Effect[];
   time: number;
-  /** Frame size, so overlays can pick the side with free space. */
-  stage?: { width: number; height: number };
+  /** Frame size, so overlays can pick the side with free space, and the
+   * other elements, for overlays that link to them. */
+  stage?: { width: number; height: number; layers?: Layer[] };
 }) {
   const measure = useContext(TextMetricsContext);
   const animation = Math.max(0, time + layer.effectOffset);
@@ -205,6 +206,13 @@ export function AnimatedText({
   const keyBox = g.words[k]
     ? { x: g.words[k].x, y: g.words[k].y, w: g.words[k].w, h: g.lead * 0.9 }
     : undefined;
+  const wordBoxes = g.words.map((w) => ({
+    x: w.x,
+    y: w.y,
+    w: w.w,
+    h: g.lead * 0.9,
+  }));
+  const first = g.glyphs.find((gl) => gl.word >= 0);
   const px = layer.fontSize * layer.scale;
   const box = {
     x: 0,
@@ -226,6 +234,16 @@ export function AnimatedText({
       box,
       key: keyBox,
       lines: lineBoxes.filter((b) => !!b),
+      words: wordBoxes,
+      initial: first && {
+        x: first.x,
+        y: first.y,
+        w: first.w,
+        h: g.lead * 0.9,
+      },
+      text: layer.text,
+      word: words[k],
+      peers: overlayPeers(stage?.layers, layer, layer.start + time, px),
       unitPx: layer.fontSize,
       room,
       start: layer.start,

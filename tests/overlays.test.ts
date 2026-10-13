@@ -24,9 +24,11 @@ import {
 } from "../src/model";
 import {
   makeOverlay,
+  overlayFeelNames,
   overlayKinds,
   overlayParts,
   overlayProgress,
+  overlaySpecs,
   type Overlay,
 } from "../src/overlays";
 
@@ -49,12 +51,35 @@ const variants = overlayEffects.flatMap((effect) => {
     : [effect];
 });
 
+const picture = {
+  box: { x: 0, y: 0, w: 40, h: 22 },
+  unitPx: 27,
+  start: 3,
+  room: { left: 4, right: 4, top: 6, bottom: 6 },
+  peers: [[-30, -12]] as [number, number][],
+};
+const words = {
+  ...target,
+  words: [
+    { x: -1.1, y: -0.5, w: 1.6, h: 0.9 },
+    { x: 1.0, y: -0.5, w: 1.8, h: 0.9 },
+    { x: 0, y: 0.5, w: 2.5, h: 0.9 },
+  ],
+  initial: { x: -1.6, y: -0.5, w: 0.5, h: 0.9 },
+  text: "Your story\nstarts here",
+  word: "story",
+};
+const finite = (parts: unknown, label: string) =>
+  assert.doesNotMatch(JSON.stringify(parts), /NaN|null|Infinity/, label);
+
 test("overlay cards cover every kind as v8 effects with finite previews", () => {
-  assert.equal(overlayEffects.length, 26);
+  assert.equal(overlayKinds.length, 75);
+  assert.equal(overlayEffects.length, 76);
   assert.deepEqual(
     [...new Set(overlayEffects.map((e) => e.overlay!.kind))].sort(),
     [...overlayKinds].sort(),
   );
+  assert.ok(variants.length >= 280, `${variants.length} variations`);
   for (const effect of variants) {
     assert.equal(builtinEffectCategory(effect.id), "Overlay");
     assert.equal(effectEngine(effect), "kamikami-visual-v8", effect.id);
@@ -65,19 +90,208 @@ test("overlay cards cover every kind as v8 effects with finite previews", () => 
       }),
     );
     assert.doesNotMatch(markup, /NaN|undefined|Infinity/, effect.id);
-    for (const time of [0, 0.2, 2, 5.9]) {
-      const parts = overlayParts(effect.overlay!, 1, time, 6, target);
-      for (const part of parts)
-        assert.doesNotMatch(
-          JSON.stringify(part),
-          /NaN|null|Infinity/,
-          `${effect.id} at ${time}`,
+    for (const t of [target, words, picture])
+      for (const time of [0, 0.2, 2, 5.9]) {
+        const parts = overlayParts(effect.overlay!, 1, time, 6, t);
+        finite(parts, `${effect.id} at ${time}`);
+        // Keys name filters and masks, so they must be unique in a frame.
+        assert.equal(
+          new Set(parts.map((p) => p.key)).size,
+          parts.length,
+          `${effect.id} keys at ${time}`,
         );
+        for (const part of parts)
+          assert.ok(part.d || part.text !== undefined || part.paths, effect.id);
+      }
+  }
+  // Every kind draws something once it's on, in every shape variant.
+  for (const kind of overlayKinds) {
+    const spec = overlaySpecs[kind];
+    assert.ok(overlayFeelNames.includes(spec.feel as never), kind);
+    assert.ok(spec.name && spec.description, kind);
+    for (let v = 0; v < Math.max(1, spec.variants?.length ?? 0); v++) {
+      const o = makeOverlay(kind, { variant: v, timing: "constant" });
+      for (const t of [words, picture])
+        assert.ok(overlayParts(o, 1, 2.3, 6, t).length > 0, `${kind} #${v}`);
     }
   }
   // The framing marks keep the IDs they had as artwork treatments.
   for (const id of ["art-print", "art-brackets", "art-label", "art-tape"])
     assert.ok(overlayEffects.some((e) => e.id === id));
+});
+
+test("shared line and fill styles restyle any kind", () => {
+  const box = (patch: Partial<Overlay>) =>
+    overlayParts(
+      makeOverlay("box", { timing: "constant", ...patch }),
+      1,
+      2,
+      6,
+      words,
+    );
+  const plain = box({});
+  assert.ok(plain[0].stroke && !plain[0].paths);
+  for (const stroke of [
+    "marker",
+    "brush",
+    "chalk",
+    "pencil",
+    "sketch",
+    "double",
+    "neon",
+  ] as const) {
+    const [part] = box({ stroke });
+    assert.ok(part.paths?.length, stroke);
+    finite(part, stroke);
+  }
+  // Tapered and marker strokes are filled outlines; rough strokes are lines.
+  assert.ok(box({ stroke: "brush" })[0].paths![0].fill);
+  assert.ok(box({ stroke: "pencil" })[0].paths!.every((p) => p.stroke));
+  assert.ok(box({ stroke: "chalk" })[0].paths![0].grain);
+  assert.ok(box({ stroke: "dashed" })[0].dash);
+  // Seeded: an export frame matches its preview.
+  assert.deepEqual(box({ stroke: "sketch" }), box({ stroke: "sketch" }));
+  // An outline that encloses the words takes its fill behind them.
+  const hatched = box({ fill: "hatch" });
+  assert.equal(hatched.length, 2);
+  assert.equal(hatched[0].behind, true);
+  assert.equal(hatched[0].pattern!.style, "hatch");
+  // Hand-drawn lines get hand-drawn hatching.
+  const rough = box({ fill: "crosshatch", stroke: "pencil" });
+  assert.ok(rough[0].paths?.length && !rough[0].pattern);
+  // Solid shapes can become outlines or patterns.
+  const print = (patch: Partial<Overlay>) =>
+    overlayParts(
+      makeOverlay("print", { timing: "constant", ...patch }),
+      1,
+      2,
+      6,
+      picture,
+    )[0];
+  assert.ok(print({}).fill && !print({}).stroke);
+  assert.ok(!print({ fill: "none" }).fill && print({ fill: "none" }).stroke);
+  assert.equal(print({ fill: "halftone" }).pattern!.style, "halftone");
+  // Layer and blend overrides, fonts and capitals.
+  assert.ok(box({ layer: "behind" }).every((p) => p.behind));
+  assert.ok(box({ blend: "screen" }).every((p) => p.blend === "screen"));
+  const label = overlayParts(
+    makeOverlay("label", {
+      timing: "constant",
+      label: "Take {index}",
+      caps: true,
+      font: "serif",
+    }),
+    1,
+    2,
+    6,
+    target,
+  ).at(-1)!;
+  assert.equal(label.text, "TAKE 01");
+  assert.equal(label.font, "serif");
+});
+
+test("entrances, exits, loops and placement move any mark", () => {
+  const at = (patch: Partial<Overlay>, time: number) =>
+    overlayParts(
+      makeOverlay("tick", { seconds: 1, ...patch }),
+      1,
+      time,
+      6,
+      target,
+    );
+  // The kind's own draw-on, or a whole-mark entrance.
+  assert.ok(at({}, 0.3)[0].draw! < 1);
+  const pop = at({ enter: "pop" }, 0.3)[0];
+  assert.equal(pop.draw, 1);
+  assert.match(pop.transform!, /scale\(/);
+  assert.ok(at({ enter: "fade" }, 0.3)[0].opacity < 1);
+  assert.ok(at({ enter: "wipe" }, 0.3)[0].clip!.w > 0);
+  assert.equal(at({ enter: "pop" }, 0).length, 0);
+  // Exits play the entrance backwards unless they have their own style.
+  assert.match(at({ enter: "pop" }, 5.7)[0].transform!, /scale\(/);
+  const slideOut = at({ enter: "pop", exit: "slide" }, 5.7)[0];
+  assert.doesNotMatch(slideOut.transform!, /scale\(/);
+  // Settled marks carry no extra motion.
+  assert.equal(at({ enter: "pop" }, 3)[0].transform, at({}, 3)[0].transform);
+  // Loops follow the tempo.
+  const pulse = (time: number) =>
+    at({ loop: "pulse", tempo: 60 }, time)[0].transform;
+  assert.notEqual(pulse(2.02), pulse(2.6));
+  assert.equal(pulse(2.02), pulse(3.02));
+  // Placement nudges, turns and mirrors.
+  assert.match(at({ offsetX: 2 }, 3)[0].transform!, /^translate\(2 0\)/);
+  assert.match(at({ rotate: 30 }, 3)[0].transform!, /rotate\(30\)/);
+  assert.match(at({ mirror: true }, 3)[0].transform!, /scale\(-1 1\)/);
+  const callout = (mirror: boolean) =>
+    overlayParts(
+      makeOverlay("callout", { timing: "constant", mirror }),
+      1,
+      2,
+      6,
+      target,
+    ).at(-1)!;
+  // Mirrored labels move across but stay readable.
+  assert.equal(callout(true).x, -callout(false).x!);
+  assert.equal(callout(true).align, "end");
+});
+
+test("text-aware anchors repeat a mark over words, lines or the first letter", () => {
+  const circles = overlayParts(
+    makeOverlay("circle", { anchor: "words", seconds: 1, stagger: 0.5 }),
+    1,
+    1.2,
+    6,
+    words,
+  );
+  assert.equal(circles.length, 3);
+  // Words draw one after another.
+  assert.ok(
+    circles[0].draw! > circles[1].draw! && circles[1].draw! > circles[2].draw!,
+  );
+  assert.match(circles[1].transform!, /^translate\(1 -0\.5\)/);
+  const lines = overlayParts(
+    makeOverlay("box", { anchor: "lines", timing: "constant" }),
+    1,
+    2,
+    6,
+    words,
+  );
+  assert.equal(lines.length, 2);
+  const initial = overlayParts(
+    makeOverlay("initial", { timing: "constant" }),
+    1,
+    2,
+    6,
+    words,
+  );
+  assert.ok(initial.length >= 2);
+  // Letter effects use the element's own letters.
+  const rain = overlayParts(makeOverlay("glyphrain"), 1, 2, 6, words);
+  assert.ok(rain.every((p) => "Yourstorystartshere".includes(p.text!)));
+  // Readouts name the key word; callouts can quote it.
+  const callout = overlayParts(
+    makeOverlay("callout", {
+      anchor: "keyword",
+      label: "“{word}”",
+      timing: "constant",
+    }),
+    1,
+    2,
+    6,
+    words,
+  ).at(-1)!;
+  assert.equal(callout.text, "“story”");
+  // Threads reach the nearest other element; alone they follow the angle.
+  const thread = (t: typeof picture) =>
+    overlayParts(
+      makeOverlay("thread", { timing: "constant", variant: 2 }),
+      1,
+      2,
+      6,
+      t,
+    )[0].d!;
+  assert.match(thread(picture), /^M-/);
+  assert.notEqual(thread(picture), thread({ ...picture, peers: [] }));
 });
 
 test("marks draw on at the start, retract at the end, or land at the end", () => {

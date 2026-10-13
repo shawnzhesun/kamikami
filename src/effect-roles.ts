@@ -4,7 +4,7 @@ import { isKineticKind, kineticRole, type KineticKind } from "./kinetic-type";
 import { isLayoutKind, type LayoutKind } from "./text-layouts";
 import { isLookKind, type LookKind } from "./text-looks";
 import { isTitleKind, titleControls, type TitleKind } from "./title-effects";
-import type { OverlayKind } from "./overlays";
+import { overlayFeelNames, overlaySpecs, type OverlayKind } from "./overlays";
 
 /**
  * Roles sort the gallery by the job an effect does in a shot, so cards from
@@ -48,7 +48,7 @@ export const roleFeels: Record<EffectRole, readonly string[]> = {
   in: ["Build", "Reveal", "Arrive", "Type on"],
   throughout: ["Pulse", "Drift", "Signal", "Color", "Camera"],
   out: ["Break", "Conceal", "Depart", "Type off"],
-  overlay: ["Frame", "Annotate", "Drafting", "Print", "Energy", "Pattern"],
+  overlay: [...overlayFeelNames, "Pattern"],
   style: ["Fill", "Outline & shadow", "Glow", "Plate", "Copies", "Material"],
   arrange: ["Emphasis", "Sequence", "Path", "Stack"],
   between: ["Wipe", "Shape", "Dissolve", "Flash"],
@@ -179,33 +179,7 @@ const layoutFeels: Record<LayoutKind, string> = {
   seesaw: "Path",
   arc: "Path",
 };
-const overlayFeels: Record<OverlayKind, string> = {
-  print: "Frame",
-  shadowblock: "Frame",
-  offsetframe: "Frame",
-  brackets: "Frame",
-  cropmarks: "Frame",
-  label: "Frame",
-  tape: "Frame",
-  circle: "Annotate",
-  underline: "Annotate",
-  highlight: "Annotate",
-  strike: "Annotate",
-  arrow: "Annotate",
-  tick: "Annotate",
-  cross: "Annotate",
-  star: "Annotate",
-  dimension: "Drafting",
-  crosshair: "Drafting",
-  ruler: "Drafting",
-  callout: "Drafting",
-  registration: "Print",
-  colorbars: "Print",
-  stamp: "Print",
-  speedlines: "Energy",
-  impact: "Energy",
-  sparkle: "Energy",
-};
+const overlayFeels = (kind: OverlayKind) => overlaySpecs[kind].feel;
 /** Pass and channel recipes, by built-in card ID. */
 const cardRoles: Record<string, RoleInfo> = {
   "barn-doors": R("between", "Wipe"),
@@ -305,7 +279,7 @@ export function effectRole(effect: Effect): RoleInfo {
     cardRoles[effect.id] ??
     (effect.presetFamilyId ? cardRoles[effect.presetFamilyId] : undefined);
   if (known) return known;
-  if (effect.overlay) return R("overlay", overlayFeels[effect.overlay.kind]);
+  if (effect.overlay) return R("overlay", overlayFeels(effect.overlay.kind));
   const text = effect.text;
   if (text) {
     const out = text.motion?.direction === "out";
