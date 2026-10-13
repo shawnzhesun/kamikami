@@ -3333,3 +3333,94 @@ button[aria-pressed="true"] {
   border-radius: 4px;
   border: 1px solid var(--line);
 }
+
+/* Effects sorted by role: In, Throughout, Out, Overlay, Style, Arrange, Between, Finish. */
+.effect-roles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 0 10px 8px;
+}
+.effect-roles button {
+  min-height: 24px;
+  padding: 3px 8px;
+  font-size: 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+.effect-roles button.active {
+  background: var(--accent-bg);
+  color: var(--on-accent);
+  border-color: var(--accent-bg);
+}
+.effect-section h4 {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 8px 10px 0;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.effect-section h4 small {
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.effect-section h4 span {
+  margin-left: auto;
+  font-weight: 400;
+  color: var(--muted);
+}
+.effect-card.effect-mismatch {
+  opacity: 0.38;
+}
+/* In and Out phases: how long a clip's entrances and exits run. */
+.clip-phase {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  pointer-events: none;
+}
+.clip-phase.in {
+  left: 0;
+  background: linear-gradient(
+    to right,
+    color-mix(in srgb, var(--on-chrome) 30%, transparent),
+    transparent
+  );
+}
+.clip-phase.out {
+  right: 0;
+  background: linear-gradient(
+    to left,
+    color-mix(in srgb, var(--on-chrome) 30%, transparent),
+    transparent
+  );
+}
+.phase-handle {
+  position: absolute;
+  top: 0;
+  width: 9px;
+  height: 9px;
+  margin: 0 -4.5px;
+  padding: 0;
+  min-height: 0;
+  border: none;
+  border-radius: 0;
+  background: var(--on-chrome);
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
+  cursor: ew-resize;
+  z-index: 3;
+  opacity: 0.85;
+}
+.phase-handle:hover,
+.phase-handle:focus-visible {
+  opacity: 1;
+  transform: scale(1.3);
+}

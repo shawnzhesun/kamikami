@@ -1,4 +1,5 @@
 import { isFrameArt } from "./artwork";
+import { migrateLegacyDecor } from "./overlays";
 import { usesSpatialMotion } from "./motion";
 import { z } from "zod";
 import {
@@ -71,7 +72,8 @@ export const EffectBundleSchema = z
     author: z.string().max(100).default(""),
     license: z.string().max(200).default("Free to use and share"),
     description: z.string().max(400).default(""),
-    effect: EffectSchema.strict(),
+    // Framing decorations from earlier v8 bundles are overlays now.
+    effect: z.preprocess(migrateLegacyDecor, EffectSchema.strict()),
   })
   .strict()
   .refine(
@@ -80,7 +82,7 @@ export const EffectBundleSchema = z
       effectEngines.indexOf(effectEngine(bundle.effect)),
     {
       message:
-        "Effect parameters require a newer engine: visual passes use kamikami-visual-v2; remap, repetition, smear and pattern modes use kamikami-visual-v3; text animation and blinds require kamikami-visual-v4; spatial motion and text glitches require kamikami-visual-v5; spring curves, stretch/skew/tilt channels and the illustration, 3D-look and organic passes require kamikami-visual-v6; title-pack text kinds require kamikami-visual-v7.",
+        "Effect parameters require a newer engine: visual passes use kamikami-visual-v2; remap, repetition, smear and pattern modes use kamikami-visual-v3; text animation and blinds require kamikami-visual-v4; spatial motion and text glitches require kamikami-visual-v5; spring curves, stretch/skew/tilt channels and the illustration, 3D-look and organic passes require kamikami-visual-v6; title-pack text kinds require kamikami-visual-v7; kinetic type, text treatments, kinetic layouts, artwork treatments and overlays require kamikami-visual-v8.",
       path: ["engine"],
     },
   );
@@ -168,7 +170,7 @@ export function applyEffectToLayers(
     )
   )
     throw new Error(
-      "Artwork copies and frames apply to images, video, shapes and backdrops. Use a text treatment for text.",
+      "Artwork copies and slices apply to images, video, shapes and backdrops. Use a text treatment for text.",
     );
   const existing = project.effects.find((e) => e.id === effect.id);
   // The catalog recipe can differ from a historical project definition.

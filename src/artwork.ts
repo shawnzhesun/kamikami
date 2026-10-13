@@ -3,8 +3,8 @@ import { clamp01, effectRandom, smooth } from "./visual-effects";
 
 /**
  * Artwork treatments (kamikami-visual-v8): camera moves, beat-locked hits,
- * lagged color copies, slices and print-style framing for images, video,
- * shapes and backdrops. They stack with each other and with every other
+ * lagged color copies and slices for images, video, shapes and backdrops
+ * (camera moves also work on text). Framing marks are overlays. They stack with each other and with every other
  * effect. Beat kinds count beats from the project start at `tempo` BPM so
  * every element on the same tempo hits together.
  */
@@ -16,33 +16,12 @@ export const artCameraKinds = [
   "strobe",
 ] as const;
 export const artCopyKinds = ["trail", "slices"] as const;
-export const artDecorKinds = [
-  "print",
-  "shadowblock",
-  "offsetframe",
-  "brackets",
-  "cropmarks",
-  "label",
-  "tape",
-] as const;
-export const artKinds = [
-  ...artCameraKinds,
-  ...artCopyKinds,
-  ...artDecorKinds,
-] as const;
+export const artKinds = [...artCameraKinds, ...artCopyKinds] as const;
 export type ArtKind = (typeof artKinds)[number];
 const includes = (list: readonly string[], kind: string) => list.includes(kind);
 export const isCameraArt = (kind: string) => includes(artCameraKinds, kind);
-/** Kinds drawn from the element's pixels or box; text has its own treatments. */
+/** Kinds drawn from the element's pixels; text has its own treatments. */
 export const isFrameArt = (kind: string) => !isCameraArt(kind);
-export const isDecorArt = (kind: string) => includes(artDecorKinds, kind);
-/** Decorations drawn under the artwork. */
-export const behindDecor: readonly ArtKind[] = [
-  "print",
-  "shadowblock",
-  "offsetframe",
-];
-
 const hex = z.string().regex(/^#[0-9a-fA-F]{6}$/);
 export const ArtSchema = z
   .object({
@@ -55,17 +34,15 @@ export const ArtSchema = z
     tempo: z.number().min(30).max(240),
     /** Animation speed of drift and continuous slices. */
     speed: z.number().min(0).max(10),
-    /** Offset, border or shift size as a fraction of the shorter frame side. */
+    /** Offset or shift size as a fraction of the shorter frame side. */
     distance: z.number().min(0).max(1),
-    /** Copies, slices, beats between strobes, stutter steps per second or label index. */
+    /** Copies, slices, beats between strobes or stutter steps per second. */
     count: z.number().int().min(1).max(24),
     angle: z.number().min(-180).max(180),
-    /** Decay of beat hits, copy lag, or draw-in / transition length. */
+    /** Decay of beat hits, copy lag, or slide length. */
     seconds: z.number().min(0.02).max(30),
     timing: z.enum(["constant", "beat", "in", "out"]),
     direction: z.enum(["horizontal", "vertical"]),
-    /** Label text; empty shows the index and the clip's start time. */
-    label: z.string().max(60).optional(),
     seed: z.number().int().min(0).max(65535),
   })
   .strict();
@@ -79,13 +56,6 @@ export const artNames: Record<ArtKind, string> = {
   strobe: "Beat strobe",
   trail: "Color ghost trail",
   slices: "Slice shift",
-  print: "Print border",
-  shadowblock: "Block shadow",
-  offsetframe: "Offset frame",
-  brackets: "Corner brackets",
-  cropmarks: "Crop marks",
-  label: "Index label",
-  tape: "Tape corners",
 };
 
 const defaults: Record<ArtKind, Partial<Art>> = {
@@ -103,25 +73,6 @@ const defaults: Record<ArtKind, Partial<Art>> = {
     secondary: "#16f4d4",
   },
   slices: { count: 6, distance: 0.06, seconds: 0.35, timing: "beat" },
-  print: { strength: 1, color: "#f6f2ea", distance: 0.035, seconds: 0.4 },
-  shadowblock: {
-    strength: 0.95,
-    color: "#141414",
-    distance: 0.03,
-    angle: 45,
-    seconds: 0.4,
-  },
-  offsetframe: {
-    strength: 1,
-    color: "#f2765e",
-    distance: 0.03,
-    angle: 45,
-    seconds: 0.5,
-  },
-  brackets: { strength: 1, color: "#f6f2ea", distance: 0.025, seconds: 0.5 },
-  cropmarks: { strength: 1, color: "#f6f2ea", distance: 0.03, seconds: 0.6 },
-  label: { strength: 1, color: "#f6f2ea", count: 1, seconds: 0.6 },
-  tape: { strength: 1, color: "#f5e6b8", seconds: 0.35 },
 };
 export function makeArt(kind: ArtKind, patch: Partial<Art> = {}): Art {
   return ArtSchema.parse({
@@ -271,16 +222,6 @@ export function sliceBands(
   });
 }
 
-const pad2 = (n: number) => String(n).padStart(2, "0");
-export const timecode = (seconds: number) =>
-  `${pad2(Math.floor(seconds / 60))}:${pad2(Math.floor(seconds % 60))}.${pad2(Math.floor((seconds % 1) * 100))}`;
-export function artLabel(art: Art, start: number) {
-  return art.label?.trim() || `No.${pad2(art.count)}  ·  ${timecode(start)}`;
-}
-/** Draw-in progress of a decoration. */
-export const decorReveal = (art: Art, time: number) =>
-  smooth(time / Math.max(0.02, art.seconds));
-
 type ArtField =
   | "strength"
   | "tempo"
@@ -291,7 +232,6 @@ type ArtField =
   | "seconds"
   | "timing"
   | "direction"
-  | "label"
   | "color"
   | "secondary";
 /** Editor labels for the settings each kind uses. */
@@ -334,39 +274,4 @@ export const artControls: Record<ArtKind, Partial<Record<ArtField, string>>> = {
     speed: "Speed",
     strength: "Amount",
   },
-  print: {
-    color: "Paper",
-    distance: "Border (% of frame)",
-    seconds: "Draw-in (seconds)",
-  },
-  shadowblock: {
-    color: "Shadow",
-    distance: "Offset (% of frame)",
-    angle: "Angle (degrees)",
-    strength: "Opacity",
-    seconds: "Draw-in (seconds)",
-  },
-  offsetframe: {
-    color: "Line",
-    distance: "Offset (% of frame)",
-    angle: "Angle (degrees)",
-    seconds: "Draw-in (seconds)",
-  },
-  brackets: {
-    color: "Color",
-    distance: "Gap (% of frame)",
-    seconds: "Draw-in (seconds)",
-  },
-  cropmarks: {
-    color: "Color",
-    distance: "Gap (% of frame)",
-    seconds: "Draw-in (seconds)",
-  },
-  label: {
-    label: "Label text",
-    count: "Index",
-    color: "Color",
-    seconds: "Type-on (seconds)",
-  },
-  tape: { color: "Tape", seconds: "Draw-in (seconds)" },
 };

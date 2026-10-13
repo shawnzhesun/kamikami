@@ -57,6 +57,9 @@ import {
   type LookDecor,
 } from "./text-looks";
 import { isLayoutKind, layoutFrames, layoutHolds } from "./text-layouts";
+import { overlayStack } from "./overlays";
+import { overlayUses } from "./model";
+import { OverlaySvg } from "./OverlayLayer";
 
 const MONO = 'ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace';
 function Decor({ items, behind }: { items: LookDecor[]; behind: boolean }) {
@@ -151,7 +154,9 @@ function KineticCopies({
             whiteSpace: "pre",
             opacity: c.opacity,
             clipPath: c.clip,
-            transform: `translate(${c.x}em,${c.y}em)`,
+            transform: `translate(${c.x}em,${c.y}em)${c.rotation ? ` rotate(${c.rotation}deg)` : ""}${c.scale !== undefined ? ` scale(${c.scale})` : ""}`,
+            ...(c.origin ? { transformOrigin: c.origin } : {}),
+            ...(c.blend ? { mixBlendMode: c.blend } : {}),
             pointerEvents: "none",
           }}
         >
@@ -164,6 +169,100 @@ function KineticCopies({
 
 /** A shared, frame-derived text renderer for the composition and library previews. */
 export function AnimatedText({
+  layer,
+  effects,
+  time,
+  stage,
+}: {
+  layer: Layer;
+  effects: Effect[];
+  time: number;
+  /** Frame size, so overlays can pick the side with free space. */
+  stage?: { width: number; height: number };
+}) {
+  const measure = useContext(TextMetricsContext);
+  const animation = Math.max(0, time + layer.effectOffset);
+  const uses = overlayUses(layer, effects, animation);
+  const body = <TextBody layer={layer} effects={effects} time={time} />;
+  if (!uses.length) return body;
+  // Overlays measure the text block in em, centered on the rendered run.
+  const g = textGeometry(layer.text, measure ?? estimateWidth);
+  const words = layer.text.split(/\s+/u).filter(Boolean);
+  const k = keyWordIndex(words);
+  const lineBoxes = layer.text.split("\n").map((_, li) => {
+    const ws = g.words.filter((w) => w.line === li);
+    const x0 = Math.min(...ws.map((w) => w.x - w.w / 2)),
+      x1 = Math.max(...ws.map((w) => w.x + w.w / 2));
+    return ws.length
+      ? {
+          x: (x0 + x1) / 2,
+          y: (li - (g.lines - 1) / 2) * g.lead,
+          w: x1 - x0,
+          h: g.lead * 0.9,
+        }
+      : null;
+  });
+  const keyBox = g.words[k]
+    ? { x: g.words[k].x, y: g.words[k].y, w: g.words[k].w, h: g.lead * 0.9 }
+    : undefined;
+  const px = layer.fontSize * layer.scale;
+  const box = {
+    x: 0,
+    y: 0,
+    w: Math.max(0.2, g.width),
+    h: Math.max(0.2, g.height),
+  };
+  const room = stage && {
+    left: (stage.width / 2 + layer.x) / px - box.w / 2,
+    right: (stage.width / 2 - layer.x) / px - box.w / 2,
+    top: (stage.height / 2 + layer.y) / px - box.h / 2,
+    bottom: (stage.height / 2 - layer.y) / px - box.h / 2,
+  };
+  const parts = overlayStack(
+    uses,
+    animation,
+    layer.effectDuration || layer.duration,
+    {
+      box,
+      key: keyBox,
+      lines: lineBoxes.filter((b) => !!b),
+      unitPx: layer.fontSize,
+      room,
+      start: layer.start,
+      position: { x: layer.x, y: layer.y },
+    },
+  );
+  const id = `ov-${layer.id.replace(/[^a-zA-Z0-9_-]/g, "")}`;
+  const svg = (behind: boolean) => (
+    <OverlaySvg
+      id={id}
+      parts={parts}
+      width={box.w}
+      height={box.h}
+      unit={(n) => `${n}em`}
+      behind={behind}
+    />
+  );
+  return (
+    <span
+      data-text-overlays
+      style={{
+        position: "relative",
+        display: "inline-block",
+        isolation: "isolate",
+      }}
+    >
+      {svg(true)}
+      {/* Positioned so it paints above the overlays drawn under it. */}
+      <span style={{ position: "relative", display: "inline-block" }}>
+        {body}
+      </span>
+      {svg(false)}
+    </span>
+  );
+}
+
+function TextBody({
   layer,
   effects,
   time,

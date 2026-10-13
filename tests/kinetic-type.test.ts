@@ -132,7 +132,7 @@ test("holds follow the tempo and wait for the element's entrances", () => {
 });
 
 test("kinetic cards are a v8 library category with posters that show motion", () => {
-  assert.equal(kineticEffects.length, 36);
+  assert.equal(kineticEffects.length, 48);
   assert.deepEqual(
     [...new Set(kineticEffects.map((e) => e.text!.kind))].sort(),
     [...kineticKinds].sort(),

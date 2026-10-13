@@ -1,14 +1,7 @@
 import React, { type CSSProperties, type ReactNode } from "react";
-import {
-  artLabel,
-  behindDecor,
-  decorReveal,
-  isDecorArt,
-  sliceBands,
-  trailCopies,
-  type Art,
-  type ArtUse,
-} from "./artwork";
+import { sliceBands, trailCopies, type ArtUse } from "./artwork";
+import { overlayStack, type OverlayUse } from "./overlays";
+import { OverlaySvg } from "./OverlayLayer";
 
 const fill: CSSProperties = {
   position: "absolute",
@@ -34,188 +27,17 @@ function TintFilter({ id, color }: { id: string; color: string }) {
   );
 }
 
-function Decor({
-  art,
-  amount,
-  time,
-  side,
-  start,
-}: {
-  art: Art;
-  amount: number;
-  time: number;
-  side: number;
-  start: number;
-}) {
-  const p = decorReveal(art, time);
-  const a = Math.min(1, art.strength * amount);
-  const pad = art.distance * side;
-  const line = Math.max(1.5, side * 0.0045);
-  const rad = (art.angle * Math.PI) / 180;
-  const box = (style: CSSProperties): CSSProperties => ({
-    position: "absolute",
-    pointerEvents: "none",
-    ...style,
-  });
-  switch (art.kind) {
-    case "print":
-      return (
-        <div
-          style={box({
-            inset: -pad,
-            background: art.color,
-            boxShadow: `0 ${side * 0.012}px ${side * 0.035}px rgba(0,0,0,${0.5 * a})`,
-            opacity: a * p,
-            transform: `scale(${0.97 + 0.03 * p})`,
-          })}
-        />
-      );
-    case "shadowblock":
-    case "offsetframe": {
-      const d = pad * p;
-      return (
-        <div
-          style={box({
-            inset: 0,
-            transform: `translate(${Math.cos(rad) * d}px,${Math.sin(rad) * d}px)`,
-            opacity: a * Math.min(1, p * 2),
-            ...(art.kind === "shadowblock"
-              ? { background: art.color }
-              : { border: `${line}px solid ${art.color}` }),
-          })}
-        />
-      );
-    }
-    case "brackets": {
-      const out = pad * (1 + (1 - p) * 1.5);
-      const corner = (v: "top" | "bottom", h: "left" | "right") => (
-        <div
-          key={v + h}
-          style={box({
-            [v]: -out,
-            [h]: -out,
-            width: side * 0.07,
-            height: side * 0.07,
-            [`border${v === "top" ? "Top" : "Bottom"}`]: `${line}px solid ${art.color}`,
-            [`border${h === "left" ? "Left" : "Right"}`]: `${line}px solid ${art.color}`,
-          })}
-        />
-      );
-      return (
-        <div style={box({ inset: 0, opacity: a * p })}>
-          {corner("top", "left")}
-          {corner("top", "right")}
-          {corner("bottom", "left")}
-          {corner("bottom", "right")}
-        </div>
-      );
-    }
-    case "cropmarks": {
-      const thin = Math.max(1, side * 0.0018);
-      const len = side * 0.045 * p;
-      const gap = pad * 0.5;
-      const marks = (["top", "bottom"] as const).flatMap((v) =>
-        (["left", "right"] as const).flatMap((h) => [
-          // Horizontal and vertical ticks off each corner.
-          <div
-            key={`${v}${h}h`}
-            style={box({
-              [v]: -thin / 2,
-              [h]: -gap - len,
-              width: len,
-              height: thin,
-              background: art.color,
-            })}
-          />,
-          <div
-            key={`${v}${h}v`}
-            style={box({
-              [v]: -gap - len,
-              [h]: -thin / 2,
-              width: thin,
-              height: len,
-              background: art.color,
-            })}
-          />,
-        ]),
-      );
-      const target = (v: "top" | "bottom") => (
-        <div
-          key={v}
-          style={box({
-            [v]: -gap - side * 0.035,
-            left: "50%",
-            width: side * 0.022,
-            height: side * 0.022,
-            marginLeft: -side * 0.011,
-            borderRadius: "50%",
-            border: `${thin}px solid ${art.color}`,
-            background: `linear-gradient(${art.color},${art.color}) center/100% ${thin}px no-repeat, linear-gradient(${art.color},${art.color}) center/${thin}px 100% no-repeat`,
-            opacity: p,
-          })}
-        />
-      );
-      return (
-        <div style={box({ inset: 0, opacity: a })}>
-          {marks}
-          {target("top")}
-          {target("bottom")}
-        </div>
-      );
-    }
-    case "label":
-      return (
-        <div
-          style={box({
-            top: `calc(100% + ${side * 0.022}px)`,
-            left: 0,
-            color: art.color,
-            font: `500 ${side * 0.026}px "IBM Plex Mono", ui-monospace, monospace`,
-            letterSpacing: "0.12em",
-            whiteSpace: "pre",
-            opacity: a,
-            clipPath: `inset(0 ${(1 - p) * 100}% 0 0)`,
-          })}
-        >
-          {artLabel(art, start)}
-        </div>
-      );
-    case "tape": {
-      const strip = (h: "left" | "right") => (
-        <div
-          key={h}
-          style={box({
-            top: -side * 0.018,
-            [h]: -side * 0.045,
-            width: side * 0.14,
-            height: side * 0.04,
-            background: art.color,
-            opacity: 0.82,
-            boxShadow: `0 1px ${side * 0.004}px rgba(0,0,0,.25)`,
-            transform: `rotate(${h === "left" ? -32 : 32}deg) scale(${p})`,
-          })}
-        />
-      );
-      return (
-        <div style={box({ inset: 0, opacity: a })}>
-          {strip("left")}
-          {strip("right")}
-        </div>
-      );
-    }
-    default:
-      return null;
-  }
-}
-
 /**
- * Draws one element with its artwork treatments: lagged color copies behind
- * it, slices of its pixels, and framing decorations that follow its transform.
+ * Draws one element with its artwork treatments and overlays: lagged color
+ * copies behind it, slices of its pixels, and overlay marks that follow its
+ * transform.
  * `frameStyle(t)` and `content(t)` render the element at a clip-local time.
  */
 export function ArtworkStack({
   id,
   uses,
+  overlays = [],
+  position,
   t,
   time,
   projectTime,
@@ -229,6 +51,9 @@ export function ArtworkStack({
 }: {
   id: string;
   uses: ArtUse[];
+  overlays?: OverlayUse[];
+  /** Element center relative to the frame center, pixels. */
+  position?: { x: number; y: number };
   /** Clip-local time. */
   t: number;
   /** Animation time (clip-local plus effect offset). */
@@ -246,31 +71,35 @@ export function ArtworkStack({
   const side = Math.min(width, height);
   const trail = uses.find((u) => u.art.kind === "trail");
   const slices = uses.find((u) => u.art.kind === "slices");
-  const decor = uses.filter((u) => isDecorArt(u.art.kind));
   const copies = trail ? trailCopies(trail.art, trail.amount, side) : [];
-  const decorBox = (items: ArtUse[]) =>
-    items.length ? (
-      <div
-        style={{
-          position: "absolute",
-          left: (width - box.width) / 2,
-          top: (height - box.height) / 2,
-          width: box.width,
-          height: box.height,
-          pointerEvents: "none",
-        }}
-      >
-        {items.map((u, i) => (
-          <Decor
-            key={i}
-            art={u.art}
-            amount={u.amount}
-            time={time}
-            side={side}
-            start={start}
-          />
-        ))}
-      </div>
+  // Overlay units are 2.5% of the frame's shorter side.
+  const u = side * 0.025;
+  const ow = box.width / u,
+    oh = box.height / u;
+  const parts = overlays.length
+    ? overlayStack(overlays, time, duration, {
+        box: { x: 0, y: 0, w: ow, h: oh },
+        unitPx: u,
+        room: {
+          left: (width / 2 + (position?.x ?? 0)) / u - ow / 2,
+          right: (width / 2 - (position?.x ?? 0)) / u - ow / 2,
+          top: (height / 2 + (position?.y ?? 0)) / u - oh / 2,
+          bottom: (height / 2 - (position?.y ?? 0)) / u - oh / 2,
+        },
+        start,
+        position,
+      })
+    : [];
+  const marks = (behind: boolean) =>
+    parts.length ? (
+      <OverlaySvg
+        id={`${id}-ov`}
+        parts={parts}
+        width={ow}
+        height={oh}
+        unit={(n) => `${n * u}px`}
+        behind={behind}
+      />
     ) : null;
   const main = slices
     ? sliceBands(
@@ -324,10 +153,10 @@ export function ArtworkStack({
         );
       })}
       <div style={{ ...fill, ...frameStyle(t) }}>
-        {decorBox(decor.filter((u) => behindDecor.includes(u.art.kind)))}
-        {/* Positioned so it paints above the decorations drawn under it. */}
+        {marks(true)}
+        {/* Positioned so it paints above the overlays drawn under it. */}
         <div style={fill}>{main}</div>
-        {decorBox(decor.filter((u) => !behindDecor.includes(u.art.kind)))}
+        {marks(false)}
       </div>
     </>
   );

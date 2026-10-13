@@ -6,11 +6,20 @@ Kinetic type kinds (`kamikami-visual-v8`) animate title elements with the timing
 
 | Role | Timing | Kinds |
 |---|---|---|
-| Entrance | Over the first `seconds` of the clip; **Play as: Exit** runs it backwards over the last `seconds` | spring, hop, wheel, hinge, spin, slam, fan, drum, shuffle, cardflip, ripple, lens, glint, brush, ink, decode, rain, push, flash, inertia |
-| Exit | Always over the last `seconds` of the clip | kick, launch, flutter, domino, closegap, burn, tornado |
-| Hold | Loops on `tempo` (BPM, default 120) between the element's entrances and exits | pluck, beathop, colorrun, dangle, rock, ride, breathe, pulse, lean |
+| Entrance | Over the first `seconds` of the clip; **Play as: Exit** runs it backwards over the last `seconds` | spring, hop, wheel, hinge, spin, slam, fan, drum, shuffle, cardflip, ripple, lens, glint, brush, ink, decode, rain, push, flash, inertia, gather, plates, inkstroke |
+| Exit | Always over the last `seconds` of the clip | kick, launch, flutter, domino, closegap, burn, tornado, blast, crumble, wipeoff, aperture, channels, melt |
+| Hold | Loops on `tempo` (BPM, default 120) between the element's entrances and exits | pluck, beathop, colorrun, dangle, rock, ride, breathe, pulse, lean, afterimage, gust, lubdub |
 
 A hold eases in once the longest entrance on the same element has nearly finished and eases out before the earliest exit starts. That makes "entrance + hold + exit" on one element the basic lyric-line recipe.
+
+### Shards, plates and channels
+
+- **gather / blast / crumble** cut each glyph into six seeded triangles (`clip-path` polygons fanned around a point inside the glyph). Shards are copies of the glyph that move and spin about their own centroid; gather flies them in from a scatter, blast throws them out with gravity after a flash, crumble shudders the letter and drops the shards one by one.
+- **plates** draws cyan, magenta and yellow copies screen-blended and offset in three directions; they slide into register and the ink takes over at 80%.
+- **channels** splits the type into red, green and blue screen-blended copies that drift apart and fade.
+- Kinds whose copies replace the glyphs hide the glyphs with a clip, not opacity, so a word's copies stay visible.
+- **inkstroke** paints a wet bristle band (one bar per strip, ragged ends) along each line; the type shows once the band has passed. **wipeoff** sweeps an accent bar that cuts the text away; **aperture** closes a circular clip with a ring mark; **melt** stretches letters down from the top while they drain, with drips.
+- **afterimage** drifts the text on a slow figure eight and leaves four screen-blended echoes at earlier positions; **gust** bends letters along the line every four beats; **lubdub** pulses a strong beat and a softer echo every two beats and flushes the accent color.
 
 ## Units
 

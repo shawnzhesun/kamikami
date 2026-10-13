@@ -118,7 +118,12 @@ export function FontText({
         }}
       >
         <TextMetricsContext.Provider value={measure}>
-          <AnimatedText layer={layer} effects={project.effects} time={time} />
+          <AnimatedText
+            layer={layer}
+            effects={project.effects}
+            time={time}
+            stage={project}
+          />
         </TextMetricsContext.Provider>
       </div>
       {pending && (

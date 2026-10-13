@@ -25,6 +25,18 @@ import { type TextEffect, textEffectNames } from "./text-effects";
 import { isTitleKind } from "./title-effects";
 import { TitleEffectControls } from "./editor/TitleEffectControls";
 import { ArtControls } from "./editor/ArtControls";
+import { OverlayControls } from "./editor/OverlayControls";
+import { overlayNames } from "./overlays";
+import {
+  effectRole,
+  effectRoles,
+  effectTarget,
+  roleFeels,
+  roleHints,
+  roleNames,
+  targetMismatch,
+  type EffectRole,
+} from "./effect-roles";
 import { artNames } from "./artwork";
 import { isKineticKind } from "./kinetic-type";
 import { isLookKind } from "./text-looks";
@@ -251,7 +263,12 @@ export function App() {
   const [mediaBusy, setMediaBusy] = useState(false);
   const [userEffects, setUserEffects] = useState<UserEffect[]>([]);
   const [effectSearch, setEffectSearch] = useState("");
-  const [effectCategory, setEffectCategory] = useState("all");
+  const [effectRoleFilter, setEffectRoleFilter] = useState<EffectRole | "all">(
+    "all",
+  );
+  const [effectTargetFilter, setEffectTargetFilter] = useState<
+    "all" | "text" | "picture"
+  >("all");
   const deletedByTransaction = useRef(new WeakMap<Project, string[]>());
   const [mediaTrash, setMediaTrash] = useState<MediaAsset[]>([]);
   const [deleteProposal, setDeleteProposal] = useState<MediaAsset | null>(null);
@@ -295,17 +312,42 @@ export function App() {
     userEffects,
   );
 
-  const categoryOf = (id: string) =>
-    allBuiltinEffects.some((e) => e.id === id)
-      ? builtinEffectCategory(id)
-      : "Imported";
   const matchesEffect = (effect: Effect) =>
     effectSearchText(effect).includes(effectSearch.trim().toLowerCase());
+  const fitsTarget = (effect: Effect) => {
+    const target = effectTarget(effect);
+    return (
+      effectTargetFilter === "all" ||
+      target === "any" ||
+      target === effectTargetFilter
+    );
+  };
   const visibleLibraryEffects = libraryEffects.filter(
     (e) =>
       matchesEffect(e) &&
-      (effectCategory === "all" || categoryOf(e.id) === effectCategory),
+      fitsTarget(e) &&
+      (effectRoleFilter === "all" || effectRole(e).role === effectRoleFilter),
   );
+  // Sections: roles when showing everything, feels within one role.
+  const effectSections = (
+    effectRoleFilter === "all"
+      ? effectRoles.map((role) => ({
+          key: role,
+          title: roleNames[role],
+          hint: roleHints[role],
+          effects: visibleLibraryEffects.filter(
+            (e) => effectRole(e).role === role,
+          ),
+        }))
+      : roleFeels[effectRoleFilter].map((feel) => ({
+          key: feel,
+          title: feel,
+          hint: "",
+          effects: visibleLibraryEffects.filter(
+            (e) => effectRole(e).feel === feel,
+          ),
+        }))
+  ).filter((section) => section.effects.length);
 
   const importMode = useRef<"add" | "library" | "relink">("add");
   const relinkAsset = useRef<MediaAsset | null>(null);
@@ -340,6 +382,15 @@ export function App() {
     saveQueue = useRef(Promise.resolve());
   current.current = project;
   const selected = project.layers.find((l) => l.id === selectedId);
+  // Cards that can't apply to the selected elements dim and say why.
+  const selectionMismatch = (effect: Effect) => {
+    for (const id of selectedIds) {
+      const layer = project.layers.find((l) => l.id === id);
+      const why = layer && targetMismatch(effect, layer.type);
+      if (why) return why;
+    }
+    return null;
+  };
   const editingEffect = effectDraft;
   const editingMyEffect =
     !effectElementId &&
@@ -1609,6 +1660,23 @@ export function App() {
                 </section>
               );
             })()}
+          {editingEffect.overlay &&
+            (() => {
+              const overlay = editingEffect.overlay;
+              return (
+                <section className="effect-settings-section">
+                  <h3>{overlayNames[overlay.kind]}</h3>
+                  <div className="visual-pass-fields">
+                    <OverlayControls
+                      overlay={overlay}
+                      onChange={(patch) =>
+                        updateEffect({ overlay: { ...overlay, ...patch } })
+                      }
+                    />
+                  </div>
+                </section>
+              );
+            })()}
           {editingEffect.depth && (
             <DepthControls
               value={editingEffect.depth}
@@ -2787,33 +2855,66 @@ export function App() {
                   onChange={(e) => setEffectSearch(e.target.value)}
                 />
                 <Dropdown
-                  label="Effect category"
-                  value={effectCategory}
-                  onChange={setEffectCategory}
+                  label="Effect target"
+                  value={effectTargetFilter}
+                  onChange={(value) =>
+                    setEffectTargetFilter(value as "all" | "text" | "picture")
+                  }
                   options={[
-                    { value: "all", label: "All categories" },
-                    ...Array.from(
-                      new Set(libraryEffects.map((e) => categoryOf(e.id))),
-                    ).map((value) => ({ value, label: value })),
+                    { value: "all", label: "Any element" },
+                    { value: "text", label: "Fits text" },
+                    { value: "picture", label: "Fits pictures" },
                   ]}
                 />
+              </div>
+              <div
+                className="effect-roles"
+                role="tablist"
+                aria-label="Effect roles"
+              >
+                {(["all", ...effectRoles] as const).map((role) => (
+                  <button
+                    key={role}
+                    role="tab"
+                    aria-selected={effectRoleFilter === role}
+                    className={effectRoleFilter === role ? "active" : ""}
+                    title={role === "all" ? "Every role" : roleHints[role]}
+                    onClick={() => setEffectRoleFilter(role)}
+                  >
+                    {role === "all" ? "All" : roleNames[role]}
+                  </button>
+                ))}
               </div>
               {!visibleLibraryEffects.length && (
                 <p className="effect-library-hint">
                   No matching library effects.
                 </p>
               )}
-              <div className="effects-grid">
-                {visibleLibraryEffects.map((e) => (
-                  <EffectCard
-                    key={e.id}
-                    effect={e}
-                    onApply={() => applyEffect(e.id)}
-                    onInspect={() => editEffect(e.id)}
-                    onDrop={(layerId) => applyEffect(e.id, layerId)}
-                  />
-                ))}
-              </div>
+              {effectSections.map((section) => (
+                <section
+                  key={section.key}
+                  className="effect-section"
+                  aria-label={section.title}
+                >
+                  <h4>
+                    {section.title}
+                    {section.hint && <small>{section.hint}</small>}
+                    <span>{section.effects.length}</span>
+                  </h4>
+                  <div className="effects-grid">
+                    {section.effects.map((e) => (
+                      <EffectCard
+                        key={e.id}
+                        effect={e}
+                        mismatch={selectionMismatch(e)}
+                        onApply={() => applyEffect(e.id)}
+                        onInspect={() => editEffect(e.id)}
+                        onDrop={(layerId) => applyEffect(e.id, layerId)}
+                      />
+                    ))}
+                  </div>
+                </section>
+              ))}
               <div className="section-line">
                 <span>MY EFFECTS</span>
                 <span>{myEffects.length}</span>
@@ -2832,6 +2933,7 @@ export function App() {
                           (effect) => effect.id === e.bundle.effect.id,
                         ) ?? e.bundle.effect
                       }
+                      mismatch={selectionMismatch(e.bundle.effect)}
                       onApply={() => applyEffect(e.bundle.effect.id)}
                       onInspect={() => editEffect(e.bundle.effect.id)}
                       onDrop={(layerId) =>

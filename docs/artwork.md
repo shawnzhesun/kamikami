@@ -1,6 +1,6 @@
 # Artwork treatments
 
-Requires `kamikami-visual-v8`. An effect with an `art` recipe (`src/artwork.ts`, rendered by `src/ArtworkLayer.tsx`) treats an image, video, shape, scene or backdrop. Every card in the **Artwork** category is one independent piece; stack them with each other and with any other effect.
+Requires `kamikami-visual-v8`. An effect with an `art` recipe (`src/artwork.ts`, rendered by `src/ArtworkLayer.tsx`) treats an image, video, shape, scene or backdrop. Every card in the **Artwork** category (shown under the Throughout, In and Out roles) is one independent piece; stack them with each other and with any other effect.
 
 ## Camera and beat (any visual element, including text)
 
@@ -21,6 +21,6 @@ Beat kinds count beats from the **project start** at `tempo` BPM, so every eleme
 
 Copies of video are muted; slices of video decode the clip once per band, so keep the count low for video.
 
-## Framing (artwork only)
+## Framing
 
-print, shadowblock and offsetframe sit under the artwork; brackets, cropmarks, label and tape sit over it. They are laid out around the artwork's visible box (an image's contain-fitted size, a shape's size, or the full frame for video, scenes and backdrops), follow its transform and draw in over `seconds`. The label shows `No.<count>  ·  <clip start>` unless text is set.
+The framing kinds (print border, block shadow, offset frame, corner brackets, crop marks, index label, tape corners) are now overlays, so they work on text too. Saved projects and bundles that used them as `art` kinds migrate on load. See [overlays](overlays.md).

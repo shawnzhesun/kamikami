@@ -6,10 +6,27 @@ import { isLayoutKind } from "../text-layouts";
 import React from "react";
 import { GraphicEffects } from "../GraphicEffects";
 import { layerAtTime, makeLayer, type Effect } from "../model";
-import { isDecorArt, isFrameArt } from "../artwork";
+import { isFrameArt } from "../artwork";
+import { type OverlayKind } from "../overlays";
 import { ArtworkStack } from "../ArtworkLayer";
 
 const sample = { ...makeLayer("scene", "Preview"), duration: 6 };
+/** Overlays previewed around a word; the rest frame a small picture. */
+const textOverlays: readonly OverlayKind[] = [
+  "circle",
+  "underline",
+  "highlight",
+  "strike",
+  "arrow",
+  "tick",
+  "cross",
+  "star",
+  "impact",
+  "sparkle",
+  "speedlines",
+  "callout",
+  "stamp",
+];
 export function effectPosterTime(effect: Effect) {
   if (effect.text?.kind === "glitch") return 0.04;
   // Layouts read best once arranged; swaps mid-sequence; holds after a beat.
@@ -21,7 +38,13 @@ export function effectPosterTime(effect: Effect) {
     if (k === "bandhide") return effect.text.seconds * 0.6;
     return Math.min(6, effect.text.seconds + 0.4);
   }
-  // Artwork: decorations once drawn in, beat kinds just after a beat, slides mid-move.
+  // Overlays once drawn; marks that land at the clip end just after they land.
+  const overlay = effect.overlay;
+  if (overlay)
+    return overlay.timing === "out"
+      ? 6 - Math.min(3, overlay.seconds) * 0.2
+      : Math.min(3, Math.max(1.2, overlay.seconds + 0.25));
+  // Artwork: beat kinds just after a beat, slides mid-move.
   const art = effect.art;
   if (art) {
     if (art.kind === "strobe") return 0.02;
@@ -33,8 +56,7 @@ export function effectPosterTime(effect: Effect) {
           : 1.5;
     if (["punch", "jolt", "slices"].includes(art.kind))
       return 60 / art.tempo + 0.03;
-    if (art.kind === "stutter" || art.kind === "drift") return 1.5;
-    return Math.min(6, Math.max(1.2, art.seconds + 0.2));
+    return 1.5;
   }
   // Looks read best once their decorations have drawn in.
   if (effect.text && isLookKind(effect.text.kind))
@@ -102,6 +124,7 @@ export function effectPosterTime(effect: Effect) {
 export function isTextEffectPreview(effect: Effect) {
   return (
     !!effect.text ||
+    (!!effect.overlay && textOverlays.includes(effect.overlay.kind)) ||
     !!effect.passes?.some(
       (pass) => pass.field && pass.field.unit !== "whole",
     ) ||
@@ -137,7 +160,7 @@ export function EffectSample({
   const fontSize =
     effect.text?.kind === "circle"
       ? 12
-      : effect.text && isLayoutKind(effect.text.kind)
+      : (effect.text && isLayoutKind(effect.text.kind)) || effect.overlay
         ? 22
         : 34;
   const layer = {
@@ -149,8 +172,8 @@ export function EffectSample({
     effects: [{ effectId: effect.id, amount: 1, enabled: true }],
   };
   const art = effect.art && isFrameArt(effect.art.kind) ? effect.art : null;
-  // Framing decorations need room around a smaller print; copies read on a cutout.
-  const framedPrint = !!art && isDecorArt(art.kind);
+  // Picture overlays need room around a smaller print; copies read on a cutout.
+  const framedPrint = !!effect.overlay && !title;
   const cutout =
     art?.kind === "trail" ||
     effect.passes?.some((p) =>
@@ -199,7 +222,12 @@ export function EffectSample({
               lineHeight: 1.15,
             }}
           >
-            <AnimatedText layer={layer} effects={[effect]} time={at} />
+            <AnimatedText
+              layer={layer}
+              effects={[effect]}
+              time={at}
+              stage={{ width: 1920, height: 1080 }}
+            />
           </span>
         ) : (
           <svg
@@ -255,10 +283,13 @@ export function EffectSample({
     >
       <foreignObject width="180" height="96">
         <div style={{ position: "relative", width: 180, height: 96 }}>
-          {art ? (
+          {art || framedPrint ? (
             <ArtworkStack
               id={`sample-${effect.id}`}
-              uses={[{ art, amount: 1 }]}
+              uses={art ? [{ art, amount: 1 }] : []}
+              overlays={
+                framedPrint ? [{ overlay: effect.overlay!, amount: 1 }] : []
+              }
               t={time}
               time={time}
               projectTime={time}

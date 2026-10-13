@@ -7,17 +7,22 @@ import {
   isTextEffectPreview,
 } from "./EffectSample";
 import { startGesture } from "./gesture";
+import { effectTarget } from "../effect-roles";
 export function EffectCard({
   effect,
   onApply,
   onInspect,
   onDrop,
+  mismatch,
 }: {
   effect: Effect;
   onApply: () => void;
   onInspect: () => void;
   onDrop: (layerId: string) => void;
+  /** Why the effect doesn't fit the current selection; the card dims. */
+  mismatch?: string | null;
 }) {
+  const fits = effectTarget(effect);
   const cleanup = useRef<(() => void) | null>(null);
   useEffect(() => () => cleanup.current?.(), []);
   const [dragging, setDragging] = useState(false);
@@ -45,11 +50,15 @@ export function EffectCard({
   }, [playing]);
   return (
     <div
-      className={`effect-card ${dragging ? "effect-dragging" : ""}`}
+      className={`effect-card ${dragging ? "effect-dragging" : ""} ${mismatch ? "effect-mismatch" : ""}`}
       tabIndex={0}
       role="group"
-      aria-label={`${effect.name}. Drag onto ${effect.text ? "text" : "a clip"}; Enter applies to selected elements.`}
-      title={effect.description + " · Drag to apply. Double-click to inspect."}
+      aria-label={`${effect.name}. Drag onto ${fits === "text" ? "text" : fits === "picture" ? "a picture clip" : "a clip"}; Enter applies to selected elements.`}
+      title={
+        (mismatch ? `${mismatch} · ` : "") +
+        effect.description +
+        " · Drag to apply. Double-click to inspect."
+      }
       onPointerDown={(e) => {
         if (e.button !== 0 || (e.target as HTMLElement).closest("button"))
           return;
@@ -89,9 +98,11 @@ export function EffectCard({
               document
                 .elementFromPoint(event.clientX, event.clientY)
                 ?.closest<HTMLElement>(
-                  effect.text
+                  fits === "text"
                     ? "[data-element-id].title"
-                    : "[data-element-id]:not(.audio)",
+                    : fits === "picture"
+                      ? "[data-element-id]:not(.audio):not(.title)"
+                      : "[data-element-id]:not(.audio)",
                 ) ?? null;
             target?.classList.add("effect-drop-target");
           },

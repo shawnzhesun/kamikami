@@ -8,6 +8,8 @@ import { builtinTextSettings, TextEffectSchema } from "./text-effects";
 import { DepthSchema, FieldSchema, ParticleSchema } from "./motion";
 import { type VisualPass } from "./visual-effects";
 import { makeArt, type Art, type ArtKind } from "./artwork";
+import { makeOverlay, type Overlay, type OverlayKind } from "./overlays";
+import { exitName, isReversibleEntrance } from "./effect-roles";
 
 const pass = (
   kind: VisualPass["kind"],
@@ -468,7 +470,15 @@ export const legacyBuiltinEffects: Effect[] = [
 
 type EffectParameters = Pick<
   Effect,
-  "channels" | "passes" | "color" | "tint" | "text" | "depth" | "origin" | "art"
+  | "channels"
+  | "passes"
+  | "color"
+  | "tint"
+  | "text"
+  | "depth"
+  | "origin"
+  | "art"
+  | "overlay"
 >;
 type EffectVariation = {
   id: string;
@@ -490,6 +500,7 @@ const parameters = (effect: Effect): EffectParameters => ({
   ...(effect.depth ? { depth: effect.depth } : {}),
   ...(effect.origin ? { origin: effect.origin } : {}),
   ...(effect.art ? { art: effect.art } : {}),
+  ...(effect.overlay ? { overlay: effect.overlay } : {}),
   color: effect.color,
   tint: effect.tint,
 });
@@ -3263,6 +3274,259 @@ const kineticCards: StyleCard[] = [
       ["beat-lean", "Lean", kin("lean", { unit: "word", tempo: 120 })],
     ],
   },
+  {
+    id: "kinetic-gather",
+    name: "Gather",
+    category: "Kinetic type",
+    description:
+      "Entrance: each letter arrives as spinning shards that fly in from a scatter and lock together. Text elements only.",
+    variations: [
+      [
+        "gather-letters",
+        "Letters",
+        kin("gather", { seconds: 1.2, stagger: 0.5 }),
+      ],
+      [
+        "gather-wide",
+        "Wide scatter",
+        kin("gather", {
+          seconds: 1.5,
+          stagger: 0.4,
+          distance: 1.4,
+          motion: { order: "random", direction: "in" },
+        }),
+      ],
+    ],
+  },
+  {
+    id: "kinetic-plates",
+    name: "Plate snap",
+    category: "Kinetic type",
+    description:
+      "Entrance: cyan, magenta and yellow copies slide from misregistration into one sharp print. Text elements only.",
+    variations: [
+      [
+        "plates-words",
+        "Words",
+        kin("plates", { unit: "word", seconds: 0.9, stagger: 0.35 }),
+      ],
+      [
+        "plates-title",
+        "Whole title",
+        kin("plates", { unit: "title", seconds: 0.8, distance: 1 }),
+      ],
+    ],
+  },
+  {
+    id: "kinetic-inkstroke",
+    name: "Ink stroke",
+    category: "Kinetic type",
+    description:
+      "Entrance: a wet bristle stroke paints along each line and the type shows once it passes. Text elements only.",
+    variations: [
+      [
+        "inkstroke-coral",
+        "Coral",
+        kin("inkstroke", { unit: "word", seconds: 1.6, stagger: 0 }),
+      ],
+      [
+        "inkstroke-ink",
+        "Ink",
+        kin("inkstroke", {
+          unit: "word",
+          seconds: 1.6,
+          stagger: 0,
+          color: "#141414",
+        }),
+      ],
+    ],
+  },
+  {
+    id: "kinetic-afterimage",
+    name: "Afterimage",
+    category: "Kinetic type",
+    description:
+      "Hold: the text drifts in a slow figure eight and leaves colored echoes of itself behind. Text elements only.",
+    variations: [
+      [
+        "afterimage-neon",
+        "Neon",
+        kin("afterimage", {
+          unit: "title",
+          tempo: 120,
+          color: "#ff2e88",
+          secondary: "#16f4d4",
+        }),
+      ],
+      [
+        "afterimage-warm",
+        "Warm",
+        kin("afterimage", {
+          unit: "title",
+          tempo: 120,
+          color: "#ff8a3d",
+          secondary: "#ffe14d",
+          distance: 1,
+        }),
+      ],
+    ],
+  },
+  {
+    id: "kinetic-gust",
+    name: "Gust",
+    category: "Kinetic type",
+    description:
+      "Hold: every four beats a gust of wind sweeps along the line and the letters bend and spring back. Text elements only.",
+    variations: [["gust-letters", "Letters", kin("gust", { tempo: 120 })]],
+  },
+  {
+    id: "kinetic-lubdub",
+    name: "Lub-dub",
+    category: "Kinetic type",
+    description:
+      "Hold: the text beats like a heart — a strong pulse and a softer echo — flushing the accent color. Text elements only.",
+    variations: [
+      [
+        "lubdub-red",
+        "Red",
+        kin("lubdub", { unit: "title", tempo: 120, color: "#ff3b4f" }),
+      ],
+      [
+        "lubdub-words",
+        "Words",
+        kin("lubdub", { unit: "word", tempo: 120, color: "#ff3b4f" }),
+      ],
+    ],
+  },
+  {
+    id: "kinetic-burst",
+    name: "Burst",
+    category: "Kinetic type",
+    description:
+      "Exit: each letter flashes and blasts apart into spinning shards that drop away. Text elements only.",
+    variations: [
+      [
+        "burst-letters",
+        "Letters",
+        kin("blast", { seconds: 0.9, stagger: 0.3, color: "#fff4c2", ...out }),
+      ],
+      [
+        "burst-center",
+        "From the center",
+        kin("blast", {
+          seconds: 1,
+          stagger: 0.4,
+          distance: 1.2,
+          color: "#fff4c2",
+          motion: { order: "center", direction: "out" },
+        }),
+      ],
+    ],
+  },
+  {
+    id: "kinetic-crumble",
+    name: "Crumble",
+    category: "Kinetic type",
+    description:
+      "Exit: letters shudder, crack into shards and fall away one piece at a time. Text elements only.",
+    variations: [
+      [
+        "crumble-letters",
+        "Letters",
+        kin("crumble", {
+          seconds: 1.6,
+          stagger: 0.45,
+          motion: { order: "random", direction: "out" },
+        }),
+      ],
+    ],
+  },
+  {
+    id: "kinetic-wipeoff",
+    name: "Wipe off",
+    category: "Kinetic type",
+    description:
+      "Exit: an accent bar sweeps across the text and wipes it away behind it. Text elements only.",
+    variations: [
+      [
+        "wipeoff-title",
+        "Whole title",
+        kin("wipeoff", { unit: "title", seconds: 0.7, ...out }),
+      ],
+      [
+        "wipeoff-words",
+        "Word by word",
+        kin("wipeoff", {
+          unit: "word",
+          seconds: 1,
+          stagger: 0.5,
+          color: "#ffe14d",
+          ...out,
+        }),
+      ],
+    ],
+  },
+  {
+    id: "kinetic-aperture",
+    name: "Aperture",
+    category: "Kinetic type",
+    description:
+      "Exit: a circular iris closes on the text, its ring shrinking to a point. Text elements only.",
+    variations: [
+      [
+        "aperture-title",
+        "Whole title",
+        kin("aperture", {
+          unit: "title",
+          seconds: 0.8,
+          color: "#f6f2ea",
+          ...out,
+        }),
+      ],
+      [
+        "aperture-words",
+        "Word by word",
+        kin("aperture", { unit: "word", seconds: 1, stagger: 0.5, ...out }),
+      ],
+    ],
+  },
+  {
+    id: "kinetic-channels",
+    name: "Channel split",
+    category: "Kinetic type",
+    description:
+      "Exit: the type separates into red, green and blue light that splits apart and fades. Text elements only.",
+    variations: [
+      [
+        "channels-words",
+        "Words",
+        kin("channels", { unit: "word", seconds: 0.8, stagger: 0.3, ...out }),
+      ],
+      [
+        "channels-title",
+        "Whole title",
+        kin("channels", { unit: "title", seconds: 0.7, distance: 1, ...out }),
+      ],
+    ],
+  },
+  {
+    id: "kinetic-melt",
+    name: "Melt",
+    category: "Kinetic type",
+    description:
+      "Exit: letters sag and drain downward from the top, trailing drips. Text elements only.",
+    variations: [
+      [
+        "melt-letters",
+        "Letters",
+        kin("melt", {
+          seconds: 1.5,
+          stagger: 0.5,
+          motion: { order: "random", direction: "out" },
+        }),
+      ],
+    ],
+  },
 ];
 export const kineticEffects: Effect[] = kineticCards.map((card) =>
   EffectSchema.parse({
@@ -3548,19 +3812,6 @@ const lookCards: StyleCard[] = [
     ],
   },
   {
-    id: "look-brackets",
-    name: "Corner brackets",
-    category: "Text treatments",
-    description: "Four corner brackets open out around the text block.",
-    variations: [
-      [
-        "corner-brackets",
-        "Brackets",
-        look("brackets", { color: "#f1eee7", seconds: 0.8 }),
-      ],
-    ],
-  },
-  {
     id: "look-rules",
     name: "Rules",
     category: "Text treatments",
@@ -3568,16 +3819,6 @@ const lookCards: StyleCard[] = [
       "A heavy rule above and a hairline below draw in from opposite sides, editorial style.",
     variations: [
       ["rules", "Rules", look("rules", { color: "#f5c84c", seconds: 0.9 })],
-    ],
-  },
-  {
-    id: "look-label",
-    name: "Index label",
-    category: "Text treatments",
-    description:
-      "A small monospaced label types in under the text: an index and the clip's time, or your own words.",
-    variations: [
-      ["index-label", "Label", look("label", { color: "#a5c3c0", seconds: 1 })],
     ],
   },
   {
@@ -3972,88 +4213,6 @@ const artCards: StyleCard[] = [
       ],
     ],
   },
-  {
-    id: "art-print",
-    name: "Print border",
-    category: "Artwork",
-    description:
-      "A paper border and soft shadow around the artwork, like a print pinned to the frame.",
-    variations: [
-      ["print-white", "White", artwork("print")],
-      [
-        "print-cream",
-        "Wide cream",
-        artwork("print", { color: "#efe4cc", distance: 0.06 }),
-      ],
-    ],
-  },
-  {
-    id: "art-block-shadow",
-    name: "Block shadow",
-    category: "Artwork",
-    description:
-      "A hard, solid offset shadow behind the artwork, pop-poster style.",
-    variations: [
-      ["block-ink", "Ink", artwork("shadowblock")],
-      [
-        "block-coral",
-        "Coral",
-        artwork("shadowblock", { color: "#f2765e", angle: 135 }),
-      ],
-    ],
-  },
-  {
-    id: "art-offset-frame",
-    name: "Offset frame",
-    category: "Artwork",
-    description:
-      "An outline rectangle that slides out from behind the artwork.",
-    variations: [
-      ["frame-coral", "Coral", artwork("offsetframe")],
-      [
-        "frame-mint",
-        "Mint",
-        artwork("offsetframe", { color: "#16f4d4", angle: -45 }),
-      ],
-    ],
-  },
-  {
-    id: "art-brackets",
-    name: "Corner brackets",
-    category: "Artwork",
-    description: "Viewfinder corners close in around the artwork.",
-    variations: [
-      ["brackets-light", "Light", artwork("brackets")],
-      ["brackets-ink", "Ink", artwork("brackets", { color: "#141414" })],
-    ],
-  },
-  {
-    id: "art-crop-marks",
-    name: "Crop marks",
-    category: "Artwork",
-    description:
-      "Printer's crop marks and registration targets around the artwork.",
-    variations: [["crop-light", "Light", artwork("cropmarks")]],
-  },
-  {
-    id: "art-label",
-    name: "Index label",
-    category: "Artwork",
-    description:
-      "A small monospaced caption under the artwork: an index and the clip's start time, or your own text.",
-    variations: [["label-index", "Index", artwork("label")]],
-  },
-  {
-    id: "art-tape",
-    name: "Tape corners",
-    category: "Artwork",
-    description:
-      "Two strips of tape hold the artwork's top corners, scrapbook style.",
-    variations: [
-      ["tape-masking", "Masking", artwork("tape")],
-      ["tape-pink", "Pink", artwork("tape", { color: "#ff9ec7" })],
-    ],
-  },
 ];
 export const artEffects: Effect[] = artCards.map((card) =>
   EffectSchema.parse({
@@ -4086,8 +4245,428 @@ export const artEffectFamilies: EffectFamily[] = artCards
   }));
 for (const card of artCards) styleCategories.set(card.id, card.category);
 
+const mark = (kind: OverlayKind, patch: Partial<Overlay> = {}) => ({
+  overlay: makeOverlay(kind, patch),
+});
+/** Overlay cards; the framing marks keep the IDs they had as artwork treatments. */
+const overlayCards: StyleCard[] = [
+  {
+    id: "art-print",
+    name: "Print border",
+    category: "Overlay",
+    description:
+      "A paper border and soft shadow around the element, like a print pinned to the frame.",
+    variations: [
+      ["print-white", "White", mark("print")],
+      [
+        "print-cream",
+        "Wide cream",
+        mark("print", { color: "#efe4cc", pad: 2.4 }),
+      ],
+    ],
+  },
+  {
+    id: "art-block-shadow",
+    name: "Block shadow",
+    category: "Overlay",
+    description:
+      "A hard, solid offset shadow behind the element, pop-poster style.",
+    variations: [
+      ["block-ink", "Ink", mark("shadowblock")],
+      [
+        "block-coral",
+        "Coral",
+        mark("shadowblock", { color: "#f2765e", angle: 135 }),
+      ],
+    ],
+  },
+  {
+    id: "art-offset-frame",
+    name: "Offset frame",
+    category: "Overlay",
+    description:
+      "An outline rectangle that slides out from behind the element.",
+    variations: [
+      ["frame-coral", "Coral", mark("offsetframe")],
+      [
+        "frame-mint",
+        "Mint",
+        mark("offsetframe", { color: "#16f4d4", angle: -45 }),
+      ],
+    ],
+  },
+  {
+    id: "art-brackets",
+    name: "Corner brackets",
+    category: "Overlay",
+    description: "Viewfinder corners close in around the element.",
+    variations: [
+      ["brackets-light", "Light", mark("brackets")],
+      ["brackets-ink", "Ink", mark("brackets", { color: "#141414" })],
+      ["brackets-coral", "Coral", mark("brackets", { color: "#f2765e" })],
+    ],
+  },
+  {
+    id: "art-crop-marks",
+    name: "Crop marks",
+    category: "Overlay",
+    description:
+      "Printer's crop marks and registration targets around the element.",
+    variations: [
+      ["crop-light", "Light", mark("cropmarks")],
+      ["crop-ink", "Ink", mark("cropmarks", { color: "#141414" })],
+    ],
+  },
+  {
+    id: "art-label",
+    name: "Index label",
+    category: "Overlay",
+    description:
+      "A small monospaced caption types in beside the element: an index and the clip's start time, or your own words.",
+    variations: [["label-index", "Index", mark("label")]],
+  },
+  {
+    id: "art-tape",
+    name: "Tape corners",
+    category: "Overlay",
+    description:
+      "Two strips of tape hold the element's top corners, scrapbook style.",
+    variations: [
+      ["tape-masking", "Masking", mark("tape")],
+      ["tape-pink", "Pink", mark("tape", { color: "#ff9ec7" })],
+    ],
+  },
+  {
+    id: "overlay-circle",
+    name: "Circle it",
+    category: "Overlay",
+    description:
+      "A quick marker loop draws around the element or its key word, overshooting where it closes.",
+    variations: [
+      ["circle-red", "Red marker", mark("circle")],
+      [
+        "circle-key",
+        "Key word",
+        mark("circle", { anchor: "keyword", pad: 0.6 }),
+      ],
+      [
+        "circle-pencil",
+        "Boiling pencil",
+        mark("circle", { color: "#f6f2ea", weight: 0.7, boil: 8, wobble: 0.7 }),
+      ],
+    ],
+  },
+  {
+    id: "overlay-underline",
+    name: "Hand underline",
+    category: "Overlay",
+    description:
+      "A hand-drawn stroke underlines the text, its key word or every line.",
+    variations: [
+      ["underline-single", "Single", mark("underline")],
+      ["underline-double", "Double", mark("underline", { count: 2 })],
+      ["underline-key", "Key word", mark("underline", { anchor: "keyword" })],
+      [
+        "underline-lines",
+        "Every line",
+        mark("underline", { anchor: "lines", color: "#ffe14d" }),
+      ],
+    ],
+  },
+  {
+    id: "overlay-highlight",
+    name: "Highlighter",
+    category: "Overlay",
+    description:
+      "A translucent marker swipe behind the words, one line after another.",
+    variations: [
+      ["highlight-yellow", "Yellow", mark("highlight", { anchor: "lines" })],
+      [
+        "highlight-pink",
+        "Pink key word",
+        mark("highlight", { anchor: "keyword", color: "#ff7ab6" }),
+      ],
+      [
+        "highlight-mint",
+        "Mint",
+        mark("highlight", { anchor: "lines", color: "#7cf2c8" }),
+      ],
+    ],
+  },
+  {
+    id: "overlay-strike",
+    name: "Strike through",
+    category: "Overlay",
+    description: "A pen line strikes through the text or a single word.",
+    variations: [
+      ["strike-single", "Single", mark("strike", { anchor: "lines" })],
+      ["strike-key", "Key word", mark("strike", { anchor: "keyword" })],
+      [
+        "strike-double",
+        "Double",
+        mark("strike", { count: 2, color: "#f6f2ea" }),
+      ],
+    ],
+  },
+  {
+    id: "overlay-arrow",
+    name: "Pointer arrow",
+    category: "Overlay",
+    description:
+      "A bowed marker arrow swoops in from the roomiest side and points at the element.",
+    variations: [
+      ["arrow-red", "Red", mark("arrow")],
+      [
+        "arrow-key",
+        "At the key word",
+        mark("arrow", { anchor: "keyword", color: "#ffe14d" }),
+      ],
+    ],
+  },
+  {
+    id: "overlay-tick",
+    name: "Tick",
+    category: "Overlay",
+    description: "A hand-drawn check mark beside the element.",
+    variations: [["tick-green", "Green", mark("tick")]],
+  },
+  {
+    id: "overlay-cross",
+    name: "Cross",
+    category: "Overlay",
+    description: "Two quick strokes cross beside the element.",
+    variations: [["cross-red", "Red", mark("cross")]],
+  },
+  {
+    id: "overlay-star",
+    name: "Margin star",
+    category: "Overlay",
+    description:
+      "A doodled star in the margin, filled once it's drawn, rocking gently.",
+    variations: [
+      ["star-yellow", "Yellow", mark("star")],
+      [
+        "star-top",
+        "Above",
+        mark("star", { placement: "top", color: "#f6f2ea" }),
+      ],
+    ],
+  },
+  {
+    id: "overlay-dimension",
+    name: "Dimension line",
+    category: "Overlay",
+    description:
+      "A drafting dimension measures the element's width, with extension lines and a live readout.",
+    variations: [
+      ["dimension-blue", "Blueprint", mark("dimension")],
+      ["dimension-ink", "Ink", mark("dimension", { color: "#141414" })],
+    ],
+  },
+  {
+    id: "overlay-crosshair",
+    name: "Crosshair",
+    category: "Overlay",
+    description:
+      "Hairlines cross behind the element's center with a ring and its position on the frame.",
+    variations: [
+      ["crosshair-blue", "Blueprint", mark("crosshair")],
+      [
+        "crosshair-key",
+        "On the key word",
+        mark("crosshair", { anchor: "keyword", color: "#f6f2ea" }),
+      ],
+    ],
+  },
+  {
+    id: "overlay-ruler",
+    name: "Ruler",
+    category: "Overlay",
+    description:
+      "A ruler with numbered ticks unrolls along the element's edge.",
+    variations: [["ruler-light", "Light", mark("ruler")]],
+  },
+  {
+    id: "overlay-callout",
+    name: "Callout",
+    category: "Overlay",
+    description: "A leader line runs from the element to a typed figure label.",
+    variations: [
+      ["callout-fig", "Figure", mark("callout")],
+      [
+        "callout-key",
+        "Key word",
+        mark("callout", { anchor: "keyword", label: "THIS ONE" }),
+      ],
+    ],
+  },
+  {
+    id: "overlay-registration",
+    name: "Registration marks",
+    category: "Overlay",
+    description:
+      "Cyan, magenta and yellow targets slide from misregistration into one sharp mark on each side.",
+    variations: [
+      ["registration-ink", "Ink", mark("registration")],
+      [
+        "registration-light",
+        "Light",
+        mark("registration", { color: "#f6f2ea" }),
+      ],
+    ],
+  },
+  {
+    id: "overlay-colorbars",
+    name: "Color bars",
+    category: "Overlay",
+    description: "A printer's color control strip lays down patch by patch.",
+    variations: [
+      ["colorbars-process", "Process", mark("colorbars")],
+      ["colorbars-long", "Process and greys", mark("colorbars", { count: 14 })],
+    ],
+  },
+  {
+    id: "overlay-stamp",
+    name: "Rubber stamp",
+    category: "Overlay",
+    description:
+      "A tilted ink stamp slams onto the corner. Write your own stamp text.",
+    variations: [
+      ["stamp-approved", "Approved", mark("stamp")],
+      [
+        "stamp-sold",
+        "Sold out",
+        mark("stamp", { label: "SOLD OUT", color: "#2a5bd7", angle: 8 }),
+      ],
+      [
+        "stamp-new",
+        "New",
+        mark("stamp", { label: "NEW!", color: "#141414", angle: -18 }),
+      ],
+    ],
+  },
+  {
+    id: "overlay-speedlines",
+    name: "Speed lines",
+    category: "Overlay",
+    description:
+      "Comic speed lines stream behind the element. The angle sets its direction of travel.",
+    variations: [
+      ["speed-right", "Rushing right", mark("speedlines")],
+      ["speed-up", "Rising", mark("speedlines", { angle: -90 })],
+      [
+        "speed-dark",
+        "Ink",
+        mark("speedlines", { angle: 180, color: "#141414" }),
+      ],
+    ],
+  },
+  {
+    id: "overlay-impact",
+    name: "Impact burst",
+    category: "Overlay",
+    description:
+      "Comic impact rays burst out behind the element and keep throbbing.",
+    variations: [
+      ["impact-yellow", "Yellow", mark("impact")],
+      [
+        "impact-red",
+        "Red, many rays",
+        mark("impact", { color: "#e8392f", count: 22 }),
+      ],
+    ],
+  },
+  {
+    id: "exit-crossout",
+    name: "Cross out",
+    category: "Overlay",
+    description:
+      "Exit: a pen line strikes through every line of the element, then it fades away.",
+    variations: [
+      [
+        "crossout-red",
+        "Red pen",
+        {
+          ...mark("strike", { anchor: "lines", timing: "out", seconds: 1 }),
+          channels: [
+            {
+              ...channel("opacity", 1, 0, "ease"),
+              seconds: 0.35,
+              align: "end" as const,
+            },
+          ],
+        },
+      ],
+      [
+        "crossout-double",
+        "Double",
+        {
+          ...mark("strike", {
+            anchor: "lines",
+            timing: "out",
+            seconds: 1,
+            count: 2,
+            color: "#f6f2ea",
+          }),
+          channels: [
+            {
+              ...channel("opacity", 1, 0, "ease"),
+              seconds: 0.35,
+              align: "end" as const,
+            },
+          ],
+        },
+      ],
+    ],
+  },
+  {
+    id: "overlay-sparkle",
+    name: "Sparkles",
+    category: "Overlay",
+    description: "Four-point glints twinkle around the element.",
+    variations: [
+      ["sparkle-warm", "Warm", mark("sparkle")],
+      [
+        "sparkle-many",
+        "Many, cool",
+        mark("sparkle", { count: 12, color: "#c8f4ff", speed: 1.6 }),
+      ],
+    ],
+  },
+];
+export const overlayEffects: Effect[] = overlayCards.map((card) =>
+  EffectSchema.parse({
+    id: card.id,
+    name: card.name,
+    description: card.description,
+    channels: [],
+    color: "#f2765e",
+    tint: 0,
+    ...card.variations[0][2],
+  }),
+);
+export const overlayEffectFamilies: EffectFamily[] = overlayCards
+  .filter((card) => card.variations.length > 1)
+  .map((card) => ({
+    id: card.id,
+    name: card.name,
+    category: card.category,
+    description: card.description,
+    variations: card.variations.map(([id, name, patch]) => ({
+      id,
+      name,
+      parameters: parameters(
+        EffectSchema.parse({
+          ...overlayEffects.find((e) => e.id === card.id)!,
+          ...patch,
+        }),
+      ),
+    })),
+  }));
+for (const card of overlayCards) styleCategories.set(card.id, card.category);
+
 /** Gallery contains one card per family; legacy definitions remain resolvable. */
-export const builtinEffects: Effect[] = [
+const primaryEffects: Effect[] = [
   ...legacyBuiltinEffects.flatMap((effect) => {
     if (!replacedIds.has(effect.id)) return [effect];
     const index = effectFamilies.findIndex(
@@ -4105,7 +4684,35 @@ export const builtinEffects: Effect[] = [
   ...lookEffects,
   ...layoutEffects,
   ...artEffects,
+  ...overlayEffects,
 ];
+/** Every reversible entrance also appears as an exit that plays it backwards. */
+export const reversedEffects: Effect[] = primaryEffects
+  .filter(isReversibleEntrance)
+  .map((effect) => {
+    const id = `${effect.id}-out`;
+    styleCategories.set(id, styleCategories.get(effect.id) ?? "Typography");
+    return EffectSchema.parse({
+      ...effect,
+      id,
+      name: exitName(effect.name),
+      description: `Exit: ${effect.name} played backwards over the end of the clip. Text elements only.`,
+      presetFamilyId: undefined,
+      text: {
+        ...effect.text,
+        motion: {
+          depth: 3,
+          spread: 2,
+          rotation: 90,
+          order: "forward",
+          easing: "smooth",
+          ...effect.text!.motion,
+          direction: "out",
+        },
+      },
+    });
+  });
+export const builtinEffects: Effect[] = [...primaryEffects, ...reversedEffects];
 export const allBuiltinEffects: Effect[] = [
   ...builtinEffects,
   ...legacyBuiltinEffects.filter((e) => replacedIds.has(e.id)),
@@ -4122,6 +4729,7 @@ export function getEffectFamily(id: string) {
     ...lookEffectFamilies,
     ...layoutEffectFamilies,
     ...artEffectFamilies,
+    ...overlayEffectFamilies,
   ].find((f) => f.id === id || f.variations.some((v) => v.id === id));
 }
 
@@ -4134,6 +4742,7 @@ const parameterSchema = EffectSchema.pick({
   depth: true,
   origin: true,
   art: true,
+  overlay: true,
 });
 const parameterKey = (value: EffectParameters) =>
   JSON.stringify(parameterSchema.parse(value));
@@ -4174,6 +4783,9 @@ export function effectVariationPatch(
           ? { origin: undefined }
           : {}),
         ...(effect.art && !variation.parameters.art ? { art: undefined } : {}),
+        ...(effect.overlay && !variation.parameters.overlay
+          ? { overlay: undefined }
+          : {}),
       })
     : undefined;
 }

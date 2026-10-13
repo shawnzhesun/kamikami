@@ -20,12 +20,13 @@ import {
 import {
   artUses,
   elementTime,
+  overlayUses,
   layerAtTime,
   layerVolume,
   type Project,
   type Layer,
 } from "./model";
-import { isDecorArt, isFrameArt } from "./artwork";
+import { isFrameArt } from "./artwork";
 import { ArtworkStack } from "./ArtworkLayer";
 
 function Station({ width, height }: { width: number; height: number }) {
@@ -170,14 +171,26 @@ function VisualLayer({
   const t = frame / fps;
   const src = layer.src ? mediaOrigin + layer.src : "";
   const uses = artUses(layer, project.effects, t);
-  // Copies and frames draw from the element's pixels; text has its own treatments.
+  // Text draws its own overlays around the measured text block.
+  const overlays =
+    layer.type === "title"
+      ? []
+      : overlayUses(layer, project.effects, animationTime(layer, t));
+  // Copies and slices draw from the element's pixels; text has its own treatments.
   const framed =
-    layer.type !== "title" && uses.some((u) => isFrameArt(u.art.kind));
+    layer.type !== "title" &&
+    (overlays.length > 0 || uses.some((u) => isFrameArt(u.art.kind)));
+  // Measure whenever the element has overlays, so they don't jump in mid-clip.
   const box = useArtworkBox(
     layer,
     src,
     project,
-    framed && uses.some((u) => isDecorArt(u.art.kind)),
+    layer.type !== "title" &&
+      layer.effects.some(
+        (i) =>
+          !!(i.settings ?? project.effects.find((e) => e.id === i.effectId))
+            ?.overlay,
+      ),
   );
   if (missing)
     return layer.type === "audio" ? null : (
@@ -306,6 +319,8 @@ function VisualLayer({
       <ArtworkStack
         id={`art-${layer.id}`}
         uses={uses}
+        overlays={overlays}
+        position={{ x: layer.x, y: layer.y }}
         t={t}
         time={animationTime(layer, t)}
         projectTime={layer.start + t}

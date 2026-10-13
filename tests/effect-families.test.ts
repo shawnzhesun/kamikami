@@ -16,6 +16,8 @@ import {
   lookEffects,
   artEffects,
   layoutEffects,
+  overlayEffects,
+  reversedEffects,
   legacyBuiltinEffects,
   effectFamilies,
   getEffectFamily,
@@ -52,7 +54,9 @@ test("gallery retains the consolidation and appends only the new video operation
       kineticEffects.length +
       lookEffects.length +
       artEffects.length +
-      layoutEffects.length,
+      layoutEffects.length +
+      overlayEffects.length +
+      reversedEffects.length,
   );
   assert.equal(
     new Set(allBuiltinEffects.map((e) => e.id)).size,

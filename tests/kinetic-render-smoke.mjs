@@ -13,6 +13,7 @@ import {
   kineticEffects,
   layoutEffects,
   lookEffects,
+  overlayEffects,
 } from "../src/builtin-effects.ts";
 import { isLayoutKind } from "../src/text-layouts.ts";
 import { isKineticKind, kineticRole } from "../src/kinetic-type.ts";
@@ -55,7 +56,7 @@ const timesFor = (effect) => {
   return [0.02, s * 0.25, s * 0.5, s * 0.75, s + 0.2];
 };
 const card = (id) =>
-  [...kineticEffects, ...lookEffects, ...layoutEffects].find(
+  [...kineticEffects, ...lookEffects, ...layoutEffects, ...overlayEffects].find(
     (effect) => effect.id === id,
   );
 // Single cards, then art-directed stacks: motion + paint + decoration.
@@ -70,8 +71,10 @@ const recipes = [
   ...[
     ["kinetic-flash", "look-ghosts", "look-keyline"],
     ["kinetic-slam", "look-extrude", "look-burst"],
-    ["kinetic-hinge", "look-word-plates", "look-label"],
-    ["kinetic-decode", "look-brackets", "look-ticker"],
+    ["kinetic-hinge", "look-word-plates", "art-label"],
+    ["kinetic-decode", "art-brackets", "look-ticker"],
+    ["kinetic-plates", "overlay-circle", "kinetic-lubdub"],
+    ["kinetic-inkstroke", "overlay-highlight", "kinetic-melt"],
     ["kinetic-spring", "look-chrome", "look-reflection"],
     ["kinetic-push", "look-neon", "look-rules"],
   ].map((ids) => ({

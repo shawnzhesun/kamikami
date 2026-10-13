@@ -388,19 +388,6 @@ function LookControls({
           onChange={(speed) => onChange({ speed })}
         />
       )}
-      {c.label && (
-        <label>
-          Label text
-          <input
-            value={text.label ?? ""}
-            maxLength={60}
-            placeholder="No.01 · 00:00.00"
-            onChange={(event) =>
-              onChange({ label: event.target.value || undefined })
-            }
-          />
-        </label>
-      )}
       {c.color && (
         <label>
           {c.color}

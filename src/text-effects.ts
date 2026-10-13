@@ -24,20 +24,19 @@ export const allTextKinds = [
   ...lookKinds,
   ...layoutKinds,
 ] as const;
-export const textEffectNames: Record<(typeof allTextKinds)[number], string> =
-  {
-    ...titleNames,
-    ...kineticNames,
-    ...lookNames,
-    ...layoutNames,
-    typewriter: "Typewriter",
-    scramble: "Text scramble",
-    stagger: "Staggered text",
-    wave: "Text wave",
-    gradient: "Flowing text gradient",
-    neon: "Neon text",
-    glitch: "Text glitch",
-  };
+export const textEffectNames: Record<(typeof allTextKinds)[number], string> = {
+  ...titleNames,
+  ...kineticNames,
+  ...lookNames,
+  ...layoutNames,
+  typewriter: "Typewriter",
+  scramble: "Text scramble",
+  stagger: "Staggered text",
+  wave: "Text wave",
+  gradient: "Flowing text gradient",
+  neon: "Neon text",
+  glitch: "Text glitch",
+};
 export const TextEffectSchema = z
   .object({
     kind: z.enum(allTextKinds),
@@ -102,8 +101,6 @@ export const TextEffectSchema = z
     tempo: z.number().min(30).max(240).optional(),
     /** Text looks: shadow/extrusion direction in degrees (v8; default 45). */
     angle: z.number().min(-180).max(180).optional(),
-    /** Index label text (v8); empty uses an index and the clip time. */
-    label: z.string().max(60).optional(),
   })
   .strict();
 export type TextEffect = z.infer<typeof TextEffectSchema>;

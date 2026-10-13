@@ -28,7 +28,7 @@ const camera = (art: Art, time: number, projectTime = time) =>
   artCamera([{ art, amount: 1 }], time, projectTime, stage);
 
 test("artwork cards cover every kind as a v8 Artwork category", () => {
-  assert.equal(artEffects.length, 14);
+  assert.equal(artEffects.length, 7);
   assert.deepEqual(
     [...new Set(artEffects.map((e) => e.art!.kind))].sort(),
     [...artKinds].sort(),
@@ -113,7 +113,7 @@ test("drift overscans and stays small; stutter holds whole steps", () => {
   );
 });
 
-test("copies trail behind, slices cut bands, frames follow the artwork box", () => {
+test("copies trail behind and slices cut bands", () => {
   const render = (art: Art, time = 1.2) =>
     renderToStaticMarkup(
       React.createElement(ArtworkStack, {
@@ -150,19 +150,9 @@ test("copies trail behind, slices cut bands, frames follow the artwork box", () 
     true,
     "slid-in bands settle",
   );
-  const label = render(makeArt("label", { count: 3 }));
-  assert.match(label, /No\.03 {2}· {2}00:08\.50/);
-  assert.match(label, /left:360px;top:140px;width:1200px;height:800px/);
-  assert.equal(
-    render(makeArt("brackets")).match(/border-top:|border-bottom:/g)?.length,
-    4,
-  );
-  // Print border and block shadow sit under the artwork.
-  const print = render(makeArt("print"));
-  assert.ok(print.indexOf("box-shadow") < print.indexOf("data-t"));
 });
 
-test("frame treatments are for artwork; camera moves also work on text", () => {
+test("copies are for artwork; camera moves and overlays also work on text", () => {
   const p = validateProject({
     ...initialProject,
     layers: [...initialProject.layers],
@@ -176,8 +166,8 @@ test("frame treatments are for artwork; camera moves also work on text", () => {
   );
   const punched = applyEffectToLayers(p, card("art-punch"), [title.id]);
   assert.ok(punched.layers.find((l) => l.id === title.id)!.effects.length);
-  const framed = applyEffectToLayers(p, card("art-print"), [scene.id]);
-  assert.equal(framed.effects.at(-1)!.art!.kind, "print");
+  const framed = applyEffectToLayers(p, card("art-slices"), [scene.id]);
+  assert.equal(framed.effects.at(-1)!.art!.kind, "slices");
   assert.throws(
     () =>
       validateProject({

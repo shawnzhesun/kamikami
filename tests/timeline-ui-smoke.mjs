@@ -1140,6 +1140,78 @@ try {
   await click('header button[aria-label="Undo"]');
   await save();
   await wait(() => !project.layers.some((l) => l.type === "backdrop"));
+  // Effects by role: apply an entrance, retime its In phase on the clip,
+  // and see picture-only cards dim while text is selected.
+  const titleId = project.layers.find((l) => l.type === "title").id;
+  await page.evaluate((id) => {
+    [...document.querySelectorAll("button")]
+      .find((e) => e.textContent.trim() === "Effects")
+      .click();
+    document
+      .querySelector(`[data-element-id="${id}"]`)
+      .dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+      );
+  }, titleId);
+  await wait(() => exists('.effect-roles [role="tab"]'));
+  await page.evaluate(() =>
+    [...document.querySelectorAll('.effect-roles [role="tab"]')]
+      .find((e) => e.textContent === "Out")
+      .click(),
+  );
+  await wait(() => exists('.effect-section[aria-label="Break"]'));
+  assert.ok(await exists('.effect-section[aria-label="Conceal"]'));
+  assert.equal(await exists('.effect-section[aria-label="Arrive"]'), false);
+  await page.evaluate(() =>
+    [...document.querySelectorAll('.effect-roles [role="tab"]')]
+      .find((e) => e.textContent === "All")
+      .click(),
+  );
+  await fill('input[aria-label="Search effects"]', "Color ghost trail");
+  await wait(() => exists(".effect-card.effect-mismatch"));
+  await fill('input[aria-label="Search effects"]', "Spring in");
+  await wait(() => exists('.effect-card[aria-label^="Spring in."]'));
+  await page.evaluate(() =>
+    document
+      .querySelector('.effect-card[aria-label^="Spring in."]')
+      .dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+      ),
+  );
+  await save();
+  await wait(() =>
+    exists(`[data-element-id="${titleId}"] .phase-handle.in`),
+  );
+  const springSeconds = () =>
+    project.layers
+      .find((l) => l.id === titleId)
+      .effects.find((i) => i.effectId === "kinetic-spring")?.settings?.text
+      ?.seconds;
+  await wait(() => springSeconds() === 1.1);
+  await page.evaluate((id) =>
+    document
+      .querySelector(`[data-element-id="${id}"] .phase-handle.in`)
+      .dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "ArrowRight",
+          shiftKey: true,
+          bubbles: true,
+        }),
+      ),
+  titleId);
+  await save();
+  await wait(() => Math.abs(springSeconds() - 1.2) < 1e-6);
+  const phases = await client.send("Page.captureScreenshot", {
+    format: "png",
+  });
+  await writeFile(
+    path.join(output, "roles.png"),
+    Buffer.from(phases.value.data, "base64"),
+  );
+  await click('header button[aria-label="Undo"]');
+  await click('header button[aria-label="Undo"]');
+  await save();
+  await wait(() => springSeconds() === undefined);
   assert.deepEqual(errors, []);
   console.log(`Browser checks passed. Screenshots: ${output}`);
 } finally {

@@ -8,9 +8,9 @@ Each is a text effect kind in `src/text-looks.ts`; cards are in `src/builtin-eff
 
 - **Paint** (`lookPaint`): outlined, keyline, doubleline, extrude, longshadow, offset, neontube, chrome, sticker, stack, halftone, accent. Text shadows from several treatments are joined into one stack; strokes use `-webkit-text-stroke` with `paint-order: stroke fill`; fills use background-clip gradients.
 - **Copies** (rendered in `AnimatedText`): ghost (flat copies re-rendered a few frames earlier, so they trail any motion), reflection, cutshift (the text cut into two clipped halves that slide apart).
-- **Decorations** (`blockDecor`, `wordDecor`): wordbox, plate, brackets, rules, label, ticker, tape, burst. They are drawn behind the glyphs inside the text box and follow it.
+- **Decorations** (`blockDecor`, `wordDecor`): wordbox, plate, rules, ticker, tape, burst. They are drawn behind the glyphs inside the text box and follow it. Corner brackets and the index label are [overlays](overlays.md) now; saved text looks of those kinds migrate on load.
 
-`seconds` and `stagger` time the draw-in; `color`, `secondary`, `angle`, `distance` and `label` tune each kind.
+`seconds` and `stagger` time the draw-in; `color`, `secondary`, `angle` and `distance` tune each kind.
 
 ## Backdrops
 

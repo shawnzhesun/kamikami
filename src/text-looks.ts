@@ -5,8 +5,9 @@ import { mix, seeded, unit } from "./motion";
 /**
  * Text looks (kamikami-visual-v8): treatments that change how type is painted
  * and decorations drawn around its words and block. Lyric-video art direction
- * leans on these: keylines, stacked shadows, colored ghosts, plates, brackets,
- * rules, labels and texture bands. Every value is a pure function of time.
+ * leans on these: keylines, stacked shadows, colored ghosts, plates, rules
+ * and texture bands. Framing marks such as brackets and labels are overlays.
+ * Every value is a pure function of time.
  */
 export const lookKinds = [
   // Paint treatments
@@ -29,9 +30,7 @@ export const lookKinds = [
   // Decorations
   "wordbox",
   "plate",
-  "brackets",
   "rules",
-  "label",
   "ticker",
   "tape",
   "burst",
@@ -64,9 +63,7 @@ export const lookNames: Record<LookKind, string> = {
   cutshift: "Cut and shift",
   wordbox: "Word boxes",
   plate: "Word plates",
-  brackets: "Corner brackets",
   rules: "Rules",
-  label: "Index label",
   ticker: "Text ticker",
   tape: "Caution tape",
   burst: "Ray burst",
@@ -80,7 +77,6 @@ export const lookControls: Record<
     speed?: string;
     angle?: boolean;
     reveal?: boolean;
-    label?: boolean;
     note?: string;
   }
 > = {
@@ -139,13 +135,7 @@ export const lookControls: Record<
     reveal: true,
     note: "Every word sits on a solid plate; its letters take the knockout color.",
   },
-  brackets: { color: "Bracket color", reveal: true },
   rules: { color: "Rule color", reveal: true },
-  label: {
-    color: "Label color",
-    label: true,
-    note: "A small typeset label under the text. Leave it empty for an index and the clip's start time.",
-  },
   ticker: {
     color: "Ticker color",
     speed: "Scroll speed",
@@ -408,29 +398,6 @@ export function blockDecor(
     const p = lookReveal(effect, time);
     const key = `${effect.kind}-${n}`;
     switch (effect.kind as LookKind) {
-      case "brackets": {
-        const e = outCubic(p);
-        const pad = mix(-0.15, 0.22, e);
-        const size = "0.34em",
-          w = "0.05em";
-        const corner = (x: "left" | "right", y: "top" | "bottom") => ({
-          position: "absolute" as const,
-          [x]: `${-pad}em`,
-          [y]: `${-pad}em`,
-          width: size,
-          height: size,
-          [`border${y === "top" ? "Top" : "Bottom"}`]: `${w} solid ${effect.color}`,
-          [`border${x === "left" ? "Left" : "Right"}`]: `${w} solid ${effect.color}`,
-          opacity: a * unit(p * 3),
-        });
-        out.push(
-          { key: key + "tl", behind: false, style: corner("left", "top") },
-          { key: key + "tr", behind: false, style: corner("right", "top") },
-          { key: key + "bl", behind: false, style: corner("left", "bottom") },
-          { key: key + "br", behind: false, style: corner("right", "bottom") },
-        );
-        break;
-      }
       case "rules": {
         const e = outCubic(p),
           e2 = outCubic(lookReveal(effect, time - effect.seconds * 0.2));
@@ -463,52 +430,6 @@ export function blockDecor(
               transform: `scaleX(${e2})`,
               transformOrigin: "right",
               opacity: a,
-            },
-          },
-        );
-        break;
-      }
-      case "label": {
-        const seconds = Math.max(0, context.start);
-        const tc = `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${(seconds % 60).toFixed(2).padStart(5, "0")}`;
-        const text =
-          effect.label ||
-          `No.${String((effect.seed % 99) + 1).padStart(2, "0")}  ·  ${tc}`;
-        const shown = Math.ceil(unit(p * 1.4) * [...text].length);
-        out.push(
-          {
-            key: key + "line",
-            behind: false,
-            style: {
-              position: "absolute",
-              left: 0,
-              top: "calc(100% + 0.12em)",
-              width: "1.6em",
-              height: "0.012em",
-              minHeight: 1,
-              background: effect.color,
-              transform: `scaleX(${outCubic(p * 2)})`,
-              transformOrigin: "left",
-              opacity: a,
-            },
-          },
-          {
-            key: key + "text",
-            behind: false,
-            text: [...text].slice(0, shown).join(""),
-            style: {
-              position: "absolute",
-              left: 0,
-              top: "calc(100% + 0.24em)",
-              fontFamily: context.mono,
-              fontSize: "0.16em",
-              fontWeight: 500,
-              letterSpacing: "0.14em",
-              whiteSpace: "pre",
-              color: effect.color,
-              opacity: a,
-              textShadow: "none",
-              lineHeight: 1.2,
             },
           },
         );

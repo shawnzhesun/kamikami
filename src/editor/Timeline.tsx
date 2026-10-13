@@ -27,6 +27,7 @@ import type { BackdropPreset } from "../backdrops";
 import type { ShapePreset } from "../shapes";
 import { EFFECT_DRAG_TYPE } from "../effect-bundle";
 import { retimeKeyframes, visibleKeyframeTimes } from "../keyframes";
+import { phaseLengths, setPhaseLength, type Phase } from "./envelope";
 
 type Props = {
   project: Project;
@@ -232,6 +233,69 @@ export function Timeline({
         cleanup.current = null;
       },
     );
+  }
+  /** Drags a clip's In or Out phase edge, retiming the effects in it. */
+  function beginPhase(
+    e: React.PointerEvent<HTMLElement>,
+    layer: Layer,
+    phase: Phase,
+    length: number,
+  ) {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    onPause();
+    cleanup.current?.();
+    const base = project,
+      origin = e.clientX;
+    const clip = e.currentTarget.closest<HTMLElement>(".clip")!;
+    const perSecond = clip.getBoundingClientRect().width / layer.duration;
+    let latest = base,
+      moved = false;
+    cleanup.current = startGesture(
+      e,
+      (event) => {
+        const dx = (event.clientX - origin) * (phase === "in" ? 1 : -1);
+        if (!moved && Math.abs(dx) < 3) return;
+        moved = true;
+        const to = Math.max(
+          0.05,
+          Math.round((length + dx / perSecond) * project.fps) / project.fps,
+        );
+        latest = setPhaseLength(base, layer.id, phase, to);
+        const now = phaseLengths(
+          latest.layers.find((l) => l.id === layer.id)!,
+          latest.effects,
+        )[phase];
+        setDrag({
+          id: layer.id,
+          label: `${phase === "in" ? "In" : "Out"} ${(now ?? to).toFixed(2)}s`,
+        });
+        onPreview(latest);
+      },
+      (cancelled) => {
+        onPreview(null);
+        setDrag(null);
+        if (moved) ignoreClickUntil.current = Date.now() + 200;
+        if (!cancelled && moved) onCommit(latest, base);
+        cleanup.current = null;
+      },
+    );
+  }
+  function phaseKey(
+    e: React.KeyboardEvent<HTMLElement>,
+    layer: Layer,
+    phase: Phase,
+    length: number,
+  ) {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    e.preventDefault();
+    e.stopPropagation();
+    const step =
+      (e.shiftKey ? 0.1 : 1 / project.fps) *
+      (e.key === "ArrowRight" ? 1 : -1) *
+      (phase === "in" ? 1 : -1);
+    onCommit(setPhaseLength(project, layer.id, phase, length + step));
   }
   function begin(
     e: React.PointerEvent<HTMLElement>,
@@ -601,6 +665,7 @@ export function Timeline({
                   )}
                   {elements.map((layer) => {
                     const asset = assets.find((a) => a.src === layer.src);
+                    const phases = phaseLengths(layer, project.effects);
                     return (
                       <React.Fragment key={layer.id}>
                         <div
@@ -688,6 +753,38 @@ export function Timeline({
                               onClick={(e) => e.stopPropagation()}
                             />
                           ))}
+                          {(["in", "out"] as const).map((phase) => {
+                            const length = phases[phase];
+                            if (length === null) return null;
+                            const share = `${(length / layer.duration) * 100}%`;
+                            const name = phase === "in" ? "In" : "Out";
+                            return (
+                              <React.Fragment key={phase}>
+                                <span
+                                  className={`clip-phase ${phase}`}
+                                  style={{ width: share }}
+                                  aria-hidden="true"
+                                />
+                                <button
+                                  className={`phase-handle ${phase}`}
+                                  style={
+                                    phase === "in"
+                                      ? { left: share }
+                                      : { right: share }
+                                  }
+                                  title={`${name} phase: ${length.toFixed(2)}s. Drag to retime this clip's ${phase === "in" ? "entrances" : "exits"}.`}
+                                  aria-label={`${name} phase of ${layer.name}, ${length.toFixed(2)} seconds`}
+                                  onPointerDown={(e) =>
+                                    beginPhase(e, layer, phase, length)
+                                  }
+                                  onClick={(e) => e.stopPropagation()}
+                                  onKeyDown={(e) =>
+                                    phaseKey(e, layer, phase, length)
+                                  }
+                                />
+                              </React.Fragment>
+                            );
+                          })}
                           <button
                             className="trim-handle left"
                             aria-label={`Trim start of ${layer.name}`}

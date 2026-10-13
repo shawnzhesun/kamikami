@@ -52,7 +52,7 @@ const render = (effects: Effect[], time = 2) =>
   );
 
 test("treatment cards cover every treatment kind as a v8 Text treatments category", () => {
-  assert.equal(lookCards.length, 23);
+  assert.equal(lookCards.length, 21);
   assert.deepEqual(
     [...new Set(lookCards.map((e) => e.text!.kind))].sort(),
     [...lookKinds].sort(),
@@ -117,19 +117,7 @@ test("copy treatments draw lagged ghosts, a reflection and cut halves", () => {
   assert.match(render([card("look-reflection")]), /scaleY\(-0.72\)/);
 });
 
-test("decorations: brackets, label, ticker, plates and the accent word", () => {
-  assert.equal(
-    render([card("look-brackets")]).match(/border-top:|border-bottom:/g)
-      ?.length,
-    4,
-  );
-  // The label shows an index and the clip's start time once typed in.
-  assert.match(render([card("look-label")]), /No\.\d\d {2}· {2}00:08\.50/);
-  const custom = {
-    ...card("look-label"),
-    text: { ...card("look-label").text!, label: "TRACK 03" },
-  };
-  assert.match(render([custom]), /TRACK 03/);
+test("decorations: ticker, plates and the accent word", () => {
   assert.equal(
     (
       render([card("look-ticker")]).match(

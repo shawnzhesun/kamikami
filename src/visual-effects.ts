@@ -274,6 +274,7 @@ export function usesV7Features(value: unknown): boolean {
 export function usesV8Features(value: unknown): boolean {
   if (!value || typeof value !== "object") return false;
   if ((value as { art?: unknown }).art !== undefined) return true;
+  if ((value as { overlay?: unknown }).overlay !== undefined) return true;
   const text = (value as { text?: Record<string, unknown> }).text;
   const order = (text?.motion as { order?: unknown } | undefined)?.order;
   return (
@@ -283,7 +284,6 @@ export function usesV8Features(value: unknown): boolean {
       isLayoutKind(String(text.kind)) ||
       text.tempo !== undefined ||
       text.angle !== undefined ||
-      text.label !== undefined ||
       order === "center" ||
       order === "edges")
   );

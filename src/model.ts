@@ -12,6 +12,11 @@ import { DepthSchema, bounceOut, depthFrame } from "./motion";
 import { ShapeSchema, type Shape } from "./shapes";
 import { BackdropSchema, type Backdrop } from "./backdrops";
 import { ArtSchema, artCamera, steppedTime, type ArtUse } from "./artwork";
+import {
+  OverlaySchema,
+  migrateProjectDecor,
+  type OverlayUse,
+} from "./overlays";
 export { bounceOut } from "./motion";
 import { TextEffectSchema, builtinTextSettings } from "./text-effects";
 import { VisualPassSchema, effectRandom } from "./visual-effects";
@@ -102,8 +107,10 @@ export const EffectSchema = z.object({
   tint: z.number().min(0).max(1),
   passes: z.array(VisualPassSchema).max(6).optional(),
   text: TextEffectSchema.optional(),
-  /** Artwork treatment: camera, beat, copy or framing recipe (v8). */
+  /** Artwork treatment: camera, beat or copy recipe (v8). */
   art: ArtSchema.optional(),
+  /** Overlay: frames, annotations and marks drawn around the element (v8). */
+  overlay: OverlaySchema.optional(),
   /** Transform pivot in canvas units (−1 left/top … 1 right/bottom), for hinged 3D moves. */
   origin: z
     .object({ x: z.number().min(-1).max(1), y: z.number().min(-1).max(1) })
@@ -201,6 +208,7 @@ export function effectSettings(effect: Effect): EffectSettings {
   return EffectSettingsSchema.parse(settings);
 }
 export function validateProject(input: unknown): Project {
+  input = migrateProjectDecor(input);
   if (
     input &&
     typeof input === "object" &&
@@ -485,6 +493,23 @@ export function artUses(layer: Layer, effects: Effect[], t: number): ArtUse[] {
     if (art && amount > 0) uses.push({ art, amount });
   }
   return uses;
+}
+/** Enabled overlays of an element at an animation time (clip-local plus effectOffset). */
+export function overlayUses(
+  layer: Layer,
+  effects: Effect[],
+  animation: number,
+): OverlayUse[] {
+  return layer.effects.flatMap((instance) => {
+    if (!instance.enabled) return [];
+    const overlay = resolveEffectInstanceAt(
+      instance,
+      effects,
+      animation,
+    )?.overlay;
+    const amount = instanceAmountAt(instance, animation);
+    return overlay && amount > 0 ? [{ overlay, amount }] : [];
+  });
 }
 /** Clip-local time after stop-motion stutter holds it to whole steps. */
 export function elementTime(layer: Layer, effects: Effect[], t: number) {

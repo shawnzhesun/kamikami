@@ -33,6 +33,9 @@ export const kineticKinds = [
   "push",
   "flash",
   "inertia",
+  "gather",
+  "plates",
+  "inkstroke",
   // Exits: they always play over the last `seconds` of the clip
   "kick",
   "launch",
@@ -41,6 +44,12 @@ export const kineticKinds = [
   "closegap",
   "burn",
   "tornado",
+  "blast",
+  "crumble",
+  "wipeoff",
+  "aperture",
+  "channels",
+  "melt",
   // Holds: they loop on the tempo between the entrance and the exit
   "pluck",
   "beathop",
@@ -51,6 +60,9 @@ export const kineticKinds = [
   "breathe",
   "pulse",
   "lean",
+  "afterimage",
+  "gust",
+  "lubdub",
 ] as const;
 export type KineticKind = (typeof kineticKinds)[number];
 export const isKineticKind = (kind: string): kind is KineticKind =>
@@ -63,6 +75,12 @@ export const kineticExits: readonly KineticKind[] = [
   "closegap",
   "burn",
   "tornado",
+  "blast",
+  "crumble",
+  "wipeoff",
+  "aperture",
+  "channels",
+  "melt",
 ];
 export const kineticHolds: readonly KineticKind[] = [
   "pluck",
@@ -74,6 +92,9 @@ export const kineticHolds: readonly KineticKind[] = [
   "breathe",
   "pulse",
   "lean",
+  "afterimage",
+  "gust",
+  "lubdub",
 ];
 export const kineticRole = (kind: KineticKind) =>
   kineticHolds.includes(kind)
@@ -232,6 +253,11 @@ export type KineticCopy = {
   color?: string;
   glyph?: string;
   clip?: string;
+  /** Degrees about `origin` (shards). */
+  rotation?: number;
+  scale?: number;
+  origin?: string;
+  blend?: "screen" | "multiply";
 };
 export type KineticMark = {
   kind: "dot" | "ring" | "block" | "bar";
@@ -355,6 +381,40 @@ const SIGNS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789#$%&*+=/<>";
 const sign = (seed: number, i: number) =>
   SIGNS[Math.floor(seeded(seed, i) * SIGNS.length)];
 const deg = (rad: number) => (rad * 180) / Math.PI;
+const PLATES = ["#00d8ff", "#ff2bd6", "#ffe600"];
+const CHANNELS = ["#ff2a2a", "#2aff6a", "#3b6bff"];
+/**
+ * Hides a unit's own glyphs but not its copies (shards, plates, channels):
+ * opacity would fade a word's copies with it, a clip only cuts the glyphs.
+ */
+function hideMain(f: KineticFrame, a: number) {
+  if (a >= 0.5) f.clip = "inset(0 0 100% 0)";
+  else f.opacity = 1 - a;
+}
+/** Six triangular shards of a glyph box (percent), fanned around a seeded point. */
+function shards(seed: number, index: number) {
+  const cx = 35 + seeded(seed + 21, index) * 30,
+    cy = 35 + seeded(seed + 22, index) * 30;
+  const ring: [number, number][] = [
+    [-15, -15],
+    [50 + signed(seed + 23, index) * 22, -15],
+    [115, -15],
+    [115, 115],
+    [50 + signed(seed + 24, index) * 22, 115],
+    [-15, 115],
+  ];
+  return ring.map((p, k) => {
+    const n = ring[(k + 1) % ring.length];
+    const mx = (cx + p[0] + n[0]) / 3,
+      my = (cy + p[1] + n[1]) / 3;
+    return {
+      clip: `polygon(${cx}% ${cy}%, ${p[0]}% ${p[1]}%, ${n[0]}% ${n[1]}%)`,
+      origin: `${mx}% ${my}%`,
+      dx: (mx - 50) / 50,
+      dy: (my - 50) / 50,
+    };
+  });
+}
 
 // ---------------------------------------------------------------- timing
 
@@ -823,6 +883,80 @@ export function kineticFrame(env: KineticEnv, u: KineticUnit): KineticFrame {
         f.opacity = 1 - (1 - unit(s * 5)) * a;
         break;
       }
+      case "gather": {
+        // Shards of each letter fly in from a scatter, spinning, and lock together.
+        const fly = 1 - outPow(s, 3);
+        hideMain(f, a);
+        shards(seed, u.index).forEach((sh, k) => {
+          const n = u.index * 6 + k;
+          f.copies.push({
+            x: (sh.dx * 1.3 + signed(seed + 30, n) * 0.7) * d * fly * a,
+            y: (sh.dy * 1.3 + signed(seed + 31, n) * 0.7) * d * fly * a,
+            rotation: signed(seed + 32, n) * 170 * fly * a,
+            origin: sh.origin,
+            clip: sh.clip,
+            opacity: unit(s * 4) * a,
+          });
+        });
+        break;
+      }
+      case "plates": {
+        // Cyan, magenta and yellow plates slide into register, then the ink takes over.
+        const e = outPow(s, 2.6);
+        const off = (1 - e) * 0.32 * d * a;
+        const turn = seeded(seed, 3) * Math.PI * 2;
+        PLATES.forEach((color, k) => {
+          const t = turn + (k / 3) * Math.PI * 2;
+          f.copies.push({
+            x: Math.cos(t) * off * 1.6,
+            y: Math.sin(t) * off,
+            color,
+            blend: "screen",
+            opacity: a * (1 - unit((s - 0.82) / 0.18)) * unit(s * 6),
+          });
+        });
+        // The ink shows once the plates are nearly in register.
+        if (s < 0.8) hideMain(f, a);
+        break;
+      }
+      case "inkstroke": {
+        // A wet bristle stroke paints along each line; the type shows once it passes.
+        const g = env.geometry;
+        const p = unwindowed(env) * g.lines;
+        const lineP = unit(p - u.line);
+        const lineW = Math.max(0.01, g.width);
+        const band = 0.9;
+        const front = mix(-0.3, lineW + band + 0.5, inOutSine(lineP));
+        const left = u.x - u.w / 2 + g.width / 2;
+        const strips = 9;
+        const points: string[] = ["-20% -20%"];
+        for (let k = 0; k < strips; k++) {
+          const lag = 0.4 * Math.pow(seeded(seed + u.line * 31, k), 1.4);
+          const edge = front - lag;
+          const top = -20 + (140 * k) / strips,
+            bottom = -20 + (140 * (k + 1)) / strips;
+          const shown =
+            ((edge - band * 0.55 - left) / Math.max(0.01, u.w)) * 100;
+          points.push(`${shown}% ${top}%`, `${shown}% ${bottom}%`);
+          // This word's share of the paint band.
+          const x0 = Math.max(left - 0.14, edge - band),
+            x1 = Math.min(left + u.w + 0.14, edge);
+          if (x1 > x0 && a > 0)
+            f.marks.push({
+              kind: "bar",
+              x: (x0 + x1) / 2 - left - u.w / 2,
+              y: ((k + 0.5) / strips - 0.5) * 1.05,
+              w: x1 - x0,
+              h: (1.05 / strips) * 1.18,
+              color: effect.color,
+              opacity: a * (0.55 + 0.45 * seeded(seed + 7, k)),
+            });
+        }
+        points.push("-20% 120%");
+        f.clip = a >= 1 ? `polygon(${points.join(",")})` : null;
+        if (a < 1) f.opacity = 1 - (1 - lineP) * a;
+        break;
+      }
     }
     return f;
   }
@@ -941,6 +1075,146 @@ export function kineticFrame(env: KineticEnv, u: KineticUnit): KineticFrame {
           (1 - unit((q - 0.75) / 0.25) * a);
         break;
       }
+      case "blast": {
+        // A flash, then the letter's shards blast outward, spin and drop.
+        const go = outPow(q, 2.2);
+        hideMain(f, a);
+        shards(seed, u.index).forEach((sh, k) => {
+          const n = u.index * 6 + k;
+          f.copies.push({
+            x: (sh.dx * 2.6 + signed(seed + 40, n) * 1.2) * d * go * a,
+            y:
+              ((sh.dy * 2.6 + signed(seed + 41, n) * 1.2) * go + 1.4 * q * q) *
+              d *
+              a,
+            rotation: signed(seed + 42, n) * 260 * go * a,
+            scale: 1 - 0.35 * q * a,
+            origin: sh.origin,
+            clip: sh.clip,
+            color: q < 0.12 ? effect.color : undefined,
+            opacity: a * (1 - unit((q - 0.55) / 0.45)),
+          });
+        });
+        break;
+      }
+      case "crumble": {
+        // The letter shudders, cracks into shards and they fall away one by one.
+        if (q < 0.22) {
+          const step = Math.floor(env.time * 30);
+          f.x = signed(seed + step, u.index) * 0.035 * d * (q / 0.22) * a;
+          f.rotation = signed(seed + step + 5, u.index) * 2.5 * (q / 0.22) * a;
+          break;
+        }
+        hideMain(f, a);
+        shards(seed, u.index).forEach((sh, k) => {
+          const n = u.index * 6 + k;
+          const fall = unit((q - 0.22 - 0.3 * seeded(seed + 50, n)) / 0.48);
+          f.copies.push({
+            x: (signed(seed + 51, n) * 0.35 + sh.dx * 0.15) * fall * d * a,
+            y: fall * fall * 5 * d * a,
+            rotation: signed(seed + 52, n) * 140 * fall * a,
+            origin: sh.origin,
+            clip: sh.clip,
+            opacity: a * (1 - unit((fall - 0.6) / 0.4)),
+          });
+        });
+        break;
+      }
+      case "wipeoff": {
+        // An accent bar sweeps across and wipes the type away behind it.
+        const e = inOutCubic(q);
+        const at = mix(-6, 106, e);
+        if (a >= 1) f.clip = `inset(-30% -30% -30% ${at}%)`;
+        else f.opacity = 1 - q * a;
+        const tall =
+          (effect.unit === "title" ? env.geometry.height : env.geometry.lead) +
+          0.22;
+        f.marks.push({
+          kind: "bar",
+          x: (at / 100 - 0.5) * u.w,
+          y: 0,
+          w: 0.12 * d,
+          h: tall,
+          color: effect.color,
+          opacity: a * (1 - unit((q - 0.88) / 0.12)),
+        });
+        break;
+      }
+      case "aperture": {
+        // An iris closes on the type, its ring shrinking to a point.
+        const e = inPow(q, 1.6);
+        const tall =
+          effect.unit === "title" ? env.geometry.height : env.geometry.lead;
+        const R = (1 - e) * 78;
+        const ref = Math.hypot(u.w, tall) / Math.SQRT2;
+        if (a >= 1) f.clip = `circle(${R}% at 50% 50%)`;
+        else f.opacity = 1 - q * a;
+        const r = Math.max(0.02, (R / 100) * ref);
+        f.marks.push({
+          kind: "ring",
+          x: 0,
+          y: 0,
+          w: r * 2 + 0.05,
+          h: r * 2 + 0.05,
+          color: effect.color,
+          opacity: a * unit(q * 5) * (1 - unit((q - 0.9) / 0.1)),
+        });
+        break;
+      }
+      case "channels": {
+        // The ink separates into red, green and blue light that splits apart.
+        const spread = inPow(q, 1.4) * 1.1 * d;
+        if (q > 0.12) hideMain(f, a);
+        const show = a * unit(q * 4) * (1 - unit((q - 0.6) / 0.4));
+        CHANNELS.forEach((color, k) => {
+          const side = k - 1;
+          f.copies.push({
+            x: side * spread,
+            y: (k === 1 ? -0.25 : 0.1 * side) * spread,
+            color,
+            blend: "screen",
+            scale: 1 + 0.08 * spread,
+            opacity: show,
+          });
+        });
+        break;
+      }
+      case "melt": {
+        // Letters sag and stretch downward, draining from the top, trailing drips.
+        const e = inPow(q, 1.8);
+        f.origin = "50% 0%";
+        f.scaleY = 1 + 1.4 * e * a;
+        f.y = 0.15 * e * d * a;
+        if (a >= 1) f.clip = `inset(${e * 100}% -20% -60% -20%)`;
+        f.opacity = 1 - unit((q - 0.78) / 0.22) * a;
+        for (let k = 0; k < 2; k++) {
+          const n = u.index * 2 + k;
+          const len = e * d * (0.3 + seeded(seed + 60, n) * 0.6);
+          if (len <= 0.01) continue;
+          const x = signed(seed + 61, n) * u.w * 0.3;
+          f.marks.push(
+            {
+              kind: "bar",
+              x,
+              y: 0.48 + len / 2,
+              w: 0.05,
+              h: len,
+              color: env.color,
+              opacity: a * (1 - unit((q - 0.8) / 0.2)),
+            },
+            {
+              kind: "dot",
+              x,
+              y: 0.48 + len,
+              w: 0.1,
+              h: 0.1,
+              color: env.color,
+              opacity: a * (1 - unit((q - 0.8) / 0.2)),
+            },
+          );
+        }
+        break;
+      }
     }
     return f;
   }
@@ -1020,6 +1294,52 @@ export function kineticFrame(env: KineticEnv, u: KineticUnit): KineticFrame {
     case "lean": {
       const side = (u.index + beat.index) % 2 ? -1 : 1;
       f.skewX = side * 18 * Math.exp(-6 * beat.since) * h;
+      break;
+    }
+    case "afterimage": {
+      // A slow figure-eight drift that leaves colored echoes of itself behind.
+      const w = (2 * Math.PI) / (beat.len * 8);
+      const at = (time: number) => ({
+        x: 0.28 * d * Math.sin(time * w * Math.max(0.05, effect.speed)),
+        y: 0.1 * d * Math.sin(2 * time * w * Math.max(0.05, effect.speed)),
+      });
+      const now = at(env.time);
+      f.x = now.x * h;
+      f.y = now.y * h;
+      for (let c = 1; c <= 4; c++) {
+        const then = at(env.time - c * 0.09);
+        f.copies.push({
+          x: (then.x - now.x) * h * 2.2,
+          y: (then.y - now.y) * h * 2.2,
+          color: c % 2 ? effect.color : effect.secondary,
+          blend: "screen",
+          opacity: (0.6 - c * 0.12) * h,
+        });
+      }
+      break;
+    }
+    case "gust": {
+      // Every four beats a gust sweeps along the line and the letters bend with it.
+      const period = beat.len * 4;
+      const tau = env.time - Math.floor(env.time / period) * period;
+      const across = unit(u.x / Math.max(0.5, env.geometry.width) + 0.5);
+      const local = tau - across * 0.35;
+      const g = local > 0 ? Math.exp(-4 * local) * Math.sin(local * 11) : 0;
+      f.origin = "50% 100%";
+      f.skewX = -24 * d * g * h;
+      f.x = 0.1 * d * g * h;
+      f.rotation = 3 * g * h;
+      break;
+    }
+    case "lubdub": {
+      // A heartbeat: a strong beat and a softer echo, flushing the accent color.
+      const period = beat.len * 2;
+      const tau = env.time - Math.floor(env.time / period) * period;
+      const kick = (x: number) =>
+        x > 0 ? (x / 0.06) * Math.exp(1 - x / 0.06) : 0;
+      const v = kick(tau) + 0.65 * kick(tau - 0.22);
+      f.scale = 1 + 0.13 * d * v * h;
+      f.tint = { color: effect.color, amount: Math.min(1, 0.55 * v) * h };
       break;
     }
   }
@@ -1102,6 +1422,18 @@ export const kineticNames: Record<KineticKind, string> = {
   breathe: "Gap breath",
   pulse: "Word pulse",
   lean: "Beat lean",
+  gather: "Gather",
+  plates: "Plate snap",
+  inkstroke: "Ink stroke",
+  blast: "Burst",
+  crumble: "Crumble",
+  wipeoff: "Wipe off",
+  aperture: "Aperture",
+  channels: "Channel split",
+  melt: "Melt",
+  afterimage: "Afterimage",
+  gust: "Gust",
+  lubdub: "Lub-dub",
 };
 
 /** Settings-dialog controls per kinetic kind (see TitleEffectControls). */
@@ -1206,4 +1538,40 @@ export const kineticControls: Record<
   breathe: { distance: "Gap change" },
   pulse: { distance: "Pulse size", note: "One word swells on every beat." },
   lean: { note: "Words lean into each beat, alternating sides." },
+  gather: {
+    distance: "Scatter",
+    note: "Each letter's shards fly in and lock together.",
+  },
+  plates: {
+    distance: "Misregistration",
+    note: "Cyan, magenta and yellow copies slide into register. Reads best on dark backgrounds.",
+  },
+  inkstroke: {
+    color: "Paint color",
+    note: "A wet bristle stroke paints along each line; the type shows once it passes.",
+  },
+  blast: { distance: "Blast", color: "Flash color" },
+  crumble: { distance: "Fall" },
+  wipeoff: { distance: "Bar width", color: "Bar color" },
+  aperture: { color: "Ring color" },
+  channels: {
+    distance: "Split",
+    note: "Red, green and blue copies split apart. Reads best on dark backgrounds.",
+  },
+  melt: { distance: "Drip length" },
+  afterimage: {
+    distance: "Drift",
+    speed: "Drift speed",
+    color: "First echo",
+    secondary: "Second echo",
+  },
+  gust: {
+    distance: "Gust strength",
+    note: "A gust sweeps through every four beats.",
+  },
+  lubdub: {
+    distance: "Beat size",
+    color: "Flush color",
+    note: "One heartbeat every two beats.",
+  },
 };

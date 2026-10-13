@@ -11,6 +11,8 @@ import {
   lookEffects,
   artEffects,
   layoutEffects,
+  overlayEffects,
+  reversedEffects,
   videoPlaybackEffects,
   remotionSceneEffects,
   motionEffects,
@@ -78,7 +80,9 @@ test("video adds four distinct operations and extends existing cards without dup
       kineticEffects.length +
       lookEffects.length +
       artEffects.length +
-      layoutEffects.length,
+      layoutEffects.length +
+      overlayEffects.length +
+      reversedEffects.length,
   );
   assert.equal(
     new Set(builtinEffects.map((e) => e.id)).size,
