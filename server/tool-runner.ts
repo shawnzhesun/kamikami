@@ -5,6 +5,12 @@ import { elementTrackId, type Project } from "../src/model";
 import { AgentCommandSchema, applyAgentEdit } from "../src/agent-protocol";
 import type { MediaAsset } from "../src/media";
 import { toolNamed } from "./editor-tools";
+import {
+  builtinFonts,
+  fontWeights,
+  type AvailableFont,
+  type FontAsset,
+} from "../src/font-assets";
 
 /**
  * Runs one editor tool for either transport. The native assistant calls it
@@ -16,8 +22,8 @@ export type ToolContext = {
   command: (action: string, args?: Record<string, unknown>) => Promise<unknown>;
   get: (route: string) => Promise<any>;
   post: (route: string, body: unknown) => Promise<any>;
-  /** Copies a local file into the media library. */
-  importFile: (filePath: string) => Promise<MediaAsset>;
+  /** Copies a local file into the media (default) or font library. */
+  importFile: (filePath: string, kind?: "media" | "font") => Promise<any>;
   /**
    * Asks the user in the app. MCP has none: its client asks before
    * destructive tools, and analysis returns needsConfirmation instead.
@@ -149,9 +155,38 @@ export async function runTool(
       )
         throw new Error(declined);
       const asset = await ctx.importFile(file);
-      // The editor reloads its library so the new src is usable at once.
+      // The editor reloads its library and measures the file (duration,
+      // size, waveform) as a UI import does, so the src is usable at once.
       await ctx.command("refresh_media");
-      return { result: asset };
+      await ctx.command("analyze_media", { src: asset.src });
+      const library = (await ctx.get("/api/media")) as { src: string }[];
+      return { result: library.find((a) => a.src === asset.src) ?? asset };
+    }
+    case "list_fonts": {
+      const imported = (await ctx.get("/api/fonts")) as AvailableFont[];
+      const q = String(args.query ?? "").toLowerCase();
+      return {
+        result: [...builtinFonts, ...imported]
+          .filter(
+            (f) =>
+              (!args.category || f.category === args.category) &&
+              f.family.toLowerCase().includes(q),
+          )
+          .map(fontSummary),
+      };
+    }
+    case "import_font": {
+      const file = String(args.path);
+      if (!path.isAbsolute(file))
+        throw new Error("Give an absolute path to the font file.");
+      if (
+        ctx.confirm &&
+        !(await ask(
+          `Import the font “${path.basename(file)}” from ${path.dirname(file)}?`,
+        ))
+      )
+        throw new Error(declined);
+      return { result: fontSummary(await ctx.importFile(file, "font")) };
     }
     case "detach_audio": {
       // Extract the requested track, then detach it in the live editor.
@@ -163,6 +198,8 @@ export async function runTool(
         track: args.track ?? 0,
       });
       await ctx.command("refresh_media");
+      // Duration and waveform, as for any import.
+      await ctx.command("analyze_media", { src: extracted.src });
       const { track: _track, ...rest } = args;
       return {
         result: await ctx.command("detach_audio", {
@@ -340,4 +377,21 @@ export function toolError(e: unknown) {
       .map((i) => (i.path.length ? `${i.path.join(".")}: ` : "") + i.message)
       .join("; ");
   return e instanceof Error ? e.message : "The tool failed.";
+}
+
+/** One font family as agents see it: what to put in fontId/fontWeight/fontStyle. */
+function fontSummary(font: FontAsset & { missing?: boolean }) {
+  const styles = (["normal", "italic"] as const).filter((style) =>
+    font.variants.some((v) => v.style === style),
+  );
+  return {
+    fontId: font.id,
+    family: font.family,
+    category: font.category,
+    weights: Object.fromEntries(
+      styles.map((style) => [style, fontWeights(font, style)]),
+    ),
+    ...(font.id.startsWith("custom-") ? { imported: true } : {}),
+    ...(font.missing ? { missing: true } : {}),
+  };
 }

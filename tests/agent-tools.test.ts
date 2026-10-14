@@ -19,6 +19,8 @@ const serviceTools = new Set([
   "view_asset_range",
   "view_timeline_range",
   "import_media",
+  "import_font",
+  "list_fonts",
   "get_render",
   "get_export",
 ]);

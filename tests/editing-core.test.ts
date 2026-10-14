@@ -267,6 +267,30 @@ test("crossfade overlaps clips using source handles and fades both", () => {
   assert.equal(a.fadeOut, 1);
   assert.notEqual(b.trackId, a.trackId, "the overlap lives on another layer");
   assert.doesNotThrow(() => validateProject(next));
+  // A free titles row above is not a picture track: a new track goes in between.
+  const titled = crossfade(
+    base([
+      video("a", 0, 5),
+      video("b", 5, 5, { offset: 8 }),
+      {
+        ...makeLayer("title", "Name"),
+        id: "n",
+        trackId: "t",
+        start: 0,
+        duration: 2,
+      },
+    ]),
+    "a",
+    "b",
+    1,
+    () => 60,
+  );
+  const moved = titled.layers.find((l) => l.id === "b")!;
+  assert.notEqual(moved.trackId, "t");
+  assert.deepEqual(
+    titled.tracks!.map((t) => t.id),
+    ["v", moved.trackId, "t"],
+  );
   assert.throws(
     () =>
       crossfade(

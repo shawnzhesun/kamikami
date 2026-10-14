@@ -1,5 +1,11 @@
 import { agentConventions } from "./agent-conventions";
 import {
+  dataOverride,
+  editorPort,
+  serviceOrigin,
+  servicePort,
+} from "./service-config";
+import {
   catalogEntries,
   describeEffect,
   findEffects,
@@ -64,14 +70,16 @@ import {
 } from "../src/model";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const data = path.join(root, ".kamikami");
+const data = dataOverride
+  ? path.resolve(dataOverride)
+  : path.join(root, ".kamikami");
 // Upgrade workspaces created before the KamiKami rename without rewriting their contents.
 try {
   await stat(data);
 } catch (error) {
   if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
   try {
-    await rename(path.join(root, ".frameforge"), data);
+    if (!dataOverride) await rename(path.join(root, ".frameforge"), data);
   } catch (legacyError) {
     if ((legacyError as NodeJS.ErrnoException).code !== "ENOENT")
       throw legacyError;
@@ -111,10 +119,10 @@ app.use((req, res, next) => {
   const host = req.headers.host ?? "";
   if (
     ![
-      "127.0.0.1:4318",
-      "127.0.0.1:5173",
-      "localhost:4318",
-      "localhost:5173",
+      `127.0.0.1:${servicePort}`,
+      `127.0.0.1:${editorPort}`,
+      `localhost:${servicePort}`,
+      `localhost:${editorPort}`,
     ].includes(host)
   )
     return res.status(403).json({ error: "Local access only" });
@@ -127,9 +135,9 @@ app.use((req, res, next) => {
     origin &&
     !fontRead &&
     ![
-      "http://127.0.0.1:5173",
-      "http://localhost:5173",
-      "http://127.0.0.1:4318",
+      `http://127.0.0.1:${editorPort}`,
+      `http://localhost:${editorPort}`,
+      serviceOrigin,
     ].includes(origin)
   )
     return res.status(403).json({ error: "Origin not allowed" });
@@ -262,7 +270,7 @@ app.post("/api/agents/tool", async (req, res) => {
   const id = String(req.body.id);
   bridge.heartbeat(id);
   const local = async (route: string, init?: RequestInit) => {
-    const response = await fetch("http://127.0.0.1:4318" + route, {
+    const response = await fetch(serviceOrigin + route, {
       ...init,
       headers: { "Content-Type": "application/json", "X-KamiKami": "mcp" },
     });
@@ -653,11 +661,18 @@ async function registerImport(filename: string, name: string, size: number) {
   // Analysis runs only when the user (or an agent) asks for it.
   return library.register(filename, name, size);
 }
-/** import_media: copies a local file the agent named into the library. */
-async function importLocalFile(filePath: string) {
+/** import_media / import_font: copies a local file the agent named into the library. */
+async function importLocalFile(filePath: string, kind = "media") {
   const name = path.basename(filePath);
-  if (!importable.test(name)) throw new Error(importHint);
   const info = await stat(filePath).catch(() => null);
+  if (kind === "font") {
+    // import_font: the same checks as a font picked in the app.
+    if (!info?.isFile()) throw new Error("File not found: " + filePath);
+    if (info.size > MAX_FONT_BYTES)
+      throw new Error("Fonts must be up to 20 MB");
+    return fonts.import(await readFile(filePath), name);
+  }
+  if (!importable.test(name)) throw new Error(importHint);
   if (!info?.isFile()) throw new Error("File not found: " + filePath);
   if (info.size > LIMITS.importBytes)
     throw new Error("Choose a file up to 4 GB.");
@@ -712,7 +727,7 @@ app.post("/api/render-range", async (req, res) => {
     const last = Math.max(first, Math.ceil(end * project.fps) - 1);
     await mkdir(dir, { recursive: true });
     const serveUrl = await getBundle(),
-      inputProps = { project, mediaOrigin: "http://127.0.0.1:4318" };
+      inputProps = { project, mediaOrigin: serviceOrigin };
     const composition = await selectComposition({
       serveUrl,
       id: "KamiKami",
@@ -773,7 +788,7 @@ app.post("/api/render", async (req, res) => {
   void (async () => {
     try {
       const serveUrl = await getBundle(),
-        inputProps = { project, mediaOrigin: "http://127.0.0.1:4318" };
+        inputProps = { project, mediaOrigin: serviceOrigin };
       const composition = await selectComposition({
         serveUrl,
         id: "KamiKami",
@@ -828,7 +843,7 @@ app.post("/api/export", async (req, res) => {
           throw e;
         });
         const serveUrl = await bundled,
-          inputProps = { project, mediaOrigin: "http://127.0.0.1:4318" };
+          inputProps = { project, mediaOrigin: serviceOrigin };
         const composition = await selectComposition({
           serveUrl,
           id: "KamiKami",
@@ -875,7 +890,16 @@ app.post("/api/export", async (req, res) => {
 app.get("/api/export/:id", (req, res) => {
   const job = jobs.get(req.params.id);
   if (!job) return res.sendStatus(404);
-  res.json(job);
+  // A finished export names its file, so a local agent can copy it.
+  res.json(
+    job.status === "done"
+      ? {
+          ...job,
+          url: `/api/exports/${job.id}.mp4`,
+          file: path.join(data, "exports", job.id + ".mp4"),
+        }
+      : job,
+  );
 });
 app.use(
   (
@@ -885,6 +909,6 @@ app.use(
     _next: express.NextFunction,
   ) => res.status(400).json({ error: error.message }),
 );
-app.listen(4318, "127.0.0.1", () =>
-  console.log("KamiKami local service: http://127.0.0.1:4318"),
+app.listen(servicePort, "127.0.0.1", () =>
+  console.log(`KamiKami local service: ${serviceOrigin}`),
 );

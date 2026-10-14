@@ -658,7 +658,17 @@ export function crossfade(
         l.start < span[1] - TOLERANCE &&
         l.start + l.duration > span[0] + TOLERANCE,
     );
-  let trackId = tracks.slice(index + 1).find((t) => free(t.id))?.id;
+  // Only the picture track right above will do: moving a clip onto a row of
+  // titles or shapes, or past them, would mix up the user's tracks.
+  const pictures = (trackId: string) =>
+    project.layers.every(
+      (l) =>
+        elementTrackId(l) !== trackId ||
+        l.type === "video" ||
+        l.type === "image",
+    );
+  const above = tracks[index + 1]?.id;
+  let trackId = above && free(above) && pictures(above) ? above : undefined;
   if (!trackId) {
     if (tracks.length >= LIMITS.tracks)
       throw new Error("No room for a crossfade layer.");

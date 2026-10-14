@@ -467,6 +467,11 @@ export function App() {
       selectedLayerIds: selectedIds,
       frame: player.current?.getCurrentFrame() ?? frame,
       saved: revision.current === saved.current,
+      // The user's project file, and whether it has every change.
+      projectFile: projectFilenameRef.current,
+      fileSaved:
+        !!projectFilenameRef.current &&
+        fileSnapshot.current === projectJson(current.current),
       playing: player.current?.isPlaying() ?? playing,
       exportJob,
       editing: editing(),
@@ -487,6 +492,20 @@ export function App() {
         libraryEffects: collections.library,
         importedEffects: entries.filter((e) => e.collection === "library"),
       };
+    }
+    if (command.action === "delete_user_effect") {
+      const entry = (await refreshEffects()).find(
+        (e) => e.id === command.userEffectId,
+      );
+      if (!entry) throw new Error("User effect not found.");
+      await api("/api/effects/delete", "POST", {
+        effectId: entry.bundle.effect.id,
+      });
+      await refreshEffects();
+      setStatus(
+        `${request.clientName}: deleted ${entry.bundle.effect.name} from My effects`,
+      );
+      return snapshot();
     }
     if (command.action === "export_effect_bundle") {
       const entry = (await refreshEffects()).find(
@@ -532,19 +551,11 @@ export function App() {
       return { ...snapshot(), ...result };
     }
     if (command.action === "analyze_media") {
-      if (!assets.some((a) => a.src === command.src))
+      // Ask the service: a file imported a moment ago may not be in state yet.
+      const library: MediaAsset[] = await api("/api/media");
+      if (!library.some((a) => a.src === command.src))
         throw new Error("Media not found.");
-      const response = await fetch(command.src);
-      if (!response.ok) throw new Error("Media not found.");
-      const blob = await response.blob();
-      await api(
-        "/api/media/" + command.src.split("/").pop(),
-        "PUT",
-        await inspectMedia(
-          new File([blob], command.src.split("/").pop()!),
-          command.src,
-        ),
-      );
+      await measureMedia(command.src);
       await refreshMedia();
       return snapshot();
     }
@@ -694,6 +705,15 @@ export function App() {
       await checkpoint();
       if (saved.current !== revision.current)
         throw new Error("Project was not saved. Check the editor status.");
+      // Save writes the file the user chose, as the Save button does. An
+      // agent never opens a file dialog: without a file, the user picks one.
+      if (projectFilenameRef.current) {
+        await save();
+        if (fileSnapshot.current !== projectJson(current.current))
+          throw new Error(
+            "Saved locally, but the project file couldn't be written. Ask the user to press Save.",
+          );
+      }
       return snapshot();
     }
     if (command.action === "undo") {
@@ -710,11 +730,31 @@ export function App() {
         throw new Error(
           "Library effects are read-only. Create a copy with a new ID or edit an applied instance.",
         );
+      let library = assets;
+      // Like a drop from the media panel: measure an unmeasured source first,
+      // so the clip gets its real length instead of the still-image default.
+      const unmeasured =
+        command.action === "add_media" &&
+        library.find(
+          (a) =>
+            a.src === command.src &&
+            !a.missing &&
+            a.type !== "image" &&
+            !a.duration,
+        );
+      if (unmeasured) {
+        const measured = await measureMedia(unmeasured.src);
+        library = library.map((a) => (a.src === measured.src ? measured : a));
+        await refreshMedia();
+      }
       const next = applyAgentEdit(
         current.current,
         command,
-        assets.filter((a) => !a.deleted).map((a) => a.src),
-        assets,
+        library.filter((a) => !a.deleted).map((a) => a.src),
+        library,
+        JSON.stringify(command).includes('"custom-')
+          ? await api("/api/fonts")
+          : [],
       );
       if (!commit(next, group))
         throw new Error("Edit could not be applied. Read the project again.");
@@ -729,8 +769,9 @@ export function App() {
         command.action === "create_effect"
           ? command.effect.id
           : command.effectId;
-      if (request.nativeAssistant) setEffectId(id);
-      else editEffect(id);
+      // Highlight it in the library; a settings window would block the
+      // agent's next edits until the user closed it.
+      setEffectId(id);
     }
     setStatus(
       `${request.clientName}: ${command.action.replaceAll("_", " ")} · Undo available`,
@@ -982,6 +1023,17 @@ export function App() {
     const timer = setInterval(() => void refreshMedia(), 2000);
     return () => clearInterval(timer);
   }, [analyzing]);
+  /** Reads duration, size and waveform in the browser, as an import does. */
+  async function measureMedia(src: string): Promise<MediaAsset> {
+    const response = await fetch(src);
+    if (!response.ok) throw new Error("Media not found.");
+    const name = src.split("/").pop()!;
+    return api(
+      "/api/media/" + name,
+      "PUT",
+      await inspectMedia(new File([await response.blob()], name), src),
+    );
+  }
   async function refreshMedia() {
     try {
       const all: MediaAsset[] = await api("/api/media?includeDeleted=true");
@@ -3363,6 +3415,8 @@ export function App() {
                                   "POST",
                                   { src: selected.src, track: 0 },
                                 )) as MediaAsset;
+                                if (!audio.duration)
+                                  await measureMedia(audio.src);
                                 await refreshMedia();
                                 if (
                                   commit(

@@ -67,7 +67,7 @@ test("empty layers persist independently and renaming does not rename elements",
         ...p,
         layers: [{ ...p.layers[0], trackId: "missing" }],
       }),
-    /unknown/,
+    /doesn't exist/,
   );
 });
 test("media insertion uses the requested frame and available gap, rejecting occupied or tiny gaps", () => {

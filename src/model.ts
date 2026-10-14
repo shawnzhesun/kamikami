@@ -98,8 +98,8 @@ export const ChannelSchema = z.object({
   ]),
   from: z.number().min(-2000).max(2000),
   to: z.number().min(-2000).max(2000),
-  frequency: z.number().min(0).max(20),
-  phase: z.number().min(-100).max(100),
+  frequency: z.number().min(0).max(20).default(0),
+  phase: z.number().min(-100).max(100).default(0),
   /** Optional span: the curve runs over these seconds instead of the whole clip. */
   seconds: z.number().min(0.05).max(30).optional(),
   /** With `seconds`, `end` places the span at the clip end (exits). */
@@ -109,12 +109,16 @@ export const EffectSchema = z.object({
   depth: DepthSchema.optional(),
   id: z.string().max(100),
   name: z.string().max(80),
-  description: z.string().max(400),
+  // Defaults spare authors the boilerplate; saved effects always carry them.
+  description: z.string().max(400).default(""),
   // Keep named starting points available after a library effect is forked.
   presetFamilyId: z.string().max(100).optional(),
-  channels: z.array(ChannelSchema).max(12),
-  color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
-  tint: z.number().min(0).max(1),
+  channels: z.array(ChannelSchema).max(12).default([]),
+  color: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/)
+    .default("#f2765e"),
+  tint: z.number().min(0).max(1).default(0),
   passes: z.array(VisualPassSchema).max(6).optional(),
   text: TextEffectSchema.optional(),
   /** Artwork treatment: camera, beat or copy recipe (v8). */
@@ -375,11 +379,13 @@ export function validateProject(input: unknown): Project {
     : 2;
   const tracks = p.tracks ? [...p.tracks] : [];
   if (new Set(tracks.map((t) => t.id)).size !== tracks.length)
-    throw new Error("Layer IDs must be unique");
+    throw new Error("Track IDs must be unique");
   p.layers = p.layers.map((element) => {
     if (element.trackId) {
       if (!tracks.some((t) => t.id === element.trackId))
-        throw new Error("Element references an unknown layer");
+        throw new Error(
+          `Track ${element.trackId} doesn't exist. Create it with create_track, or leave trackId out to get a new track.`,
+        );
       return element;
     }
     // Legacy projects and legacy element-creation commands receive their own layer.

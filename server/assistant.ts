@@ -8,8 +8,9 @@ import type {
   ResponseInputItem,
 } from "openai/resources/responses/responses";
 import { editorTools } from "./editor-tools";
-import { runTool, toolError } from "./tool-runner";
+import { runTool, toolError, type ToolContext } from "./tool-runner";
 import { agentConventions } from "./agent-conventions";
+import { serviceOrigin } from "./service-config";
 import { EditorBridge } from "./editor-bridge";
 import type { MediaAsset } from "../src/media";
 import { respond, type ModelRequest, type ModelReply } from "./assistant-model";
@@ -150,7 +151,7 @@ export class AssistantService {
     private data: string,
     private modelCall: (request: ModelRequest) => Promise<ModelReply> = respond,
     private fetcher: typeof fetch = fetch,
-    private importFile: (filePath: string) => Promise<MediaAsset> = () =>
+    private importFile: ToolContext["importFile"] = () =>
       Promise.reject(new Error("Importing files isn't available here.")),
   ) {}
 
@@ -362,7 +363,7 @@ export class AssistantService {
   }
   private async local(route: string, signal: AbortSignal) {
     signal.throwIfAborted();
-    const response = await this.fetcher("http://127.0.0.1:4318" + route, {
+    const response = await this.fetcher(serviceOrigin + route, {
       signal,
     });
     const value = await response.json().catch(() => ({}));
@@ -374,7 +375,7 @@ export class AssistantService {
   }
   private async localPost(route: string, body: unknown, signal: AbortSignal) {
     signal.throwIfAborted();
-    const response = await this.fetcher("http://127.0.0.1:4318" + route, {
+    const response = await this.fetcher(serviceOrigin + route, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -518,7 +519,7 @@ export class AssistantService {
             output = run.result;
             if (run.image) {
               const response = await this.fetcher(
-                "http://127.0.0.1:4318" + run.image.url,
+                serviceOrigin + run.image.url,
                 { signal },
               );
               if (!response.ok) throw new Error("The image is unavailable.");

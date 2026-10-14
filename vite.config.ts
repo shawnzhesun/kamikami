@@ -1,14 +1,16 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+// Overridable for isolated runs; see server/service-config.ts.
+const service = `http://127.0.0.1:${Number(process.env.KAMIKAMI_PORT) || 4318}`;
 export default defineConfig({
   plugins: [react()],
   server: {
-    port: 5173,
+    port: Number(process.env.KAMIKAMI_EDITOR_PORT) || 5173,
     strictPort: true,
     proxy: {
-      "/api": "http://127.0.0.1:4318",
-      "/media": "http://127.0.0.1:4318",
-      "/fonts/imported": "http://127.0.0.1:4318",
+      "/api": service,
+      "/media": service,
+      "/fonts/imported": service,
     },
   },
 });

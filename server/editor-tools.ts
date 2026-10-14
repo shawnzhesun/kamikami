@@ -4,6 +4,7 @@ import { BackdropSchema, backgroundKinds, finishKinds } from "../src/backdrops";
 import { KeyframeSchema, elementKeyframeProperties } from "../src/keyframes";
 import { FindEffectsSchema } from "../src/effect-catalog";
 import { analysisTiers } from "../src/asset-analysis";
+import { fontCategories } from "../src/font-assets";
 import { analysisSections } from "./analysis/query";
 
 /**
@@ -54,7 +55,7 @@ export const editorTools: ToolDefinition[] = [
   tool(
     "get_project",
     "read",
-    "Read the live project, its revision, selected element IDs, playhead, whether the editor is busy, and whether it is saved. Call first.",
+    "Read the live project, its revision, selected element IDs, playhead, whether the editor is busy, whether it is saved, and the user's project file (projectFile, fileSaved). Call first.",
   ),
   tool(
     "get_capabilities",
@@ -120,6 +121,21 @@ export const editorTools: ToolDefinition[] = [
       name: z.string().max(100).optional(),
       ...rev,
     },
+  ),
+  tool(
+    "list_fonts",
+    "read",
+    "List font families for text elements: built-in and imported, with fontId and the weights each style (normal, italic) supports. Set them with update_layer patch {fontId, fontWeight, fontStyle}.",
+    {
+      query: z.string().max(100).optional().describe("Part of a family name."),
+      category: z.enum(fontCategories).optional(),
+    },
+  ),
+  tool(
+    "import_font",
+    "add",
+    "Import a font file (TTF, OTF, WOFF or WOFF2) by absolute path into the font library and return its fontId. Faces of one family merge into one fontId. In the app, the user approves each import.",
+    { path: z.string().min(1) },
   ),
   tool(
     "update_layer",
@@ -237,7 +253,7 @@ export const editorTools: ToolDefinition[] = [
   tool(
     "crossfade",
     "edit",
-    "Crossfade two adjacent clips (to starts where from ends) by seconds, using spare source footage. The overlapping clip moves to a free track.",
+    "Crossfade two adjacent clips (to starts where from ends) by seconds, using spare source footage. The overlapping clip moves to the picture track right above when it is free, otherwise to a new Crossfades track.",
     {
       fromLayerId: z.string(),
       toLayerId: z.string(),
@@ -293,8 +309,13 @@ export const editorTools: ToolDefinition[] = [
   tool(
     "add_media",
     "add",
-    "Place imported media on the timeline. Duration defaults to the source length (images: 5 s).",
-    { src: z.string(), ...placement, ...rev },
+    "Place imported media on the timeline. offset is the source second the clip starts from (video and audio). Duration defaults to the rest of the source (images: 5 s).",
+    {
+      src: z.string(),
+      ...placement,
+      offset: z.number().min(0).optional(),
+      ...rev,
+    },
   ),
   tool(
     "delete_media",
@@ -319,7 +340,7 @@ export const editorTools: ToolDefinition[] = [
   tool(
     "get_asset_analysis",
     "read",
-    "Read an asset's analysis before watching it. section: overview (default: summary, tags, probe, loudness, scenes, counts), transcript (segments), words (word timings), shots (cuts, black and frozen spans), frames (captioned samples), audio (loudness, silences), image (description, OCR, colors, subject box, safe text region) or all. start/end are asset seconds and slice the time-based sections.",
+    "Read an asset's analysis before watching it. section: overview (default: summary, tags, probe, loudness, tempo, scenes, counts), transcript (segments), words (word timings), shots (cuts, black and frozen spans), frames (captioned samples), audio (loudness, silences, tempo with every beat time), image (description, OCR, colors, subject box, safe text region) or all. start/end are asset seconds and slice the time-based sections.",
     {
       src: z.string(),
       section: z.enum(analysisSections).optional(),
@@ -437,7 +458,7 @@ export const editorTools: ToolDefinition[] = [
   tool(
     "analyze_assets",
     "add",
-    "Analyze media (all assets, or srcs). tier: probe (free and local: shots, loudness, silences), transcribe (only if enabled in settings), balanced (default: probe, captions, summary, plus transcription if enabled) or full. Model tiers upload media to the provider and need the user's approval of an estimate: the app asks the user; over MCP the call returns needsConfirmation until you retry with confirmed:true. prompt (e.g. lyrics) guides transcription.",
+    "Analyze media (all assets, or srcs). tier: probe (free and local: shots, loudness, silences, music tempo and beats), transcribe (only if enabled in settings), balanced (default: probe, captions, summary, plus transcription if enabled) or full. Model tiers upload media to the provider and need the user's approval of an estimate: the app asks the user; over MCP the call returns needsConfirmation until you retry with confirmed:true. prompt (e.g. lyrics) guides transcription.",
     {
       srcs: z.array(z.string()).optional(),
       tier: z.enum(analysisTiers).optional(),
@@ -480,7 +501,7 @@ export const editorTools: ToolDefinition[] = [
   tool(
     "update_effect_instance",
     "edit",
-    "Patch the settings of one applied effect on one element (any effect section: channels, passes, text, art, overlay, depth, origin, color, tint, name, description). The preset and other instances are unchanged. Schema in get_capabilities.",
+    "Patch the settings of one applied effect on one element (any effect section: channels, passes, text, art, overlay, depth, origin, color, tint, name, description). Object sections merge, so {text:{tempo:120}} changes only the tempo; arrays (channels, passes) replace. The preset and other instances are unchanged. Schema in get_capabilities.",
     {
       layerId: z.string(),
       effectId: z.string(),
@@ -502,7 +523,7 @@ export const editorTools: ToolDefinition[] = [
   tool(
     "update_effect",
     "edit",
-    "Patch an editable preset (My effects or project) for future uses; applied instances keep their settings. Library and imported originals are read-only: fork with create_effect and a new ID.",
+    "Patch an editable preset (My effects or project) for future uses; object sections merge as in update_effect_instance, and applied instances keep their settings. Library and imported originals are read-only: fork with create_effect and a new ID.",
     { effectId: z.string(), patch: z.record(z.string(), z.unknown()), ...rev },
   ),
   tool(
@@ -526,6 +547,12 @@ export const editorTools: ToolDefinition[] = [
     "export_effect_bundle",
     "read",
     "Return a My effects or imported entry as a portable bundle; userEffectId is the library entry ID. Only when the user asks.",
+    { userEffectId: z.string() },
+  ),
+  tool(
+    "delete_user_effect",
+    "edit",
+    "Delete an entry from My effects (userEffectId is the library entry ID). Elements that use it keep their applied copies. Only when the user asks.",
     { userEffectId: z.string() },
   ),
 
@@ -552,7 +579,7 @@ export const editorTools: ToolDefinition[] = [
   tool(
     "save_project",
     "add",
-    "Flush the current editor state to local storage.",
+    "Save the project: to the user's project file when one is open (get_project.projectFile), always to the local recovery copy. It never opens a file dialog; if projectFile is null, ask the user to press Save once to choose where.",
   ),
 
   // Review and export
@@ -577,7 +604,7 @@ export const editorTools: ToolDefinition[] = [
   tool(
     "get_export",
     "read",
-    "Read export progress. A finished video downloads from the editor or /api/exports/<id>.mp4.",
+    "Read export progress. When status is done, file is the MP4's absolute path (copy it where the user wants it) and url its download link.",
     { jobId: z.string() },
   ),
 ];

@@ -13,7 +13,7 @@ How to work on KamiKami's code. This file is for coding agents. To edit a *video
 | Effect library | `src/builtin-effects.ts` (cards, families), `src/effect-roles.ts` (role, feel, target), `src/effect-bundle.ts` (apply, bundles, `effectEngine`), `src/effect-catalog.ts` (agent search and describe) |
 | Editor UI | `src/App.tsx` (state, history, autosave, agent commands), `src/editor/*` (timeline, canvas, dialogs, controls, `editing.ts` for ripple/edit-list operations, `tracks.ts`) |
 | Agent tools | `server/editor-tools.ts` (the one tool list), `server/tool-runner.ts` (the one dispatcher), `server/agent-conventions.ts` (rules every agent gets), `src/agent-protocol.ts` (validated editor commands, revisions), `server/editor-bridge.ts` |
-| Service | `server/index.ts` (endpoints, storage, renders, capabilities), `server/assistant.ts`, `server/assistant-model.ts`, `server/mcp.mjs` → `server/mcp-server.ts`, `server/media-library.ts`, `server/effect-library.ts`, `server/font-library.ts`, `server/analysis/*` |
+| Service | `server/index.ts` (endpoints, storage, renders, capabilities), `server/service-config.ts` (ports, workspace), `server/assistant.ts`, `server/assistant-model.ts`, `server/mcp.mjs` → `server/mcp-server.ts`, `server/media-library.ts`, `server/effect-library.ts`, `server/font-library.ts`, `server/analysis/*` |
 | Desktop shell | `electron/main.cjs` (sandboxed window), `electron/preload.cjs`, `electron/project-files.cjs`, `electron/assistant-credentials.cjs` |
 
 ## Conventions
@@ -55,6 +55,7 @@ How to work on KamiKami's code. This file is for coding agents. To edit a *video
 
 - Run `npm test` and `npm run build` for every change. Run `test:ui` for editor UI changes. Run `test:kinetic-render` / `test:text-render` for rendering changes.
 - **Do not run `test:service`, `test:mcp` or `test:mcp:full` unprompted.** They edit the user's live workspace.
+- `npm run test:e2e` is safe: it starts its own service, editor and browser on separate ports with a temporary workspace, creates a project as a user, then builds and exports a music video through a real MCP client. Run it after agent-tool or editor-command changes.
 - For visual checks, render contact sheets to a scratch directory with Remotion's `openBrowser`; never write into `.kamikami/`.
 - `.kamikami/` is the user's workspace (project, media, effects, analysis). Tests and scripts must not write to it.
 

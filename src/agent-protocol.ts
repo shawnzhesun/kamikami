@@ -1,3 +1,4 @@
+import { fontChoice, resolveFont, type FontAsset } from "./font-assets";
 import {
   KeyframeSchema,
   elementKeyframeProperties,
@@ -60,6 +61,35 @@ import { applyInstanceEffectDraft } from "./editor/effect-draft";
 import { durationChange } from "./editor-utils";
 import type { MediaAsset } from "./media";
 const revision = { expectedRevision: z.string().min(1) };
+/**
+ * An effect patch: object sections (text, art, overlay, depth, origin) merge
+ * into the current ones, so { text: { tempo: 120 } } changes only the tempo;
+ * arrays (channels, passes) and plain values replace. The result is validated
+ * as a whole.
+ */
+const effectPatch = z
+  .record(z.string(), z.unknown())
+  .superRefine((patch, ctx) => {
+    for (const key of Object.keys(patch))
+      if (key === "id" || !(key in EffectSettingsSchema.shape))
+        ctx.addIssue({
+          code: "custom",
+          message: `Unknown effect field ${key}.`,
+        });
+  });
+function mergeEffect<T extends Record<string, unknown>>(
+  effect: T,
+  patch: Record<string, unknown>,
+): T {
+  const plain = (v: unknown): v is Record<string, unknown> =>
+    !!v && typeof v === "object" && !Array.isArray(v);
+  const next: Record<string, unknown> = { ...effect };
+  for (const [key, value] of Object.entries(patch))
+    next[key] =
+      plain(value) && plain(effect[key]) ? { ...effect[key], ...value } : value;
+  return next as T;
+}
+
 export const AgentCommandSchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("create_track"),
@@ -108,6 +138,7 @@ export const AgentCommandSchema = z.discriminatedUnion("action", [
     src: z.string(),
     start: z.number().min(0).optional(),
     duration: z.number().min(0.1).optional(),
+    offset: z.number().min(0).optional(),
     ...revision,
   }),
   z.object({
@@ -238,14 +269,14 @@ export const AgentCommandSchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("update_effect"),
     effectId: z.string(),
-    patch: EffectSchema.omit({ id: true }).partial().strict(),
+    patch: effectPatch,
     ...revision,
   }),
   z.object({
     action: z.literal("update_effect_instance"),
     layerId: z.string(),
     effectId: z.string(),
-    patch: EffectSettingsSchema.partial().strict(),
+    patch: effectPatch,
     ...revision,
   }),
   z.object({
@@ -275,6 +306,10 @@ export const AgentCommandSchema = z.discriminatedUnion("action", [
   }),
   z.object({
     action: z.literal("export_effect_bundle"),
+    userEffectId: z.string(),
+  }),
+  z.object({
+    action: z.literal("delete_user_effect"),
     userEffectId: z.string(),
   }),
   z.object({
@@ -376,6 +411,8 @@ export function applyAgentEdit(
   command: AgentCommand,
   knownSources: string[],
   assets: MediaAsset[] = [],
+  /** Imported fonts, so a custom fontId brings its font into the project. */
+  fontLibrary: FontAsset[] = [],
 ): Project {
   project = validateProject(project);
   setKeyframeFps(project.fps);
@@ -544,7 +581,9 @@ export function applyAgentEdit(
     next = {
       ...project,
       effects: project.effects.map((e) =>
-        e.id === command.effectId ? { ...e, ...command.patch } : e,
+        e.id === command.effectId
+          ? EffectSchema.parse(mergeEffect(e, command.patch))
+          : e,
       ),
     };
   }
@@ -558,7 +597,7 @@ export function applyAgentEdit(
     next = applyInstanceEffectDraft(
       project,
       command.layerId,
-      { ...original, ...command.patch },
+      EffectSchema.parse(mergeEffect(original, command.patch)),
       original,
     );
   }
@@ -580,9 +619,11 @@ export function applyAgentEdit(
     );
     if (!a) throw new Error("Available media not found.");
     const start = command.start ?? 0;
+    const offset = a.type === "image" ? 0 : (command.offset ?? 0);
     const duration =
-      command.duration ?? Math.min(a.duration ?? 5, project.duration - start);
-    if (a.duration && duration > a.duration + 0.001)
+      command.duration ??
+      Math.min((a.duration ?? 5) - offset, project.duration - start);
+    if (a.duration && offset + duration > a.duration + 0.001)
       throw new Error("Clip exceeds its source duration.");
     next = {
       ...project,
@@ -594,6 +635,7 @@ export function applyAgentEdit(
           src: a.src,
           start,
           duration,
+          offset,
         },
       ],
     };
@@ -604,7 +646,16 @@ export function applyAgentEdit(
     next = {
       ...project,
       layers: project.layers.map((l) =>
-        l.id === command.layerId ? { ...l, ...command.patch } : l,
+        l.id === command.layerId
+          ? {
+              ...l,
+              ...command.patch,
+              ...fontSwitch(l, command.patch, [
+                ...(project.fonts ?? []),
+                ...fontLibrary,
+              ]),
+            }
+          : l,
       ),
     };
   } else if (command.action === "add_text") {
@@ -656,7 +707,7 @@ export function applyAgentEdit(
   } else if (command.action === "apply_project") next = command.project;
   else if (command.action === "reorder_layers")
     next = reorderLayers(project, command.layerIds);
-  next = validateProject(next);
+  next = validateProject(withProjectFonts(next, fontLibrary));
   if (!sameFormat(project, next)) throw new Error(FORMAT_LOCKED);
   const sources = new Set([
     ...knownSources,
@@ -667,4 +718,49 @@ export function applyAgentEdit(
       "Use an existing source from the media library. Import new files in the app first.",
     );
   return next;
+}
+
+/**
+ * A new fontId without a weight or style keeps the nearest face the font has,
+ * as the font picker does; explicit values are validated as given.
+ */
+function fontSwitch(
+  layer: Project["layers"][number],
+  patch: Partial<Project["layers"][number]>,
+  fonts: FontAsset[],
+) {
+  const font = patch.fontId && resolveFont(patch.fontId, fonts);
+  if (!font) return {};
+  const choice = fontChoice(
+    font,
+    patch.fontWeight ?? layer.fontWeight,
+    patch.fontStyle ?? layer.fontStyle,
+  );
+  return {
+    ...(patch.fontWeight === undefined
+      ? { fontWeight: choice.fontWeight }
+      : {}),
+    ...(patch.fontStyle === undefined ? { fontStyle: choice.fontStyle } : {}),
+  };
+}
+
+/** An imported font travels with the project once an element uses it, as when the user picks it. */
+function withProjectFonts(project: Project, library: FontAsset[]): Project {
+  const have = new Set((project.fonts ?? []).map((f) => f.id));
+  const used = library.filter(
+    (f) => !have.has(f.id) && project.layers.some((l) => l.fontId === f.id),
+  );
+  if (!used.length) return project;
+  return {
+    ...project,
+    fonts: [
+      ...(project.fonts ?? []),
+      ...used.map(({ id, family, category, variants }) => ({
+        id,
+        family,
+        category,
+        variants,
+      })),
+    ],
+  };
 }

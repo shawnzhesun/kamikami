@@ -83,9 +83,22 @@ export const AudioStatsSchema = z
     silences: z.array(range).max(5000),
     /** Fraction of the duration that is not silence. */
     activeRatio: z.number().min(0).max(1),
+    /** A steady pulse, when the audio has one (music). */
+    tempo: z
+      .object({
+        bpm: z.number().min(30).max(300),
+        /** 0–1: how clearly the pulse stands out. */
+        confidence: z.number().min(0).max(1),
+        /** Seconds of the first beat; later beats follow every 60/bpm s. */
+        firstBeat: time,
+        beats: z.array(time).max(4000),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 export type AudioStats = z.infer<typeof AudioStatsSchema>;
+export type AudioTempo = NonNullable<AudioStats["tempo"]>;
 
 export const ShotSchema = z
   .object({
@@ -282,6 +295,7 @@ export function probeSummary(a: AssetAnalysis): string {
     else {
       parts.push(`${Math.round(a.audio.activeRatio * 100)}% audio activity`);
       if (a.audio.lufs !== null) parts.push(`${a.audio.lufs.toFixed(1)} LUFS`);
+      if (a.audio.tempo) parts.push(`${a.audio.tempo.bpm} BPM`);
     }
   }
   if (a.probe.audioTracks.length > 1)

@@ -29,7 +29,7 @@ The tools are the same; only confirmation differs, because MCP has no in-app dia
 | Deleting or ripple-removing elements, `apply_project` removing elements, shortening the project | The app lists the affected elements and asks | The client's own permission prompt; these tools carry `destructiveHint` |
 | `delete_media` on used media | The app asks | Returns `requiresConfirmation`; retry with `confirmUsed: true` |
 | `analyze_assets` model tiers | The app shows the estimate and asks | Returns `needsConfirmation` with the estimate; retry with `confirmed: true` |
-| `import_media` | The app asks for each file (the paperclip also attaches files) | Imports directly |
+| `import_media`, `import_font` | The app asks for each file (the paperclip also attaches files) | Imports directly |
 | Images (`render_frame`, `get_render`, `view_asset_range`, `view_timeline_range`) | Attached to the conversation and shown as artifacts | Returned as image content |
 
 MCP annotations come from each tool's `access`: `read` sets `readOnlyHint`, `edit` sets `destructiveHint`.
@@ -56,8 +56,10 @@ codex mcp add kamikami -- $(which node) /abs/path/kamikami/server/mcp.mjs
 ```
 
 - **Skill:** Claude Code finds `/kamikami-editor` through `.claude/skills/` (a symlink); Codex finds `$kamikami-editor` in `.agents/skills/`.
-- **Connection:** the server talks to `http://127.0.0.1:4318` on the same machine, with a heartbeat; `GET /api/agents` lists connected clients. Restart the MCP server after changing tool definitions.
+- **Connection:** the server talks to the service on `127.0.0.1` (port 4318 unless `KAMIKAMI_PORT` is set), with a heartbeat; `GET /api/agents` lists connected clients. Restart the MCP server after changing tool definitions.
 - **Timeouts:** editor commands time out after 30 s. A timeout can mean the edit happened, so read the project before retrying.
+- **Files:** `save_project` writes the user's project file once they've chosen one with Save (`get_project.projectFile`); agents never open file dialogs. A finished `get_export` returns the MP4's absolute `file` path.
+- **Isolated runs:** `KAMIKAMI_PORT`, `KAMIKAMI_EDITOR_PORT` and `KAMIKAMI_DATA` move the service, editor and workspace (`server/service-config.ts`). `npm run test:e2e` uses them to drive a whole music video through MCP without touching the running app or `.kamikami/`.
 - **Analysis:** MCP needs no model key of its own; model tiers use the native assistant's connection.
 
 ## Adding a tool

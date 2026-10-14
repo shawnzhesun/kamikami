@@ -55,6 +55,14 @@ export function sliceAnalysis(
           silent: analysis.audio.silent,
         }
       : null,
+    // The beat list is in the audio section.
+    tempo: analysis.audio?.tempo
+      ? {
+          bpm: analysis.audio.tempo.bpm,
+          confidence: analysis.audio.tempo.confidence,
+          firstBeat: analysis.audio.tempo.firstBeat,
+        }
+      : null,
     scenes: analysis.scenes ?? [],
     sections: analysis.sections ?? [],
     language: transcript?.language,
@@ -86,6 +94,14 @@ export function sliceAnalysis(
             inRange(a, b, s, e),
           ),
           activeRatio: analysis.audio.activeRatio,
+          tempo: analysis.audio.tempo
+            ? {
+                ...analysis.audio.tempo,
+                beats: analysis.audio.tempo.beats.filter(
+                  (t) => t >= s && t < e,
+                ),
+              }
+            : null,
         }
       : null,
     black: (analysis.visual?.black ?? []).filter(([a, b]) =>

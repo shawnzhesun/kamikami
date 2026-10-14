@@ -25,7 +25,7 @@ type Estimate = {
   uploadsTo: string | null;
 };
 const tierLabels: Record<AnalysisTier, string> = {
-  probe: "Probe only · free, local (shots, loudness, silences)",
+  probe: "Probe only · free, local (shots, loudness, silences, tempo)",
   transcribe: "Transcribe · words with timings",
   balanced: "Balanced · descriptions, summary (+ transcript if enabled)",
   full: "Full · denser frame sampling",
@@ -214,6 +214,7 @@ type Detail = {
     truePeak: number | null;
     silent: boolean;
   } | null;
+  tempo: { bpm: number; confidence: number; firstBeat: number } | null;
   scenes: { start: number; end: number; title: string }[];
   sections: { start: number; end: number; label: string }[];
   language?: string;
@@ -353,6 +354,15 @@ export function AssetDetails({
                           {detail.loudness.silent
                             ? "Silent"
                             : `${detail.loudness.lufs} LUFS · peak ${detail.loudness.truePeak} dBTP`}
+                        </dd>
+                      </>
+                    )}
+                    {detail.tempo && (
+                      <>
+                        <dt>Tempo</dt>
+                        <dd>
+                          {detail.tempo.bpm} BPM · first beat{" "}
+                          {detail.tempo.firstBeat.toFixed(2)} s
                         </dd>
                       </>
                     )}

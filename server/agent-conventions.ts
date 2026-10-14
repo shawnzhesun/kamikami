@@ -38,7 +38,7 @@ export const agentConventions = [
   `- Roles: ${effectRoles.map((r) => `${r} (${roleHints[r].toLowerCase()})`).join("; ")}. Stack about one card per role and match the feel to the music. Entrances also exist as <id>-out exits.`,
   `- Fit: effects with a text recipe apply only to title elements; art kinds trail and slices only to pictures; everything else to any visual element. Audio takes no effects. An element holds at most ${LIMITS.elementEffects} effects, one instance per effect.`,
   "- Instances hold full settings snapshots: update_effect_instance changes one element; update_effect changes an editable preset for future uses only. Library and imported originals are read-only; fork with create_effect and a new ID, keeping presetFamilyId.",
-  "- Beat settings (text.tempo, art.tempo, overlay.tempo, in BPM) count beats from the project start; give every beat effect the song's tempo so elements hit together.",
+  "- Beat settings (text.tempo, art.tempo, overlay.tempo, in BPM) count beats from the project start; give every beat effect the song's tempo so elements hit together. The probe measures it: get_asset_analysis gives tempo.bpm and firstBeat, section audio lists every beat. Beat effects count from project time 0, so line the song up with that grid: start it at n·60/bpm − firstBeat seconds, or trim firstBeat off its start. Cut on beat times too.",
   "",
   "AUTHORING (create_effect)",
   "- Recipes are declarative (no code or shaders). Sections: channels, passes, text, art, overlay, depth, origin {x,y -1..1 pivot}, color/tint (legacy wash); limits are in the effect schema. To learn a kind's settings, describe_effect a card that uses it.",

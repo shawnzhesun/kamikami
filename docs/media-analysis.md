@@ -15,7 +15,8 @@ Analysis runs only on request: from **Analyze** in the media panel, an asset's s
   - sha256 and stream details (codec, size, fps, rotation, alpha, audio tracks);
   - EBU R128 loudness and true peak;
   - silences and the active ratio;
-  - shot cuts, black spans and frozen spans.
+  - shot cuts, black spans and frozen spans;
+  - for music, the tempo and beat grid (`server/analysis/tempo.ts`): spectral-flux onsets, autocorrelation for the period, and a least-squares fit of the grid to the onsets. Audio without a steady pulse (speech, noise, steady tones) gets none. Overview reports `tempo.bpm`, `confidence` and `firstBeat`; the `audio` section lists every beat.
 
   Audio measurements use track 0.
 

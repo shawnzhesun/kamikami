@@ -4,12 +4,13 @@ import { readFile } from "node:fs/promises";
 import { editorTools } from "./editor-tools";
 import { mcpInstructions } from "./agent-conventions";
 import type { ToolOutput } from "./tool-runner";
+import { serviceOrigin } from "./service-config";
 
 /**
  * A thin stdio proxy: every tool runs in the KamiKami service through the
  * dispatcher the native assistant uses (server/tool-runner.ts).
  */
-const base = "http://127.0.0.1:4318";
+const base = serviceOrigin;
 async function api<T>(route: string, body?: unknown, timeoutMs = 45_000) {
   const response = await fetch(base + route, {
     method: body === undefined ? "GET" : "POST",

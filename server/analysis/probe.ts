@@ -10,6 +10,7 @@ import {
   type VisualStats,
 } from "../../src/asset-analysis";
 import { ffmpegPath, ffprobePath, run } from "./ffmpeg";
+import { audioTempo, TEMPO_PARAMS } from "./tempo";
 
 /** Probe thresholds, part of the cache key so tuning them invalidates old results. */
 export const PROBE_PARAMS = {
@@ -19,6 +20,7 @@ export const PROBE_PARAMS = {
   silenceMin: 0.4,
   blackMin: 0.4,
   freezeMin: 1,
+  tempo: TEMPO_PARAMS,
 } as const;
 export const probeParamsHash = () =>
   createHash("sha1")
@@ -270,6 +272,10 @@ export async function probeAsset(
   const duration = probe.duration ?? 0;
   if (duration > 0 && probe.audioTracks.length) {
     analysis.audio = await audioStats(file, duration, 0, signal);
+    if (!analysis.audio.silent) {
+      const tempo = await audioTempo(file, duration, 0, signal);
+      if (tempo) analysis.audio.tempo = tempo;
+    }
     analysis.provenance.audio = provenance;
   }
   if (type === "video" && probe.video && duration > 0) {
