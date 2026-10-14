@@ -16,7 +16,7 @@ Both see the same tools and run them through the same dispatcher:
 | MCP transport | `server/mcp.mjs` → `server/mcp-server.ts`, a stdio proxy to `POST /api/agents/tool` |
 | Editor commands | `server/editor-bridge.ts` → `src/agent-protocol.ts` (validation) → `src/App.tsx` |
 
-Tool inputs use the source enums and schemas (shape and backdrop kinds, roles, frame rates, keyframe easings), so the tool list never restates values that can change. Counts, limits and the effect library come from the tools themselves: `tools/list`, `get_capabilities` (`limits`, `effectLibrary`, `tools`, `conventions`), `find_effects` and `describe_effect`.
+Tool inputs use the source enums and schemas (shape and backdrop kinds, roles, keyframe easings), so the tool list never restates values that can change. Counts, limits and the effect library come from the tools themselves: `tools/list`, `get_capabilities` (`limits`, `effectLibrary`, `tools`, `conventions`), `find_effects` and `describe_effect`.
 
 The conventions reach agents three ways: `get_capabilities.conventions`, the MCP server instructions, and the native system prompt. The editing skill, `.agents/skills/kamikami-editor/SKILL.md`, is the MCP resource `kamikami://editing-skill`.
 

@@ -6,6 +6,7 @@ import {
   frameRates,
   resolutionPresets,
   type Project,
+  type ProjectFormat,
   type TimelineLayer,
 } from "../model";
 import { Dropdown } from "./Dropdown";
@@ -49,27 +50,9 @@ export function ProjectSettings({
   const [duration, setDuration] = useState(String(project.duration));
   const [confirmed, setConfirmed] = useState(false);
   const [error, setError] = useState("");
-  const [size, setSize] = useState(`${project.width}x${project.height}`);
-  const [fps, setFps] = useState(String(project.fps));
   const [loudness, setLoudness] = useState(
     project.exportLoudness == null ? "off" : String(project.exportLoudness),
   );
-  const sizeOptions = [
-    ...resolutionPresets.map((p) => ({
-      value: `${p.width}x${p.height}`,
-      label: `${p.label} · ${p.width} × ${p.height}`,
-    })),
-    ...(resolutionPresets.some(
-      (p) => p.width === project.width && p.height === project.height,
-    )
-      ? []
-      : [
-          {
-            value: `${project.width}x${project.height}`,
-            label: `Custom · ${project.width} × ${project.height}`,
-          },
-        ]),
-  ];
   const seconds = Number(duration);
   const valid =
     duration.trim() !== "" &&
@@ -84,7 +67,7 @@ export function ProjectSettings({
           e.preventDefault();
           if (!name.trim() || !change) {
             setError(
-              "Enter a project name and a duration from 1 to 600 seconds.",
+              `Enter a project name and a duration from 1 to ${LIMITS.seconds} seconds.`,
             );
             return;
           }
@@ -92,15 +75,11 @@ export function ProjectSettings({
             setError("Review and confirm the affected elements below.");
             return;
           }
-          const [width, height] = size.split("x").map(Number);
           if (
             onSave(
               {
                 ...change.next,
                 name: name.trim(),
-                width,
-                height,
-                fps: Number(fps),
                 exportLoudness: loudness === "off" ? null : Number(loudness),
               },
               base,
@@ -138,28 +117,14 @@ export function ProjectSettings({
             }}
           />
         </label>
-        <label>
-          Output size
-          <Dropdown
-            label="Output size"
-            value={size}
-            options={sizeOptions}
-            onChange={setSize}
-          />
-        </label>
+        <p className="settings-format">
+          <span>Format</span> {formatLabel(project)}
+          <span className="muted">
+            {" "}
+            · set when the project was created; exports use it
+          </span>
+        </p>
         <div className="field-row">
-          <label>
-            Frame rate
-            <Dropdown
-              label="Frame rate"
-              value={fps}
-              options={frameRates.map((r) => ({
-                value: String(r),
-                label: `${r} fps`,
-              }))}
-              onChange={setFps}
-            />
-          </label>
           <label>
             Export loudness
             <Dropdown
@@ -175,11 +140,6 @@ export function ProjectSettings({
             />
           </label>
         </div>
-        <p className="muted">
-          Positions are measured from the canvas center, so changing the size
-          keeps elements centered. Timing is in seconds and survives frame-rate
-          changes.
-        </p>
         {!!change?.affected.length && (
           <div className="settings-affected">
             <p>
@@ -221,6 +181,125 @@ export function ProjectSettings({
           </button>
           <button type="submit" className="primary">
             Save changes
+          </button>
+        </div>
+      </form>
+    </SettingsDialog>
+  );
+}
+const sizeName = (width: number, height: number) =>
+  resolutionPresets.find((p) => p.width === width && p.height === height)
+    ?.label ?? "Custom";
+export const formatLabel = (f: ProjectFormat) =>
+  `${sizeName(f.width, f.height)} · ${f.width} × ${f.height} · ${f.fps} fps`;
+/** Picks a new project's name and format; the format can't change later. */
+export function NewProjectDialog({
+  base,
+  onCreate,
+  onClose,
+}: {
+  base: ProjectFormat;
+  onCreate: (format: ProjectFormat, name: string) => void;
+  onClose: () => void;
+}) {
+  const [name, setName] = useState("Untitled project");
+  const [size, setSize] = useState(`${base.width}x${base.height}`);
+  const [custom, setCustom] = useState({
+    width: base.width,
+    height: base.height,
+  });
+  const [fps, setFps] = useState(String(base.fps));
+  const [error, setError] = useState("");
+  const options = [
+    ...resolutionPresets.map((p) => ({
+      value: `${p.width}x${p.height}`,
+      label: `${p.label} · ${p.width} × ${p.height}`,
+    })),
+    { value: "custom", label: "Custom size…" },
+  ];
+  const presetValue = options.some((o) => o.value === size) ? size : "custom";
+  return (
+    <SettingsDialog title="New project" onClose={onClose}>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          const [width, height] =
+            presetValue === "custom"
+              ? [custom.width, custom.height]
+              : size.split("x").map(Number);
+          const even = (n: number) =>
+            Number.isInteger(n) && n % 2 === 0 && n >= 256 && n <= 4096;
+          if (!name.trim()) return setError("Enter a project name.");
+          if (!even(width) || !even(height))
+            return setError("Use even sizes from 256 to 4096 pixels.");
+          onCreate({ width, height, fps: Number(fps) }, name.trim());
+        }}
+      >
+        <label>
+          Project name
+          <input
+            autoFocus
+            required
+            maxLength={100}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </label>
+        <label>
+          Size
+          <Dropdown
+            label="Size"
+            value={presetValue}
+            options={options}
+            onChange={setSize}
+          />
+        </label>
+        {presetValue === "custom" && (
+          <div className="field-row">
+            {(["width", "height"] as const).map((side) => (
+              <label key={side}>
+                {side === "width" ? "Width (px)" : "Height (px)"}
+                <input
+                  type="number"
+                  min={256}
+                  max={4096}
+                  step={2}
+                  value={custom[side]}
+                  onChange={(e) =>
+                    setCustom({ ...custom, [side]: Number(e.target.value) })
+                  }
+                />
+              </label>
+            ))}
+          </div>
+        )}
+        <label>
+          Frame rate
+          <Dropdown
+            label="Frame rate"
+            value={fps}
+            options={frameRates.map((r) => ({
+              value: String(r),
+              label: `${r} fps`,
+            }))}
+            onChange={setFps}
+          />
+        </label>
+        <p className="muted">
+          Size and frame rate can’t be changed after the project is created.
+          Exports use them.
+        </p>
+        {error && (
+          <p role="alert" className="field-error">
+            {error}
+          </p>
+        )}
+        <div className="dialog-actions">
+          <button type="button" onClick={onClose}>
+            Cancel
+          </button>
+          <button type="submit" className="primary">
+            Create project
           </button>
         </div>
       </form>

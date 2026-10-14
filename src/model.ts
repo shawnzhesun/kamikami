@@ -47,6 +47,14 @@ export const resolutionPresets = [
   { label: "4K UHD (16:9)", width: 3840, height: 2160 },
 ] as const;
 /** Project capacity. Raised for transcript-driven editing (many short cuts). */
+/**
+ * Effects and element defaults are authored in reference pixels for a frame
+ * whose short side is 1080 (1920×1080, 1080×1920, 1080×1080). Multiply by
+ * this to get project pixels, so a look keeps its proportions at 720p, 4K or
+ * any aspect ratio. 1080p projects render exactly as authored.
+ */
+export const frameUnit = (frame: { width: number; height: number }) =>
+  Math.min(frame.width, frame.height) / 1080;
 export const LIMITS = {
   elements: 500,
   tracks: 40,
@@ -160,7 +168,8 @@ export const LayerSchema = z.object({
   opacity: z.number().min(0).max(1),
   volume: z.number().min(0).max(1),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
-  fontSize: z.number().min(12).max(240),
+  // Project pixels: big enough for a full-height title at 4K.
+  fontSize: z.number().min(12).max(1000),
   fontFamily: z.enum(fontFamilies).optional(),
   fontId: fontIdSchema.optional(),
   fontWeight: z.number().int().min(1).max(1000).optional(),
@@ -577,6 +586,7 @@ export function overlayPeers(
 export function elementTime(layer: Layer, effects: Effect[], t: number) {
   return steppedTime(artUses(layer, effects, t), t);
 }
+const pixelChannels = new Set(["x", "y", "blur", "letterSpacing"]);
 export function layerAtTime(
   layer: Layer,
   effects: Effect[],
@@ -585,6 +595,7 @@ export function layerAtTime(
 ) {
   const uses = artUses(layer, effects, clipTime);
   const t = steppedTime(uses, clipTime);
+  const unit = frameUnit(stage);
   const v = {
     x: propertyAt(layer, "x", t),
     y: propertyAt(layer, "y", t),
@@ -598,7 +609,7 @@ export function layerAtTime(
     letterSpacing: 0,
     rotateY: 0,
     rotateX: 0,
-    perspective: 1800,
+    perspective: 1800 * unit,
     scaleX: 1,
     scaleY: 1,
     skewX: 0,
@@ -627,9 +638,9 @@ export function layerAtTime(
       v.rotation += d.rotation;
       v.rotateX += d.tiltX;
       v.rotateY += d.tiltY;
-      v.blur += d.blur;
+      v.blur += d.blur * unit;
       v.opacity *= d.opacity;
-      v.perspective = d.perspective * 1800;
+      v.perspective = d.perspective * 1800 * unit;
     }
     for (const c of definition?.channels ?? []) {
       const value = channelValue(
@@ -648,7 +659,10 @@ export function layerAtTime(
       )
         // Clamp each factor: two negative factors must not multiply back to visible.
         v[c.property] *= Math.max(0, 1 + (value - 1) * amount);
-      else v[c.property] += value * amount;
+      // Moves, blur and tracking are reference pixels; angles are degrees.
+      else
+        v[c.property] +=
+          value * amount * (pixelChannels.has(c.property) ? unit : 1);
     }
   }
   if (uses.length) {
@@ -660,7 +674,7 @@ export function layerAtTime(
     v.invert = camera.invert;
   }
   v.opacity = Math.max(0, Math.min(1, v.opacity * fadeGain(layer, t)));
-  v.blur = Math.max(0, Math.min(100, v.blur));
+  v.blur = Math.max(0, Math.min(100 * unit, v.blur));
   v.scale = Math.max(0.001, v.scale);
   v.brightness = Math.max(0, Math.min(10, v.brightness));
   v.contrast = Math.max(0, Math.min(10, v.contrast));
@@ -673,7 +687,12 @@ export function layerAtTime(
   v.skewX = Math.max(-80, Math.min(80, v.skewX));
   return v;
 }
-export function makeLayer(type: Layer["type"], name: string): Layer {
+/** `frame` sizes the default text for the project; omit it for 1080p. */
+export function makeLayer(
+  type: Layer["type"],
+  name: string,
+  frame: { width: number; height: number } = { width: 1920, height: 1080 },
+): Layer {
   return {
     id: crypto.randomUUID(),
     name,
@@ -694,7 +713,7 @@ export function makeLayer(type: Layer["type"], name: string): Layer {
     opacity: 1,
     volume: 1,
     color: "#f1eee7",
-    fontSize: 86,
+    fontSize: Math.round(86 * frameUnit(frame)),
     fontFamily: DEFAULT_FONT,
     visible: true,
     effects: [],
@@ -730,9 +749,16 @@ export function fadeGain(layer: Layer, localTime: number) {
 }
 /** Automatic de-click ramp at audio edges, in seconds. */
 export const AUDIO_EDGE_RAMP = 0.02;
-/** True when another piece of the same source continues seamlessly at this edge (a split). */
-function continues(layer: Layer, layers: Layer[], edge: "in" | "out") {
-  const fps = 24;
+/**
+ * True when another piece of the same source continues seamlessly at this
+ * edge (a split). Edges within half a frame at the project fps count as one.
+ */
+function continues(
+  layer: Layer,
+  layers: Layer[],
+  edge: "in" | "out",
+  fps: number,
+) {
   return layers.some(
     (o) =>
       o.id !== layer.id &&
@@ -746,17 +772,22 @@ function continues(layer: Layer, layers: Layer[], edge: "in" | "out") {
   );
 }
 /** `localTime` is clip-local seconds; omit it for the static (unkeyed) level. */
-export function layerVolume(layer: Layer, layers: Layer[], localTime?: number) {
+export function layerVolume(
+  layer: Layer,
+  layers: Layer[],
+  localTime?: number,
+  fps = 24,
+) {
   const soloing = layers.some(
     (l) => l.visible && ["audio", "video"].includes(l.type) && l.solo,
   );
   if (layer.muted || (soloing && !layer.solo)) return 0;
   if (localTime === undefined) return layer.volume;
   const t = Math.max(0, Math.min(layer.duration, localTime));
-  const rampIn = continues(layer, layers, "in")
+  const rampIn = continues(layer, layers, "in", fps)
     ? 1
     : Math.min(1, t / AUDIO_EDGE_RAMP);
-  const rampOut = continues(layer, layers, "out")
+  const rampOut = continues(layer, layers, "out", fps)
     ? 1
     : Math.min(1, (layer.duration - t) / AUDIO_EDGE_RAMP);
   return (
@@ -765,11 +796,23 @@ export function layerVolume(layer: Layer, layers: Layer[], localTime?: number) {
     Math.max(0, Math.min(rampIn, rampOut))
   );
 }
-/** An empty project that keeps the canvas size and frame rate of `base`. */
-export function blankProject(base: Project): Project {
+/**
+ * Frame rate and size are chosen when a project is created and never change,
+ * so every effect, keyframe and export is authored for one format.
+ */
+export type ProjectFormat = Pick<Project, "width" | "height" | "fps">;
+export const sameFormat = (a: ProjectFormat, b: ProjectFormat) =>
+  a.width === b.width && a.height === b.height && a.fps === b.fps;
+export const FORMAT_LOCKED =
+  "Frame rate and size are fixed when a project is created. Start a new project for another format.";
+/** An empty project in the given format. */
+export function blankProject(
+  base: ProjectFormat,
+  name = "Untitled project",
+): Project {
   return validateProject({
     version: 2,
-    name: "Untitled project",
+    name,
     width: base.width,
     height: base.height,
     fps: base.fps,

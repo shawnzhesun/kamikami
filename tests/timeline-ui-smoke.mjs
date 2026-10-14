@@ -1098,6 +1098,20 @@ try {
       .find((e) => e.textContent === "Don’t save")
       .click(),
   );
+  // Then the new project's name and format, which can't change later.
+  await wait(() => exists('dialog[aria-label="New project"][open]'));
+  assert.match(
+    await page.evaluate(
+      () =>
+        document.querySelector('dialog[aria-label="New project"]').textContent,
+    ),
+    /can’t be changed after the project is created/,
+  );
+  await page.evaluate(() =>
+    [...document.querySelectorAll("dialog[open] button")]
+      .find((e) => e.textContent === "Create project")
+      .click(),
+  );
   await wait(() => project.layers.length === 0);
   assert.equal(project.name, "Untitled project");
   assert.equal(project.width, saved.width);
@@ -1113,10 +1127,16 @@ try {
     ),
     "Untitled project",
   );
-  // A fresh, unedited project is replaced without asking.
+  // A fresh, unedited project skips the save prompt and goes straight to setup.
   await click(newProjectButton);
-  await new Promise((resolve) => setTimeout(resolve, 200));
-  assert.equal(await exists("dialog[open]"), false);
+  await wait(() => exists('dialog[aria-label="New project"][open]'));
+  assert.equal(await exists("dialog.new-project-dialog[open]"), false);
+  await page.evaluate(() =>
+    [...document.querySelectorAll("dialog[open] button")]
+      .find((e) => e.textContent === "Cancel")
+      .click(),
+  );
+  await wait(async () => !(await exists("dialog[open]")));
   await click('header button[aria-label="Undo"]');
   await wait(() => project.layers.length === saved.layers.length);
   assert.equal(project.name, saved.name);

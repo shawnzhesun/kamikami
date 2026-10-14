@@ -18,6 +18,7 @@ How to work on KamiKami's code. This file is for coding agents. To edit a *video
 
 ## Conventions
 
+- **Resolution independence.** Any fixed pixel amount in rendering is a reference pixel: multiply by `frameUnit(frame)` (short side / 1080). Never divide by the frame width alone, and never assume 1920×1080. `tests/resolution.test.ts` covers the rule.
 - **Determinism.** Every effect is a pure function of the frame, settings and seed. No `Math.random()`, `Date.now()` or browser state in rendering; use `effectRandom(seed, n)`. Previews and exports must draw the same frame.
 - **Schemas are the contract.** Zod schemas in `src/` validate projects, effects, bundles and agent commands. New effect fields need defaults, so older saved data still parses.
 - **Engine gating.** A recipe's minimum engine is computed by `effectEngine` (`src/effect-bundle.ts`) from the `usesV*Features` checks in `src/visual-effects.ts`. A new field or kind must be added to the right check. The ladder is `effectEngines`; the last entry is the current engine.

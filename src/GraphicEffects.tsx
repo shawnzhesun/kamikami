@@ -1,6 +1,6 @@
 import React, { useId } from "react";
 import { effectRandom, visualFrame, type VisualPass } from "./visual-effects";
-import { type Effect, type Layer } from "./model";
+import { frameUnit, type Effect, type Layer } from "./model";
 import { instanceAmountAt, resolveEffectInstanceAt } from "./effect-instance";
 import { GraphicMapEffects } from "./GraphicMapEffects";
 import { svgImage } from "./graphic-maps";
@@ -40,7 +40,8 @@ function Pass({
   const f = visualFrame(pass, time, duration, amount);
   const s = f.strength,
     z = pass.size;
-  const unit = w / 1920;
+  // Reference pixels at a 1080 short side, so vertical frames match landscape.
+  const unit = frameUnit({ width: w, height: h });
   const image = (body: string, result = "paint") => (
     <feImage
       href={svgImage(body, w, h)}
@@ -430,7 +431,7 @@ function Pass({
         break;
       }
       case "hexagons": {
-        const r = w * (0.025 + z * 0.055),
+        const r = 1920 * unit * (0.025 + z * 0.055),
           dx = r * 1.5,
           dy = Math.sqrt(3) * r;
         let body = "";

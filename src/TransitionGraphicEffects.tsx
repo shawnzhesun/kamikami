@@ -618,7 +618,8 @@ export function revealFilterNodes(c: Context): React.ReactNode {
     }
     case "cells": {
       const cols = Math.max(4, Math.round(4 + z * 20));
-      const cell = w / cols;
+      // Columns span the long side, so cells keep their size in vertical frames.
+      const cell = Math.max(w, h) / cols;
       const rows = Math.ceil(h / cell);
       const mode = pass.cellMode ?? "squares";
       let body = "";

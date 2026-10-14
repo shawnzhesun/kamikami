@@ -5,6 +5,7 @@ What isn't built yet, known issues, and the third-party sources that shaped the 
 ## Known issues
 
 - **Test coverage:** `test:mcp:full` (live workspace) doesn't exercise the shape, backdrop, keyframe, analysis, ripple and effect-catalog tools. The unit tests cover the shared dispatcher, but not the MCP stdio round trip.
+- **Frame-filling motion:** particle and copy fields spread across the frame's width and height, so their circular paths become ellipses in non-16:9 frames (by design: they fill the frame).
 - **Re-analysis:** nothing flags an analysis as outdated when the analyzer changes; re-run `analyze_assets` to refresh.
 
 ## Editing and compositing

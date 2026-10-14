@@ -22,6 +22,7 @@ import {
   elementTime,
   overlayPeers,
   overlayUses,
+  frameUnit,
   layerAtTime,
   layerVolume,
   type Project,
@@ -30,14 +31,30 @@ import {
 import { isFrameArt } from "./artwork";
 import { ArtworkStack } from "./ArtworkLayer";
 
+/**
+ * The artwork is drawn on a 1920×1080 board. Other frame shapes crop it
+ * around the sign and the figure instead of the board's center, so the
+ * subject stays in view from 9:16 to ultra-wide.
+ */
+export function stationView(width: number, height: number) {
+  const aspect = width / height;
+  const clamp = (v: number, lo: number, hi: number) =>
+    Math.max(lo, Math.min(hi, v));
+  if (aspect <= 1920 / 1080) {
+    const w = 1080 * aspect;
+    return { x: clamp(1365 - w / 2, 0, 1920 - w), y: 0, w, h: 1080 };
+  }
+  const h = 1920 / aspect;
+  return { x: 0, y: clamp(560 - h / 2, 0, 1080 - h), w: 1920, h };
+}
 function Station({ width, height }: { width: number; height: number }) {
-  // The artwork is drawn at 1920×1080 and covers other frame shapes.
+  const view = stationView(width, height);
   return (
     <svg
-      viewBox="0 0 1920 1080"
+      viewBox={`${view.x} ${view.y} ${view.w} ${view.h}`}
       width={width}
       height={height}
-      preserveAspectRatio="xMidYMid slice"
+      preserveAspectRatio="xMidYMid meet"
       xmlns="http://www.w3.org/2000/svg"
     >
       <defs>
@@ -144,9 +161,12 @@ function Station({ width, height }: { width: number; height: number }) {
           <path key={i} d={`M${i * 67} ${80 + (i % 7) * 67} l-25 85`} />
         ))}
       </g>
+      {/* The dark rim frames whatever part of the board is visible. */}
       <rect
-        width="1920"
-        height="1080"
+        x={view.x}
+        y={view.y}
+        width={view.w}
+        height={view.h}
         fill="none"
         stroke="#030811"
         strokeWidth="80"
@@ -193,6 +213,7 @@ function VisualLayer({
             ?.overlay,
       ),
   );
+  const unit = frameUnit(project);
   if (missing)
     return layer.type === "audio" ? null : (
       <AbsoluteFill
@@ -202,11 +223,11 @@ function VisualLayer({
           alignItems: "center",
           justifyContent: "center",
           fontFamily: "sans-serif",
-          fontSize: 40,
+          fontSize: 40 * unit,
         }}
       >
         Missing media: {layer.name}
-        <span style={{ fontSize: 24, marginTop: 20 }}>
+        <span style={{ fontSize: 24 * unit, marginTop: 20 * unit }}>
           Relink the file in the Media library
         </span>
       </AbsoluteFill>
@@ -215,7 +236,7 @@ function VisualLayer({
     return src ? (
       <Audio
         src={src}
-        volume={(f) => layerVolume(layer, project.layers, f / fps)}
+        volume={(f) => layerVolume(layer, project.layers, f / fps, fps)}
         startFrom={Math.round(layer.offset * fps)}
       />
     ) : null;
@@ -283,7 +304,7 @@ function VisualLayer({
             startFrom={Math.round(layer.offset * fps)}
             // Copies are silent: only the element itself plays its sound.
             volume={
-              copy ? 0 : (f) => layerVolume(layer, project.layers, f / fps)
+              copy ? 0 : (f) => layerVolume(layer, project.layers, f / fps, fps)
             }
             muted={copy}
             style={{ width: "100%", height: "100%", objectFit: "contain" }}

@@ -246,6 +246,16 @@ test("fades shape opacity and volume; audio edges de-click except across split p
     "no dip at a split",
   );
   assert.equal(layerVolume(right, project.layers, 0.001), 1);
+  // At 60 fps a one-frame gap is a real edge, so it keeps its de-click ramp.
+  const gap = 1 / 60;
+  const after = {
+    ...right,
+    id: "after",
+    start: left.start + left.duration + gap,
+    offset: left.offset + left.duration + gap,
+  };
+  assert.ok(layerVolume(after, [left, after], 0.001, 60) < 1);
+  assert.equal(layerVolume(right, project.layers, 0.001, 60), 1);
 });
 
 test("crossfade overlaps clips using source handles and fades both", () => {
@@ -397,7 +407,7 @@ test("export loudness normalization reaches the target and keeps the video strea
   }
 });
 
-test("projects accept preset frame rates and even resolutions; agents can change them", () => {
+test("projects accept preset frame rates and even resolutions, fixed after creation", () => {
   const vertical = validateProject({
     ...initialProject,
     width: 1080,
@@ -412,9 +422,6 @@ test("projects accept preset frame rates and even resolutions; agents can change
     initialProject,
     AgentCommandSchema.parse({
       action: "set_project_settings",
-      width: 1080,
-      height: 1080,
-      fps: 60,
       exportLoudness: -23,
       expectedRevision: "r",
     }),
@@ -422,7 +429,28 @@ test("projects accept preset frame rates and even resolutions; agents can change
   );
   assert.deepEqual(
     [next.width, next.height, next.fps, next.exportLoudness],
-    [1080, 1080, 60, -23],
+    [1920, 1080, 24, -23],
+  );
+  // No command can change the format, including a whole-project replace.
+  assert.throws(
+    () =>
+      applyAgentEdit(
+        initialProject,
+        AgentCommandSchema.parse({
+          action: "apply_project",
+          project: { ...initialProject, fps: 60 },
+          expectedRevision: "r",
+        }),
+        [],
+      ),
+    /fixed when a project is created/,
+  );
+  assert.throws(() =>
+    AgentCommandSchema.parse({
+      action: "set_project_settings",
+      fps: 60,
+      expectedRevision: "r",
+    }),
   );
   // Depth travel scales with the frame instead of assuming 1920×1080.
   const wide = layerAtTime({ ...makeLayer("image", "i") }, [], 0, {

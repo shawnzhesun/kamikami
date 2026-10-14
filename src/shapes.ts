@@ -40,6 +40,22 @@ export type ShapePreset = {
   label: string;
   shape: Shape;
 };
+/** A preset's reference-pixel size in project pixels (see `frameUnit`). */
+export function scaleShape(shape: Shape, unit: number): Shape {
+  const px = (n: number | undefined) =>
+    n === undefined ? undefined : Math.max(2, Math.round(n * unit));
+  return {
+    ...shape,
+    width: px(shape.width)!,
+    height: px(shape.height)!,
+    ...(shape.strokeWidth !== undefined
+      ? { strokeWidth: Math.round(shape.strokeWidth * unit) }
+      : {}),
+    ...(shape.radius !== undefined
+      ? { radius: Math.round(shape.radius * unit) }
+      : {}),
+  };
+}
 /** The Add shape menu. Presets are ordinary shapes, so every one stays editable. */
 export const shapePresets: ShapePreset[] = [
   {

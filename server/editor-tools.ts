@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { frameRates } from "../src/model";
 import { ShapeSchema } from "../src/shapes";
 import { BackdropSchema, backgroundKinds, finishKinds } from "../src/backdrops";
 import { KeyframeSchema, elementKeyframeProperties } from "../src/keyframes";
@@ -268,13 +267,10 @@ export const editorTools: ToolDefinition[] = [
   tool(
     "set_project_settings",
     "edit",
-    "Change the name, duration, size (width/height, e.g. 1080x1920 vertical), frame rate, or export loudness in LUFS (-14 social, -23 broadcast, null for off). Shortening past elements needs trimAffected:true after the user reviews them.",
+    "Change the name, duration, or export loudness in LUFS (-14 social, -23 broadcast, null for off). Frame rate and size are fixed when the project is created. Shortening past elements needs trimAffected:true after the user reviews them.",
     {
       name: z.string().optional(),
       duration: z.number().optional(),
-      width: z.number().int().optional(),
-      height: z.number().int().optional(),
-      fps: z.literal([...frameRates]).optional(),
       exportLoudness: z.number().nullable().optional(),
       trimAffected: z.boolean().optional(),
       ...rev,

@@ -2,6 +2,7 @@ import React from "react";
 import { AbsoluteFill } from "remotion";
 import type { Backdrop } from "./backdrops";
 import { seeded } from "./motion";
+import { frameUnit } from "./model";
 
 const alpha = (c: string, a: number) =>
   c +
@@ -27,6 +28,8 @@ export function BackdropArt({
   const s = t * b.speed;
   const d = b.density;
   const unitSize = Math.min(W, H);
+  // Reference pixels at a 1080 short side (see frameUnit).
+  const U = frameUnit({ width: W, height: H });
   const fill: React.CSSProperties = { width: W, height: H, overflow: "hidden" };
   switch (b.kind) {
     case "gradient":
@@ -182,9 +185,9 @@ export function BackdropArt({
                 <rect
                   key={`p${k}`}
                   x={k * w + w * 0.15}
-                  y={H - H * 0.42 * peak - 8}
+                  y={H - H * 0.42 * peak - 8 * U}
                   width={w * 0.7}
-                  height={4}
+                  height={4 * U}
                   fill={b.accent}
                 />
               );
@@ -226,7 +229,7 @@ export function BackdropArt({
           })}
           <AbsoluteFill
             style={{
-              backgroundImage: `repeating-linear-gradient(0deg, ${alpha("#000000", 0.18)} 0 2px, transparent 2px 5px)`,
+              backgroundImage: `repeating-linear-gradient(0deg, ${alpha("#000000", 0.18)} 0 ${2 * U}px, transparent ${2 * U}px ${5 * U}px)`,
             }}
           />
         </AbsoluteFill>
@@ -235,6 +238,8 @@ export function BackdropArt({
     case "grid": {
       const lines = Math.round(10 + 14 * d);
       const scroll = fract(s * 0.4);
+      // Tiles follow the long side so vertical floors match landscape ones.
+      const tile = (Math.max(W, H) * 2) / lines;
       return (
         <AbsoluteFill
           style={{
@@ -250,10 +255,10 @@ export function BackdropArt({
               top: "52%",
               height: "100%",
               transformOrigin: "50% 0%",
-              transform: "perspective(600px) rotateX(68deg)",
-              backgroundImage: `linear-gradient(${b.secondary} 3px, transparent 3px), linear-gradient(90deg, ${b.secondary} 3px, transparent 3px)`,
-              backgroundSize: `${(W * 2) / lines}px ${(W * 2) / lines}px`,
-              backgroundPosition: `0 ${scroll * ((W * 2) / lines)}px`,
+              transform: `perspective(${600 * U}px) rotateX(68deg)`,
+              backgroundImage: `linear-gradient(${b.secondary} ${3 * U}px, transparent ${3 * U}px), linear-gradient(90deg, ${b.secondary} ${3 * U}px, transparent ${3 * U}px)`,
+              backgroundSize: `${tile}px ${tile}px`,
+              backgroundPosition: `0 ${scroll * tile}px`,
               WebkitMaskImage: "linear-gradient(transparent, #000 30%)",
               maskImage: "linear-gradient(transparent, #000 30%)",
             }}
@@ -326,7 +331,7 @@ export function BackdropArt({
             <filter id={`grain-${id}`} x="0" y="0" width="100%" height="100%">
               <feTurbulence
                 type="fractalNoise"
-                baseFrequency={0.9}
+                baseFrequency={0.9 / U}
                 numOctaves={2}
                 seed={(b.seed + tick * 17) % 1000}
                 stitchTiles="stitch"

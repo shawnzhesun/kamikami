@@ -2052,6 +2052,13 @@ button[aria-pressed="true"] {
 .settings-dialog .settings-checkbox input {
   width: auto;
 }
+.settings-format {
+  margin: 0;
+}
+.settings-format > span:first-child {
+  font-weight: 600;
+  margin-right: 0.4em;
+}
 .settings-affected {
   padding: 12px;
   border: 1px solid var(--line);

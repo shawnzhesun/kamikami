@@ -2,7 +2,7 @@
 
 ## Layout
 
-- **Header:** New project, Open project, the project name (opens project settings: size, fps, length, export loudness), theme picker (Original, Olive, Daylight, Dusk), Undo/Redo, Save, Export video.
+- **Header:** New project (asks for a name, size and frame rate, which are fixed from then on), Open project, the project name (opens project settings: name, length, export loudness; shows the format), theme picker (Original, Olive, Daylight, Dusk), Undo/Redo, Save, Export video.
 - **Library (left):** Media and Effects tabs. Drag the divider to resize it; double-click resets the width.
 - **Canvas:** the preview. It fits its window.
 - **Timeline:** tracks and clips, plus a toolbar with Text, Shape, Backdrop, Split, snapping toggle and zoom (1–8×; the factor button fits the timeline).

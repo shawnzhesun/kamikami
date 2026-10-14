@@ -1,4 +1,8 @@
-import { AnimatedText, TextMetricsContext } from "./AnimatedText";
+import {
+  AnimatedText,
+  FrameUnitContext,
+  TextMetricsContext,
+} from "./AnimatedText";
 import React, { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { canvasMeasure } from "./kinetic-type";
 import { flushSync } from "react-dom";
@@ -6,7 +10,7 @@ import { getRemotionEnvironment, useDelayRender } from "remotion";
 import { fontCSS, resolveFont } from "./font-assets";
 import { FONT_IMPORT_EVENT, loadFontAsset } from "./font-loading";
 import { fontStack } from "./fonts";
-import type { Layer, Project } from "./model";
+import { frameUnit, type Layer, type Project } from "./model";
 
 export function FontText({
   layer,
@@ -85,7 +89,9 @@ export function FontText({
   const family = font
     ? fontCSS(font, weight, style)
     : fontStack(layer.fontFamily);
-  const tracking = (layer.fontSize > 50 ? -4 : 4) + letterSpacing;
+  // Default tracking and shadow are reference pixels, like effect values.
+  const unit = frameUnit(project);
+  const tracking = (layer.fontSize > 50 * unit ? -4 : 4) * unit + letterSpacing;
   // Kinetic type positions letters from real metrics once the face is loaded.
   const measure = useMemo(
     () =>
@@ -114,16 +120,18 @@ export function FontText({
           lineHeight: 1.03,
           whiteSpace: "pre-wrap",
           textAlign: "left",
-          textShadow: "0 4px 40px #0008",
+          textShadow: `0 ${4 * unit}px ${40 * unit}px #0008`,
         }}
       >
         <TextMetricsContext.Provider value={measure}>
-          <AnimatedText
-            layer={layer}
-            effects={project.effects}
-            time={time}
-            stage={project}
-          />
+          <FrameUnitContext.Provider value={unit}>
+            <AnimatedText
+              layer={layer}
+              effects={project.effects}
+              time={time}
+              stage={project}
+            />
+          </FrameUnitContext.Provider>
         </TextMetricsContext.Provider>
       </div>
       {pending && (
@@ -132,9 +140,9 @@ export function FontText({
           style={{
             position: "absolute",
             fontFamily: "Arial, sans-serif",
-            fontSize: 26,
-            maxWidth: 800,
-            padding: 20,
+            fontSize: 26 * unit,
+            maxWidth: 800 * unit,
+            padding: 20 * unit,
             color: "#fff",
             background: "#171717e8",
           }}

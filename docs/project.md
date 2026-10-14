@@ -37,6 +37,14 @@ Keyframes are defined in `src/keyframes.ts`.
 - **Pruning:** when a settings change removes a keyed path (for example choosing another variation), its track is removed.
 - **Agents:** `set_keyframes` takes clip-local times.
 
+## Format
+
+A project's size and frame rate are chosen in **New project** and never change afterwards: no command, including `apply_project`, can alter them (`sameFormat` in `src/model.ts`, checked by `applyAgentEdit`). Exports render at exactly that size and rate.
+
+- **Units:** element `x`/`y`, `fontSize` and shape sizes are project pixels. Pixel amounts inside effects (channel x/y/blur/letterSpacing, pass sizes and strokes, perspective) are *reference pixels* for a frame whose short side is 1080, multiplied by `frameUnit` (`src/model.ts`) at render time. A 1080p project renders exactly as authored; 4K doubles them; 9:16 and 1:1 match 16:9. Overlays (2.5% of the short side), artwork moves and text effects (em) follow the same rule.
+- **Defaults:** new text and shape presets are sized with `frameUnit`, so they take the same share of any frame.
+- **Scene artwork** is a 1920×1080 board that other aspect ratios crop around its subject (`stationView` in `src/Composition.tsx`). Supported values are `frameRates` and even sizes in the project schema; `resolutionPresets` are the size presets.
+
 ## Versions and compatibility
 
 | Version | Written when | Notes |

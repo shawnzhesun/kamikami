@@ -22,6 +22,8 @@ export const agentConventions = [
   "- project.tracks are timeline rows, ordered bottom to top. project.layers is the list of elements (legacy name), each with a trackId. Tool parameters layerId/layerIds mean element IDs.",
   "- Elements on one track can't overlap. A missing trackId makes a new track; an unknown one is an error. Deleting a track deletes its elements.",
   `- Times are seconds; frames are zero-based at the project fps (${frameRates[0]}–${frameRates.at(-1)}). x/y are pixels from the canvas center; rotation is degrees.`,
+  "- The project's frame rate and size (get_project) are fixed when it is created; no tool changes them, and exports use them.",
+  "- Element x/y, fontSize and shape sizes are project pixels. Pixel amounts inside effects (channel x/y/blur/letterSpacing, pass sizes) are reference pixels for a 1080-pixel short side and scale with the frame, so one effect looks the same at any size.",
   "- offset and effectOffset keep source and animation continuity; prefer trim_clip, split_clips and move_clips over raw timing edits.",
   "- Backdrop backgrounds sit under everything; finishes blend on top. Elements may set fadeIn/fadeOut seconds.",
   "",

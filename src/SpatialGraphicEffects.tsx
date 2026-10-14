@@ -3,6 +3,7 @@ import { fieldFrames, particleFrames, particleFrame } from "./motion";
 import { affineMaps, svgImage, type SampleMatrix } from "./graphic-maps";
 import { MappedSample } from "./GraphicMapEffects";
 import type { VisualPass } from "./visual-effects";
+import { frameUnit } from "./model";
 
 /** Repeated artwork samples one SourceGraphic; media decoders are never duplicated. */
 export function ObjectField({
@@ -81,7 +82,7 @@ export function ObjectField({
             />
             <feGaussianBlur
               in={`${name}cut`}
-              stdDeviation={(f.blur * w) / 1920}
+              stdDeviation={f.blur * frameUnit({ width: w, height: h })}
               result={`${name}blur`}
             />
             <feComponentTransfer in={`${name}blur`} result={`${name}alpha`}>
@@ -111,12 +112,13 @@ export function depthParticleSvg(
   h: number,
 ) {
   const config = pass.particles!;
+  const unit = frameUnit({ width: w, height: h });
   return particleFrames(config, time, pass.seed)
     .map((f) => {
       if (f.opacity < 0.001) return "";
       const x = w / 2 + (f.x * w) / 2,
         y = h / 2 + (f.y * h) / 2;
-      const size = (((1 + pass.size * 18) * w) / 1920) * f.scale;
+      const size = (1 + pass.size * 18) * unit * f.scale;
       const color = f.colorIndex < 0.5 ? pass.color : pass.secondary;
       const shape =
         config.shape === "paper"
@@ -134,7 +136,7 @@ export function depthParticleSvg(
         config.trails > 0 && previous.life <= f.life
           ? `<path d="M${w / 2 + (previous.x * w) / 2} ${h / 2 + (previous.y * h) / 2}L${x} ${y}" stroke="${color}" stroke-width="${Math.max(0.2, size * 0.5)}" opacity="${strength * f.opacity * 0.5}" stroke-linecap="round"/>`
           : "";
-      const blur = (f.blur * w) / 1920;
+      const blur = f.blur * unit;
       return `${blur > 0.1 ? `<defs><filter id="b${f.id}" x="-200%" y="-200%" width="500%" height="500%"><feGaussianBlur stdDeviation="${blur}"/></filter></defs>` : ""}${trail}<g fill="${color}" opacity="${strength * f.opacity}" transform="translate(${x} ${y}) rotate(${f.rotation})" ${blur > 0.1 ? `filter="url(#b${f.id})"` : ""}>${shape}</g>`;
     })
     .join("");

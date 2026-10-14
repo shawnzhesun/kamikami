@@ -31,6 +31,8 @@ import {
   makeShape,
   makeBackdrop,
   validateProject,
+  sameFormat,
+  FORMAT_LOCKED,
   type Project,
 } from "./model";
 import { EffectBundleSchema } from "./effect-bundle";
@@ -215,18 +217,18 @@ export const AgentCommandSchema = z.discriminatedUnion("action", [
     frame: z.number().int().min(0),
     ...revision,
   }),
-  z.object({
-    action: z.literal("set_project_settings"),
-    name: z.string().min(1).max(100).optional(),
-    duration: z.number().min(1).max(LIMITS.seconds).optional(),
-    width: z.number().int().min(256).max(4096).optional(),
-    height: z.number().int().min(256).max(4096).optional(),
-    fps: z.number().optional(),
-    /** Export loudness target in LUFS (e.g. −14 social, −23 broadcast), or null for off. */
-    exportLoudness: z.number().min(-31).max(-5).nullable().optional(),
-    trimAffected: z.boolean().default(false),
-    ...revision,
-  }),
+  z
+    .object({
+      action: z.literal("set_project_settings"),
+      name: z.string().min(1).max(100).optional(),
+      duration: z.number().min(1).max(LIMITS.seconds).optional(),
+      /** Export loudness target in LUFS (e.g. −14 social, −23 broadcast), or null for off. */
+      exportLoudness: z.number().min(-31).max(-5).nullable().optional(),
+      trimAffected: z.boolean().default(false),
+      ...revision,
+    })
+    // Strict so a frame rate or size is refused rather than silently dropped.
+    .strict(),
   z.object({ action: z.literal("set_playback"), playing: z.boolean() }),
   z.object({
     action: z.literal("create_effect"),
@@ -526,9 +528,6 @@ export function applyAgentEdit(
     next = {
       ...change.next,
       name: command.name ?? project.name,
-      ...(command.width !== undefined ? { width: command.width } : {}),
-      ...(command.height !== undefined ? { height: command.height } : {}),
-      ...(command.fps !== undefined ? { fps: command.fps } : {}),
       ...(command.exportLoudness !== undefined
         ? { exportLoudness: command.exportLoudness }
         : {}),
@@ -615,7 +614,7 @@ export function applyAgentEdit(
       layers: [
         ...project.layers,
         {
-          ...makeLayer("title", command.name),
+          ...makeLayer("title", command.name, project),
           trackId: command.trackId,
           text: command.text,
           start,
@@ -658,6 +657,7 @@ export function applyAgentEdit(
   else if (command.action === "reorder_layers")
     next = reorderLayers(project, command.layerIds);
   next = validateProject(next);
+  if (!sameFormat(project, next)) throw new Error(FORMAT_LOCKED);
   const sources = new Set([
     ...knownSources,
     ...project.layers.map((l) => l.src),

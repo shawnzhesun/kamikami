@@ -1,4 +1,4 @@
-import type { ShapePreset } from "./shapes";
+import { scaleShape, type ShapePreset } from "./shapes";
 import { ShapeControls } from "./editor/ShapeControls";
 import { BackdropControls } from "./editor/BackdropControls";
 import { isFinishKind, type BackdropPreset } from "./backdrops";
@@ -56,7 +56,11 @@ import {
 import { Dropdown } from "./editor/Dropdown";
 import { ProjectFileAccess, projectJson } from "./project-files";
 import { ThemePicker } from "./editor/ThemePicker";
-import { ProjectSettings, LayerSettings } from "./editor/SettingsDialogs";
+import {
+  ProjectSettings,
+  LayerSettings,
+  NewProjectDialog,
+} from "./editor/SettingsDialogs";
 import {
   addTrack,
   updateTrack,
@@ -99,6 +103,8 @@ import {
 import { Composition } from "./Composition";
 import {
   blankProject,
+  frameUnit,
+  type ProjectFormat,
   initialProject,
   makeBackdrop,
   makeLayer,
@@ -276,6 +282,7 @@ export function App() {
   const [deleteProposal, setDeleteProposal] = useState<MediaAsset | null>(null);
   const deleteDialog = useRef<HTMLDialogElement>(null);
   const [newProjectPrompt, setNewProjectPrompt] = useState(false);
+  const [newProjectSetup, setNewProjectSetup] = useState(false);
   const newProjectDialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     if (newProjectPrompt) newProjectDialog.current?.showModal();
@@ -442,6 +449,7 @@ export function App() {
       !!previewProject ||
       !!deleteProposal ||
       newProjectPrompt ||
+      newProjectSetup ||
       projectSettings ||
       effectModal ||
       !!layerSettings ||
@@ -1169,8 +1177,14 @@ export function App() {
     // Canceled or failed saves keep the current project open.
     if (!unsavedWork()) await newProject();
   }
+  /** After any save prompt, ask for the new project's name and format. */
   async function newProject() {
     setNewProjectPrompt(false);
+    if (!ready || !fileAccessReady || fileOperation.current) return;
+    setNewProjectSetup(true);
+  }
+  async function createProject(format: ProjectFormat, name: string) {
+    setNewProjectSetup(false);
     if (!ready || !fileAccessReady || fileOperation.current) return;
     fileOperation.current = true;
     setFileBusy(true);
@@ -1180,7 +1194,7 @@ export function App() {
       await projectFiles.current.forget();
       projectFilenameRef.current = null;
       setProjectFilename(null);
-      const next = blankProject(current.current);
+      const next = blankProject(format, name);
       if (!commit(next))
         throw new Error("The new project could not be created.");
       fileSnapshot.current = projectJson(current.current);
@@ -1527,14 +1541,21 @@ export function App() {
     if (file.current) file.current.value = "";
   }
   function addTitle() {
-    addElement(makeLayer("title", "Text"));
+    addElement(makeLayer("title", "Text", current.current));
   }
   function addShape(preset: ShapePreset, color: string) {
     const shape =
       preset.shape.filled === false
         ? { ...preset.shape, stroke: color }
         : preset.shape;
-    addElement(makeShape(shape, preset.label, color));
+    // Presets are sized for 1080p; keep their proportion of the frame.
+    addElement(
+      makeShape(
+        scaleShape(shape, frameUnit(current.current)),
+        preset.label,
+        color,
+      ),
+    );
   }
   /** Backgrounds get a new bottom layer, finishes a new top layer, full length. */
   function addBackdrop(preset: BackdropPreset) {
@@ -2570,6 +2591,13 @@ export function App() {
             }}
           />
         )}
+      {newProjectSetup && (
+        <NewProjectDialog
+          base={project}
+          onClose={() => setNewProjectSetup(false)}
+          onCreate={(format, name) => void createProject(format, name)}
+        />
+      )}
       {projectSettings && (
         <ProjectSettings
           project={project}
@@ -3398,7 +3426,10 @@ export function App() {
                           label="Font size"
                           value={selected.fontSize}
                           min={12}
-                          max={240}
+                          // The 1080p cap, scaled up for larger frames.
+                          max={Math.round(
+                            240 * Math.max(1, frameUnit(project)),
+                          )}
                           onChange={(n) => updateLayer({ fontSize: n })}
                         />
                         <label>

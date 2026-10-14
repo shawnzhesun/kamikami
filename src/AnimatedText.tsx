@@ -475,6 +475,8 @@ function TextBody({
   );
 }
 
+/** Reference pixels to project pixels (`frameUnit`); 1 outside a project frame. */
+export const FrameUnitContext = React.createContext(1);
 function TextRun({
   layer,
   effects,
@@ -490,6 +492,7 @@ function TextRun({
   const active = activeTextEffects(layer, effects, time);
   const gooId = `goo-${useId().replace(/:/g, "")}`;
   const measure = useContext(TextMetricsContext);
+  const unit = useContext(FrameUnitContext);
   if (!active.length) return <>{layer.text}</>;
   const t = textEffectTime(layer, time);
   const duration = layer.effectDuration || layer.duration;
@@ -556,6 +559,7 @@ function TextRun({
         duration={duration}
         paint={paint}
         filterId={gooId}
+        unit={unit}
       />
     );
   const typeLoop =
@@ -1516,6 +1520,7 @@ function SequenceText({
   duration,
   paint,
   filterId,
+  unit,
 }: {
   layer: Layer;
   effect: TextEffect;
@@ -1524,6 +1529,8 @@ function SequenceText({
   duration: number;
   paint: React.CSSProperties;
   filterId: string;
+  /** Reference pixels to project pixels (frameUnit). */
+  unit: number;
 }) {
   const lines = sequenceLines(layer.text);
   if (!lines.length) return null;
@@ -1543,7 +1550,7 @@ function SequenceText({
           ...(morph
             ? {
                 // Cross-blur both words; the threshold filter on the parent fuses them.
-                filter: `blur(${Math.min(100, state === "in" ? 8 / Math.max(p, 0.01) - 8 : 8 / Math.max(1 - p, 0.01) - 8)}px)`,
+                filter: `blur(${unit * Math.min(100, state === "in" ? 8 / Math.max(p, 0.01) - 8 : 8 / Math.max(1 - p, 0.01) - 8)}px)`,
                 opacity:
                   state === "in" ? Math.pow(p, 0.4) : Math.pow(1 - p, 0.4),
               }
