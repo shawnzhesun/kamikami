@@ -1,6 +1,5 @@
 import React, { useEffect, useId, useRef, useState } from "react";
 import {
-  Check,
   Eye,
   EyeOff,
   LoaderCircle,
@@ -602,17 +601,6 @@ export function AssistantSettingsDialog({
                 )
               ) : (
                 <>
-                  <section className="prefs-group" aria-label="Local probe">
-                    <h3>Local probe</h3>
-                    <Row
-                      label="Probe on import"
-                      hint="Shots, loudness, silences and black or frozen frames, measured on this computer."
-                    >
-                      <span className="prefs-pill">
-                        <Check size={12} /> Always on · free
-                      </span>
-                    </Row>
-                  </section>
                   <section className="prefs-group" aria-label="Transcription">
                     <h3>Transcription</h3>
                     <Row
@@ -625,20 +613,6 @@ export function AssistantSettingsDialog({
                         checked={analysis.transcriptionEnabled}
                         onChange={(v) =>
                           void saveAnalysis({ transcriptionEnabled: v })
-                        }
-                      />
-                    </Row>
-                    <Row
-                      label="Transcribe new imports"
-                      htmlFor={field("auto")}
-                      hint="Start transcription automatically for each new audio or video file."
-                    >
-                      <Switch
-                        id={field("auto")}
-                        checked={analysis.autoTranscribe}
-                        disabled={!analysis.transcriptionEnabled}
-                        onChange={(v) =>
-                          void saveAnalysis({ autoTranscribe: v })
                         }
                       />
                     </Row>

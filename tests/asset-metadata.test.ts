@@ -68,6 +68,10 @@ test("manual metadata merges, validates times and types, and can be cleared", ()
     "user",
   ).analysis;
   assert.equal(entrySummary(described), "A lighthouse at dusk.");
+  // Without a written summary the digest falls back to probe facts, but the
+  // overview leaves them to its probe fields instead of repeating them.
+  assert.equal(entrySummary(video), "30.0s");
+  assert.equal((sliceAnalysis(video) as { summary: string }).summary, "");
   assert.throws(
     () =>
       applyMetadata(
@@ -248,7 +252,6 @@ test("writing metadata probes new assets, survives later analysis and skips paid
       connection: () => null,
       settings: async () => ({
         transcriptionEnabled: true,
-        autoTranscribe: false,
         transcriptionModel: "whisper-1",
         visionModel: "",
         defaultTier: "balanced",

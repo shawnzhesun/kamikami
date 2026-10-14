@@ -510,14 +510,43 @@ try {
   );
 
   assert.ok(!(await text()).includes("Add at playhead"));
-  // Library analysis is a toolbar action; cards stay free of analysis labels.
-  assert.ok(
-    !(await page.evaluate(() =>
-      [...document.querySelectorAll(".media-card")].some((c) =>
-        c.textContent.includes("Analyze"),
-      ),
-    )),
+  // Analysis is on demand: the card's status sits left of Details and opens
+  // the analysis dialog for that asset.
+  assert.deepEqual(
+    await page.evaluate(() =>
+      [...document.querySelectorAll(".media-card-actions > button")]
+        .filter((b) => !b.classList.contains("media-delete"))
+        .map((b) => b.textContent.trim()),
+    ),
+    ["Not analyzed", "Details"],
   );
+  await page.evaluate(() =>
+    [...document.querySelectorAll("button")]
+      .find((e) => e.textContent.trim() === "Media")
+      .click(),
+  );
+  await writeFile(
+    path.join(output, "media.png"),
+    Buffer.from(
+      (await page._client().send("Page.captureScreenshot", { format: "png" }))
+        .value.data,
+      "base64",
+    ),
+  );
+  await click(".media-card-actions .analysis-badge");
+  await wait(() =>
+    page.evaluate(
+      () =>
+        document.querySelector("dialog[open] h2")?.textContent ===
+        "Analyze \u201cSample image\u201d",
+    ),
+  );
+  await page.evaluate(() =>
+    [...document.querySelectorAll("dialog[open] button")]
+      .find((e) => e.textContent === "Cancel")
+      .click(),
+  );
+  await wait(async () => !(await exists("dialog[open]")));
   assert.equal(
     await page.evaluate(() => document.querySelector(".media-card").draggable),
     true,

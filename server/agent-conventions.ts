@@ -54,6 +54,7 @@ export const agentConventions = [
   "",
   "MEDIA ANALYSIS",
   "- Read before you watch: get_asset_analysis, search_assets, then view_asset_range at decision points. Times are asset-relative seconds.",
+  "- Media isn't analyzed on import. If an asset you need shows analysis none, run analyze_assets with tier probe (free, local, no approval) and read it when ready.",
   "- Save user-supplied descriptions or transcripts with set_asset_metadata; manual fields are never overwritten by analysis. Never invent unseen details.",
   "- Cut on word or silence boundaries with 0.05–0.15 s padding; never alter raw word timings. Check with view_timeline_range.",
   "",

@@ -1,15 +1,15 @@
 # Media analysis
 
-Every import is analyzed locally and for free. Optional AI stages add captions, descriptions, summaries and transcripts, and agents use the results to edit. The code is in `server/analysis/` (pipeline), `src/asset-analysis.ts` (schema) and `src/editor/AnalysisDialogs.tsx` (UI).
+Analysis runs only on request: from **Analyze** in the media panel, an asset's status badge, **Details**, or an agent's `analyze_assets`. The `probe` tier is local and free; optional AI stages add captions, descriptions, summaries and transcripts, and agents use the results to edit. The code is in `server/analysis/` (pipeline), `src/asset-analysis.ts` (schema) and `src/editor/AnalysisDialogs.tsx` (UI).
 
 ## Tiers and stages
 
-| Tier | Runs | Cost |
-| --- | --- | --- |
-| `probe` | Automatically on every import, and for old assets at startup | Free, local ffmpeg |
-| `transcribe` | Probe + transcription (shown only if transcription is enabled) | Provider |
-| `balanced` (default) | Probe + one frame per shot, plus extra frames in long shots + summary | Provider |
-| `full` | Probe + frames at a fixed interval + summary | Provider |
+| Tier                 | Runs                                                                  | Cost               |
+| -------------------- | --------------------------------------------------------------------- | ------------------ |
+| `probe`              | Stream details, loudness, silences, shots                             | Free, local ffmpeg |
+| `transcribe`         | Probe + transcription (shown only if transcription is enabled)        | Provider           |
+| `balanced` (default) | Probe + one frame per shot, plus extra frames in long shots + summary | Provider           |
+| `full`               | Probe + frames at a fixed interval + summary                          | Provider           |
 
 - **Probe** records (sampling parameters are in `server/analysis/stages.ts` and `probe.ts`):
   - sha256 and stream details (codec, size, fps, rotation, alpha, audio tracks);
@@ -18,8 +18,9 @@ Every import is analyzed locally and for free. Optional AI stages add captions, 
   - shot cuts, black spans and frozen spans.
 
   Audio measurements use track 0.
+
 - **Look** batches video frames into labelled contact sheets, one vision call per sheet, giving a caption and on-screen text per frame. An image gets one call returning a caption, details, OCR, colors, subject box, safe text region and tags.
-- **Transcribe** is opt-in (Assistant settings; auto-transcribe on import is a separate option).
+- **Transcribe** is opt-in (Assistant settings).
   - It calls `/audio/transcriptions` with word timestamps.
   - Audio goes as track 0, mono, in chunks cut at silences.
 - **Lyric alignment:**
@@ -41,11 +42,11 @@ AI stages use the assistant's connection. Without a key or provider consent they
 
 ## Storage
 
-| Path in `.kamikami/analysis/` | Holds |
-| --- | --- |
-| `<sha256>.json` | Per-file analysis, keyed by content, so renamed or relinked files keep it |
-| `index.json` | Map from src to `{sha256, status, tier, updatedAt, error, summary}` |
-| `queue.json`, `settings.json` | Pending jobs (resumed after restart) and settings |
+| Path in `.kamikami/analysis/` | Holds                                                                     |
+| ----------------------------- | ------------------------------------------------------------------------- |
+| `<sha256>.json`               | Per-file analysis, keyed by content, so renamed or relinked files keep it |
+| `index.json`                  | Map from src to `{sha256, status, tier, updatedAt, error, summary}`       |
+| `queue.json`, `settings.json` | Pending jobs (resumed after restart) and settings                         |
 
 The analysis file has these fields: `probe`, `audio`, `visual{shots, samples, black, freeze}`, `transcript{source asr|lyrics|manual, segments, words[{t,s,e,p?}]}`, `image`, `scenes`, `sections`, `description`, `summary{text, tags}`, and `provenance` per section. Changing a stage's parameters only recomputes the sections that are now stale.
 

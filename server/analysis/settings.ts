@@ -29,8 +29,6 @@ export class AnalysisSettingsStore {
       ...(await this.read()),
       ...(patch && typeof patch === "object" ? patch : {}),
     });
-    // Auto-transcription is meaningless without transcription itself.
-    if (!next.transcriptionEnabled) next.autoTranscribe = false;
     await mkdir(path.dirname(this.file), { recursive: true });
     const temp = `${this.file}.${randomUUID()}.tmp`;
     await writeFile(temp, JSON.stringify(next, null, 2));

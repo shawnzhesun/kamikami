@@ -2839,8 +2839,12 @@ export function App() {
                 onRelink={(a) => chooseImport("relink", a)}
                 onDelete={(a) => void requestMediaDelete(a)}
                 trash={mediaTrash}
-                onAnalyze={() =>
-                  setAnalyzeTarget({ title: "Analyze media library" })
+                onAnalyze={(a) =>
+                  setAnalyzeTarget(
+                    a
+                      ? { srcs: [a.src], title: `Analyze “${a.name}”` }
+                      : { title: "Analyze media library" },
+                  )
                 }
                 onDetails={(a) => setDetailsSrc(a.src)}
                 onRestore={async (a) => {

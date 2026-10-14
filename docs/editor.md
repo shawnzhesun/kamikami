@@ -10,15 +10,15 @@
 
 ## Shortcuts
 
-| Where | Keys |
-| --- | --- |
-| Global | ⌘/Ctrl+S save · ⌘/Ctrl+Z undo · Shift+⌘/Ctrl+Z redo · Backspace delete selected · Shift+Backspace ripple delete |
-| Canvas | Click to select, Shift-click to add · drag to move · corner handles scale · round handle rotates (Shift snaps 15°) · arrows nudge 1 px (Shift 10) · Alt bypasses snapping · double-click text to edit (⌘/Ctrl+Enter applies, Esc cancels) |
-| Timeline ruler | Click or drag to scrub · arrows one frame (Shift one second) · Home/End |
-| Clips | Drag to move (vertically to change track) · drag an edge to trim · focused clip or edge: arrows one frame (Shift one second) · Esc cancels a drag · Alt bypasses snapping |
-| In/Out phase handles | Drag to retime a clip's entrances or exits together · arrows one frame (Shift 0.1 s) |
-| Track grip | Drag, or Up/Down, to reorder tracks |
-| Dropdowns | Arrows, Home/End, type to jump, Enter, Esc |
+| Where                | Keys                                                                                                                                                                                                                                      |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Global               | ⌘/Ctrl+S save · ⌘/Ctrl+Z undo · Shift+⌘/Ctrl+Z redo · Backspace delete selected · Shift+Backspace ripple delete                                                                                                                           |
+| Canvas               | Click to select, Shift-click to add · drag to move · corner handles scale · round handle rotates (Shift snaps 15°) · arrows nudge 1 px (Shift 10) · Alt bypasses snapping · double-click text to edit (⌘/Ctrl+Enter applies, Esc cancels) |
+| Timeline ruler       | Click or drag to scrub · arrows one frame (Shift one second) · Home/End                                                                                                                                                                   |
+| Clips                | Drag to move (vertically to change track) · drag an edge to trim · focused clip or edge: arrows one frame (Shift one second) · Esc cancels a drag · Alt bypasses snapping                                                                 |
+| In/Out phase handles | Drag to retime a clip's entrances or exits together · arrows one frame (Shift 0.1 s)                                                                                                                                                      |
+| Track grip           | Drag, or Up/Down, to reorder tracks                                                                                                                                                                                                       |
+| Dropdowns            | Arrows, Home/End, type to jump, Enter, Esc                                                                                                                                                                                                |
 
 Split cuts selected clips at the playhead, keeping at least three frames on each side. Each drag is one undo step.
 
@@ -37,7 +37,7 @@ Split cuts selected clips at the playhead, keeping at least three frames on each
 
 - **Import:** media is copied into `.kamikami/media/`. Drag a card onto a track at a time; drops snap to frames and fill the gap up to the source length. Importing alone doesn't change the project.
 - **Formats:** browser codecs decide what previews. MP4/H.264 and standard image formats are safest.
-- **Analysis:** every import gets a free local analysis. **Analyze** runs the AI stages after showing an estimate, and **Details** shows the transcript, shots and description. See [media-analysis.md](media-analysis.md).
+- **Analysis:** imports aren't analyzed automatically. **Analyze** (whole library) or a card's status badge (one asset) shows an estimate, then runs the chosen tier; **Details** shows the transcript, shots and description. See [media-analysis.md](media-analysis.md).
 - **Missing and deleted media:** Refresh checks for missing files. Relink replaces every reference in one undoable edit; the replacement must be the same type and long enough. Deleted media goes to Media trash and can be restored.
 
 ## Effects gallery

@@ -178,22 +178,33 @@ export const ImageDescriptionSchema = z
   .strict();
 export type ImageDescription = z.infer<typeof ImageDescriptionSchema>;
 
-export const AnalysisSettingsSchema = z
-  .object({
-    /** Opt-in: transcription uploads audio to the provider. Off by default. */
-    transcriptionEnabled: z.boolean().default(false),
-    /** Also transcribe new imports automatically (requires transcriptionEnabled). */
-    autoTranscribe: z.boolean().default(false),
-    transcriptionModel: z.string().trim().min(1).max(120).default("whisper-1"),
-    /** Empty means "use the assistant's chat model". */
-    visionModel: z.string().trim().max(120).default(""),
-    defaultTier: z.enum(analysisTiers).default("balanced"),
-    /** Language for captions, descriptions and summaries (the UI language). */
-    language: z.string().max(40).default("en"),
-    /** Provider hosts the user has allowed to receive media for analysis. */
-    consent: z.record(z.string().max(200), z.boolean()).default({}),
-  })
-  .strict();
+export const AnalysisSettingsSchema = z.preprocess(
+  // Settings saved before analysis became on-demand only carry autoTranscribe.
+  (v) => {
+    if (!v || typeof v !== "object") return v;
+    const { autoTranscribe: _, ...rest } = v as Record<string, unknown>;
+    return rest;
+  },
+  z
+    .object({
+      /** Opt-in: transcription uploads audio to the provider. Off by default. */
+      transcriptionEnabled: z.boolean().default(false),
+      transcriptionModel: z
+        .string()
+        .trim()
+        .min(1)
+        .max(120)
+        .default("whisper-1"),
+      /** Empty means "use the assistant's chat model". */
+      visionModel: z.string().trim().max(120).default(""),
+      defaultTier: z.enum(analysisTiers).default("balanced"),
+      /** Language for captions, descriptions and summaries (the UI language). */
+      language: z.string().max(40).default("en"),
+      /** Provider hosts the user has allowed to receive media for analysis. */
+      consent: z.record(z.string().max(200), z.boolean()).default({}),
+    })
+    .strict(),
+);
 export type AnalysisSettings = z.infer<typeof AnalysisSettingsSchema>;
 
 export const AssetAnalysisSchema = z
@@ -458,13 +469,16 @@ export function keepManual(
   return merged;
 }
 
-/** The digest line: summary, else the description's first sentence, else probe facts. */
-export function entrySummary(a: AssetAnalysis): string {
+/** The written summary, else the description's first sentence, else "". */
+export function writtenSummary(a: AssetAnalysis): string {
   if (a.summary?.text) return a.summary.text;
-  if (a.description) {
-    const first =
-      a.description.match(/^.*?[.!?。！？](\s|$)/)?.[0] ?? a.description;
-    return first.trim().slice(0, 600);
-  }
-  return probeSummary(a);
+  if (!a.description) return "";
+  const first =
+    a.description.match(/^.*?[.!?。！？](\s|$)/)?.[0] ?? a.description;
+  return first.trim().slice(0, 600);
+}
+
+/** The digest line: the written summary, else probe facts. */
+export function entrySummary(a: AssetAnalysis): string {
+  return writtenSummary(a) || probeSummary(a);
 }

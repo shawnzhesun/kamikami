@@ -1,5 +1,5 @@
 import {
-  entrySummary,
+  writtenSummary,
   isManual,
   manualFields,
   type AnalysisEntry,
@@ -37,7 +37,8 @@ export function sliceAnalysis(
   const transcript = analysis.transcript;
   const overview = {
     type: analysis.type,
-    summary: entrySummary(analysis),
+    // Probe facts are already in probe, loudness and counts.
+    summary: writtenSummary(analysis),
     ...(analysis.description ? { description: analysis.description } : {}),
     tags: analysis.summary?.tags ?? [],
     probe: analysis.probe,

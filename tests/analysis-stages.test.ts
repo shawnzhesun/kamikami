@@ -276,7 +276,12 @@ test("chunk plan, estimates and tolerant JSON parsing", () => {
   assert.ok(plan.every((c) => c.end - c.start <= 600));
   const settings = AnalysisSettingsSchema.parse({});
   assert.equal(settings.transcriptionEnabled, false);
-  assert.equal(settings.autoTranscribe, false);
+  assert.equal(
+    "autoTranscribe" in
+      AnalysisSettingsSchema.parse({ autoTranscribe: true, language: "fr" }),
+    false,
+    "old settings files still parse",
+  );
   assert.equal(settings.defaultTier, "balanced");
   const e = estimate(
     [

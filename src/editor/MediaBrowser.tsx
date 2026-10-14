@@ -23,7 +23,7 @@ type Props = {
   onDelete: (a: MediaAsset) => void;
   trash: MediaAsset[];
   onRestore: (a: MediaAsset) => void;
-  onAnalyze: () => void;
+  onAnalyze: (a?: MediaAsset) => void;
   onDetails: (a: MediaAsset) => void;
 };
 
@@ -56,7 +56,7 @@ export function MediaBrowser({
         </button>
         <button
           title="Analyze media for the assistant (shows an estimate first)"
-          onClick={onAnalyze}
+          onClick={() => onAnalyze()}
           disabled={!assets.length}
         >
           <Sparkles size={14} />
@@ -159,14 +159,6 @@ export function MediaBrowser({
             )}
           </button>
           <strong title={a.name}>{a.name}</strong>
-          {!a.missing && (
-            <span
-              className={`analysis-badge ${a.analysis?.status ?? "none"}`}
-              title={a.analysis?.error ?? a.analysis?.summary ?? ""}
-            >
-              {badgeLabel[a.analysis?.status ?? "none"]}
-            </span>
-          )}
           <small>
             {a.type} · {a.duration ? `${a.duration.toFixed(2)}s · ` : ""}
             {a.width && a.height ? `${a.width} × ${a.height} · ` : ""}
@@ -198,19 +190,51 @@ export function MediaBrowser({
                 Relink file…
               </button>
             ) : (
-              <button
-                className="media-details"
-                aria-label={`Analysis details for ${a.name}`}
-                title="Transcript, shots, description and audio"
-                onClick={() => onDetails(a)}
-              >
-                <ListTree size={13} />
-                Details
-              </button>
+              <>
+                <AnalysisBadge asset={a} onAnalyze={() => onAnalyze(a)} />
+                <button
+                  className="media-details"
+                  aria-label={`Analysis details for ${a.name}`}
+                  title="Transcript, shots, description and audio"
+                  onClick={() => onDetails(a)}
+                >
+                  <ListTree size={13} />
+                  Details
+                </button>
+              </>
             )}
           </div>
         </article>
       ))}
     </div>
+  );
+}
+
+/** Analysis status; starts analysis of this asset unless a job is pending. */
+function AnalysisBadge({
+  asset,
+  onAnalyze,
+}: {
+  asset: MediaAsset;
+  onAnalyze: () => void;
+}) {
+  const status = asset.analysis?.status ?? "none";
+  const pending = status === "queued" || status === "running";
+  return (
+    <button
+      className={`analysis-badge ${status}`}
+      aria-label={`${badgeLabel[status]}. Analyze ${asset.name}`}
+      title={
+        pending
+          ? (asset.analysis?.summary ?? "")
+          : [asset.analysis?.error ?? asset.analysis?.summary, "Analyze…"]
+              .filter(Boolean)
+              .join("\n")
+      }
+      disabled={pending}
+      onClick={onAnalyze}
+    >
+      {badgeLabel[status]}
+    </button>
   );
 }

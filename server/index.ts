@@ -212,14 +212,6 @@ const assistant = new AssistantService(
 analysisConnection = () => assistant.analysisConnection();
 await assistant.load();
 await analysisQueue.load();
-// Probe assets imported before analysis existed (free and local).
-void Promise.all([library.list(), analysisStore.index()]).then(
-  ([assets, entries]) => {
-    for (const a of assets)
-      if (!a.missing && (!entries[a.src] || entries[a.src].status === "none"))
-        analysisQueue.enqueue(a.src, "probe");
-  },
-);
 app.get("/api/assistant", (_req, res) => res.json(assistant.state()));
 app.get("/api/assistant/models", async (_req, res) =>
   res.json(await assistant.listModels()),
@@ -497,7 +489,6 @@ app.post("/api/media/extract-audio", async (req, res) => {
       `${source.name} (audio${track ? ` track ${track + 1}` : ""})`,
       (await stat(output)).size,
     );
-    analysisQueue.enqueue(asset.src, "probe");
     res.json(asset);
   } catch (e) {
     res.status(400).json({ error: (e as Error).message });
@@ -659,19 +650,8 @@ app.post("/api/import", upload.single("file"), async (req, res) => {
   );
 });
 async function registerImport(filename: string, name: string, size: number) {
-  const asset = await library.register(filename, name, size);
-  // The probe is free and local, so every import gets one automatically;
-  // transcription on import is a separate opt-in.
-  const settings = await analysisSettings.read();
-  analysisQueue.enqueue(
-    asset.src,
-    settings.transcriptionEnabled &&
-      settings.autoTranscribe &&
-      asset.type !== "image"
-      ? "transcribe"
-      : "probe",
-  );
-  return asset;
+  // Analysis runs only when the user (or an agent) asks for it.
+  return library.register(filename, name, size);
 }
 /** import_media: copies a local file the agent named into the library. */
 async function importLocalFile(filePath: string) {

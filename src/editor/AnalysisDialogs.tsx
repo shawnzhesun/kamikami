@@ -310,7 +310,7 @@ export function AssetDetails({
             <div className="asset-tab" role="tabpanel">
               {tab === "overview" && (
                 <>
-                  <p>{detail.summary}</p>
+                  {detail.summary && <p>{detail.summary}</p>}
                   {detail.description && (
                     <p className="asset-description">{detail.description}</p>
                   )}
@@ -336,7 +336,7 @@ export function AssetDetails({
                     )}
                     {detail.probe.video && (
                       <>
-                        <dt>Video</dt>
+                        <dt>{asset.type === "image" ? "Size" : "Video"}</dt>
                         <dd>
                           {detail.probe.video.width} ×{" "}
                           {detail.probe.video.height}
