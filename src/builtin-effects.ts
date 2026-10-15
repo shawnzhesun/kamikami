@@ -4334,19 +4334,30 @@ export const allBuiltinEffects: Effect[] = [
   ...legacyBuiltinEffects.filter((e) => replacedIds.has(e.id)),
 ];
 
+// The editor looks families up for every library card on each render, so index them once.
+let familyIndex: Map<string, EffectFamily> | undefined;
 export function getEffectFamily(id: string) {
-  return [
-    ...effectFamilies,
-    ...motionEffectFamilies,
-    ...styleEffectFamilies,
-    ...titleEffectFamilies,
-    ...packEffectFamilies,
-    ...kineticEffectFamilies,
-    ...lookEffectFamilies,
-    ...layoutEffectFamilies,
-    ...artEffectFamilies,
-    ...overlayEffectFamilies,
-  ].find((f) => f.id === id || f.variations.some((v) => v.id === id));
+  if (!familyIndex) {
+    familyIndex = new Map();
+    for (const f of [
+      ...effectFamilies,
+      ...motionEffectFamilies,
+      ...styleEffectFamilies,
+      ...titleEffectFamilies,
+      ...packEffectFamilies,
+      ...kineticEffectFamilies,
+      ...lookEffectFamilies,
+      ...layoutEffectFamilies,
+      ...artEffectFamilies,
+      ...overlayEffectFamilies,
+    ]) {
+      // First match wins, as with the earlier linear search.
+      if (!familyIndex.has(f.id)) familyIndex.set(f.id, f);
+      for (const v of f.variations)
+        if (!familyIndex.has(v.id)) familyIndex.set(v.id, f);
+    }
+  }
+  return familyIndex.get(id);
 }
 
 const parameterSchema = EffectSchema.pick({
@@ -4421,7 +4432,16 @@ export function builtinEffectCategory(id: string) {
   );
 }
 
+const searchTexts = new WeakMap<Effect, string>();
 export function effectSearchText(effect: Effect) {
+  let text = searchTexts.get(effect);
+  if (text === undefined) {
+    text = buildSearchText(effect);
+    searchTexts.set(effect, text);
+  }
+  return text;
+}
+function buildSearchText(effect: Effect) {
   const f = getEffectFamily(effect.id);
   const aliases =
     f?.variations

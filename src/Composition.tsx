@@ -5,7 +5,7 @@ import { instanceAmountAt, resolveEffectInstanceAt } from "./effect-instance";
 import { animationTime } from "./keyframes";
 import { shapePath } from "./shapes";
 import { BackdropArt } from "./BackdropArt";
-import React from "react";
+import React, { useCallback } from "react";
 import {
   AbsoluteFill,
   Sequence,
@@ -214,6 +214,12 @@ function VisualLayer({
       ),
   );
   const unit = frameUnit(project);
+  // Remotion re-evaluates the whole clip's volume curve whenever this function
+  // changes identity, so keep it stable across frames.
+  const volume = useCallback(
+    (f: number) => layerVolume(layer, project.layers, f / fps, fps),
+    [layer, project.layers, fps],
+  );
   if (missing)
     return layer.type === "audio" ? null : (
       <AbsoluteFill
@@ -236,7 +242,7 @@ function VisualLayer({
     return src ? (
       <Audio
         src={src}
-        volume={(f) => layerVolume(layer, project.layers, f / fps, fps)}
+        volume={volume}
         startFrom={Math.round(layer.offset * fps)}
       />
     ) : null;
@@ -304,7 +310,7 @@ function VisualLayer({
             startFrom={Math.round(layer.offset * fps)}
             // Copies are silent: only the element itself plays its sound.
             volume={
-              copy ? 0 : (f) => layerVolume(layer, project.layers, f / fps, fps)
+              copy ? 0 : volume
             }
             muted={copy}
             style={{ width: "100%", height: "100%", objectFit: "contain" }}

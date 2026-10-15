@@ -52,7 +52,11 @@ export function CanvasEditor({
     null,
   );
   useEffect(() => () => cleanup.current?.(), []);
+  // Measuring reads layout from the live preview, which stalls each played
+  // frame; nothing is drawn while playing, so measure again once it stops.
+  const measuredFrame = playing ? null : frame;
   useLayoutEffect(() => {
+    if (playing) return;
     const measure = () => {
       setCanvasWidth(root.current?.clientWidth ?? W);
       const next: typeof sizes = {};
@@ -98,7 +102,7 @@ export function CanvasEditor({
       ?.querySelectorAll("[data-layer-content]")
       .forEach((node) => observer.observe(node));
     return () => observer.disconnect();
-  }, [project, frame, assets]);
+  }, [project, measuredFrame, playing, assets]);
   const visible = orderedElements(project).filter((l) =>
     visibleAt(l, frame, project.fps),
   );

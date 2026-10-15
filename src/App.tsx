@@ -75,7 +75,7 @@ import {
   elementTrackId,
   type TimelineLayer,
 } from "./model";
-import React, { useEffect, useId, useRef, useState } from "react";
+import React, { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Player, type PlayerRef } from "@remotion/player";
 import {
   ArrowDownToLine,
@@ -381,6 +381,16 @@ export function App() {
   const missingSources = libraryAssets
     .filter((a) => a.missing)
     .map((a) => a.src);
+  const missingKey = missingSources.join("\n");
+  // App re-renders on every played frame; a new inputProps object each time
+  // makes the Player redo its frame work and drop about a third of the frames.
+  const playerProps = useMemo(
+    () => ({
+      project: displayProject,
+      missingSources: missingKey ? missingKey.split("\n") : [],
+    }),
+    [displayProject, missingKey],
+  );
   const inspector = useRef<HTMLDivElement>(null);
   const player = useRef<PlayerRef>(null),
     file = useRef<HTMLInputElement>(null),
@@ -3081,7 +3091,7 @@ export function App() {
               <Player
                 ref={player}
                 component={Composition}
-                inputProps={{ project: displayProject, missingSources }}
+                inputProps={playerProps}
                 durationInFrames={Math.round(project.duration * project.fps)}
                 compositionWidth={project.width}
                 compositionHeight={project.height}

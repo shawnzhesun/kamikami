@@ -1,5 +1,6 @@
 import React from "react";
-export function Waveform({
+// Timeline rows re-render on every played frame; the waveform only changes with the clip.
+export const Waveform = React.memo(function Waveform({
   peaks,
   offset = 0,
   duration,
@@ -43,4 +44,4 @@ export function Waveform({
       ))}
     </svg>
   );
-}
+});
