@@ -14,7 +14,8 @@ How to work on KamiKami's code. This file is for coding agents. To edit a *video
 | Editor UI | `src/App.tsx` (state, history, autosave, agent commands), `src/editor/*` (timeline, canvas, dialogs, controls, `editing.ts` for ripple/edit-list operations, `tracks.ts`) |
 | Agent tools | `server/editor-tools.ts` (the one tool list), `server/tool-runner.ts` (the one dispatcher), `server/agent-conventions.ts` (rules every agent gets), `src/agent-protocol.ts` (validated editor commands, revisions), `server/editor-bridge.ts` |
 | Service | `server/index.ts` (endpoints, storage, renders, capabilities), `server/service-config.ts` (ports, workspace), `server/assistant.ts`, `server/assistant-model.ts`, `server/mcp.mjs` → `server/mcp-server.ts`, `server/media-library.ts`, `server/effect-library.ts`, `server/font-library.ts`, `server/analysis/*` |
-| Desktop shell | `electron/main.cjs` (sandboxed window), `electron/preload.cjs`, `electron/project-files.cjs`, `electron/assistant-credentials.cjs` |
+| Desktop shell | `electron/main.cjs` (sandboxed window), `electron/runtime.cjs` (development or installed origins), `electron/service.cjs` (runs the built service), `electron/bin/` (MCP launchers), `electron/preload.cjs`, `electron/project-files.cjs`, `electron/assistant-credentials.cjs` |
+| Installer | `scripts/build-desktop.mjs` (service, MCP, render bundle, browser, ffmpeg into `desktop-build/`), `electron-builder.yml`; see [docs/distribution.md](docs/distribution.md) |
 
 ## Conventions
 
@@ -58,9 +59,11 @@ How to work on KamiKami's code. This file is for coding agents. To edit a *video
 - `npm run test:e2e` is safe: it starts its own service, editor and browser on separate ports with a temporary workspace, creates a project as a user, then builds and exports a music video through a real MCP client. Run it after agent-tool or editor-command changes.
 - For visual checks, render contact sheets to a scratch directory with Remotion's `openBrowser`; never write into `.kamikami/`.
 - `.kamikami/` is the user's workspace (project, media, effects, analysis). Tests and scripts must not write to it.
+- After changes to `electron/`, `server/service-config.ts`, the MCP launcher or `electron-builder.yml`, run `npm run dist:dir` (Node 22+) and copy `release/mac-arm64/KamiKami.app` to a scratch folder outside the repo (inside it, Node resolves missing packages from the repo's `node_modules` and hides packaging gaps), then start it with `KAMIKAMI_PORT` and `KAMIKAMI_USER_DATA` set to a scratch port and folder, so it doesn't touch the user's profile.
 
 ## Gotchas
 
+- `dependencies` in `package.json` is what ships in the installed app's `node_modules`; everything bundled (editor libraries, the service's pure-JS packages) is a dev dependency. Add a runtime dependency only if the bundled service must load it from disk, together with its peer dependencies (`@remotion/renderer` needs `react` and `react-dom`).
 - The Electron app and the service cache schemas. After engine or schema changes, the desktop app needs a full restart.
 - MCP clients start `server/mcp.mjs` once; restart the MCP server (or the client) after changing tool definitions. It loads TypeScript through `tsx`, so it must not print to stdout.
 - `project.layers` holds **elements**; timeline rows are `project.tracks`. Tool parameters named `layerId` refer to elements.

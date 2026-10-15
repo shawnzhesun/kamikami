@@ -1,0 +1,49 @@
+# Installer build: `npm run dist` (see docs/distribution.md).
+appId: app.kamikami.desktop
+productName: KamiKami
+copyright: Copyright © KamiKami
+directories:
+  output: release
+# The service hands real file paths to ffmpeg, the Remotion compositor and the
+# headless browser, which can't read from an asar archive.
+asar: false
+# No native modules; the bundled binaries are prebuilt per platform.
+npmRebuild: false
+files:
+  - package.json
+  - electron/**/*
+  - "!electron/bin/**"
+  - desktop-build/**/*
+  - dist/**/*
+  # The service serves the built-in fonts from public/; skip the editor's copy.
+  - "!dist/fonts/builtin/**"
+  - public/fonts/**/*
+  - public/kamikami-icon-macos.png
+  - .agents/skills/**/*
+  # Never ship a developer's workspace or settings, whatever the patterns above match.
+  - "!**/.kamikami/**"
+  - "!**/.frameforge/**"
+  - "!**/.env*"
+extraResources:
+  # MCP launchers, at a fixed path clients can register.
+  - from: electron/bin
+    to: bin
+mac:
+  category: public.app-category.video
+  icon: public/kamikami-icon.icns
+  target: [dmg, zip]
+  hardenedRuntime: true
+  entitlements: electron/entitlements.mac.plist
+  entitlementsInherit: electron/entitlements.mac.plist
+win:
+  icon: public/kamikami-icon.png
+  target: nsis
+nsis:
+  oneClick: true
+  perMachine: false
+linux:
+  icon: public/kamikami-icon.png
+  target: deb
+  executableName: kamikami
+  category: AudioVideo
+  maintainer: KamiKami

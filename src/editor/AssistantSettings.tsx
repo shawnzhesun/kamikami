@@ -1,5 +1,14 @@
-import React, { useEffect, useId, useRef, useState } from "react";
+import React, {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import {
+  Bot,
+  Check,
+  Copy,
   Eye,
   EyeOff,
   LoaderCircle,
@@ -15,7 +24,7 @@ import type { AssistantState } from "../assistant";
 import type { AnalysisSettings, AnalysisTier } from "../asset-analysis";
 import { Dropdown } from "./Dropdown";
 
-type Tab = "connection" | "analysis" | "privacy";
+type Tab = "connection" | "analysis" | "agents" | "privacy";
 const tabs: { id: Tab; label: string; hint: string; icon: typeof Plug }[] = [
   {
     id: "connection",
@@ -28,6 +37,12 @@ const tabs: { id: Tab; label: string; hint: string; icon: typeof Plug }[] = [
     label: "Media analysis",
     hint: "Transcripts and descriptions",
     icon: ScanSearch,
+  },
+  {
+    id: "agents",
+    label: "Agent apps",
+    hint: "Claude Code, Codex and MCP",
+    icon: Bot,
   },
   {
     id: "privacy",
@@ -160,6 +175,7 @@ export function AssistantSettingsDialog({
   const tabRefs = useRef<Record<Tab, HTMLButtonElement | null>>({
     connection: null,
     analysis: null,
+    agents: null,
     privacy: null,
   });
   // Connection form, seeded from the saved connection.
@@ -693,6 +709,7 @@ export function AssistantSettingsDialog({
                   )}
                 </>
               ))}
+            {tab === "agents" && <AgentApps />}
             {tab === "privacy" && (
               <>
                 <section className="prefs-group" aria-label="API key">
@@ -783,5 +800,141 @@ export function AssistantSettingsDialog({
         </div>
       </form>
     </dialog>
+  );
+}
+
+type AgentsStatus = {
+  editorConnected: boolean;
+  clients: { id: string; name: string; version: string }[];
+  mcp: { command: string; args: string[] };
+};
+/** Quote one argument for the user's shell; Windows launchers are .cmd files. */
+function shellArg(arg: string, windows: boolean) {
+  if ((windows ? /^[\w@+=:,./\\-]+$/ : /^[\w@+=:,./-]+$/).test(arg)) return arg;
+  return windows ? `"${arg}"` : `'${arg.replace(/'/g, `'\\''`)}'`;
+}
+
+/**
+ * Setup for MCP clients. The command comes from the service, so it names this
+ * install's launcher (or the source checkout during development).
+ */
+function AgentApps() {
+  const [status, setStatus] = useState<AgentsStatus | null>(null);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let live = true;
+    const load = () =>
+      api("/api/agents")
+        .then((next: AgentsStatus) => live && (setStatus(next), setError("")))
+        .catch((e) => live && setError((e as Error).message));
+    void load();
+    // Clients connect while the user follows the steps; keep the list current.
+    const timer = setInterval(load, 3000);
+    return () => {
+      live = false;
+      clearInterval(timer);
+    };
+  }, []);
+  if (!status)
+    return error ? (
+      <p className="prefs-error" role="alert">
+        {error}
+      </p>
+    ) : (
+      <p className="prefs-loading">
+        <LoaderCircle size={16} className="spin" /> Loading…
+      </p>
+    );
+  const { command, args } = status.mcp;
+  const windows = /\.cmd$/i.test(command);
+  const line = [command, ...args].map((a) => shellArg(a, windows)).join(" ");
+  const json = JSON.stringify(
+    { mcpServers: { kamikami: { command, args } } },
+    null,
+    2,
+  );
+  const count = status.clients.length;
+  return (
+    <>
+      <div className={`prefs-status${count ? " on" : ""}`}>
+        <span className="status-dot" aria-hidden="true" />
+        <div>
+          <strong>
+            {count
+              ? `${count} agent app${count === 1 ? "" : "s"} connected`
+              : "No agent apps connected"}
+          </strong>
+          <p>
+            {count
+              ? status.clients
+                  .map((c) => [c.name, c.version].filter(Boolean).join(" "))
+                  .join(", ")
+              : "Add KamiKami to an MCP client to let it edit this project. KamiKami opens itself when a client needs it."}
+          </p>
+        </div>
+      </div>
+      <section className="prefs-group" aria-label="Add to an agent app">
+        <h3>Add to an agent app</h3>
+        <Row label="Claude Code" hint="Run once in a terminal." stacked>
+          <CopyField
+            value={`claude mcp add --transport stdio --scope user kamikami -- ${line}`}
+          />
+        </Row>
+        <Row label="Codex" hint="Run once in a terminal." stacked>
+          <CopyField value={`codex mcp add kamikami -- ${line}`} />
+        </Row>
+        <Row
+          label="Other MCP clients"
+          hint="Add this server to the client's MCP configuration, such as claude_desktop_config.json."
+          stacked
+        >
+          <CopyField value={json} />
+        </Row>
+      </section>
+    </>
+  );
+}
+
+function CopyField({ value }: { value: string }) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  const [copied, setCopied] = useState(false);
+  // Long install paths wrap; show the whole command rather than a scroll box.
+  useLayoutEffect(() => {
+    const field = ref.current;
+    if (!field) return;
+    field.style.height = "auto";
+    field.style.height = `${field.scrollHeight + 2}px`;
+  }, [value]);
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(value);
+    } catch {
+      // The desktop app denies permission prompts; fall back to a selection copy.
+      ref.current?.select();
+      document.execCommand("copy");
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  }
+  return (
+    <div className="prefs-copy">
+      <textarea
+        ref={ref}
+        className="mono"
+        readOnly
+        rows={1}
+        value={value}
+        spellCheck={false}
+        onFocus={(e) => e.currentTarget.select()}
+      />
+      <button
+        type="button"
+        className="prefs-secondary"
+        onClick={() => void copy()}
+      >
+        {copied ? <Check size={14} /> : <Copy size={14} />}
+        {copied ? "Copied" : "Copy"}
+      </button>
+    </div>
   );
 }

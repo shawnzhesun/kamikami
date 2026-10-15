@@ -48,7 +48,9 @@ MCP annotations come from each tool's `access`: `read` sets `readOnlyHint`, `edi
 
 ## MCP (Claude Code, Codex)
 
-Keep the editor open (`npm run desktop`), then register the stdio server with absolute paths:
+**Installed app:** **Assistant settings → Agent apps** shows the commands for this install. They register `kamikami-mcp`, a launcher in the app's resources that runs the MCP server on the app's own runtime, so users need no Node. The first tool call opens KamiKami if it isn't running. See [distribution.md](distribution.md).
+
+**From source:** keep the editor open (`npm run desktop`), then register the stdio server with absolute paths:
 
 ```sh
 claude mcp add --transport stdio --scope local kamikami -- $(which node) /abs/path/kamikami/server/mcp.mjs
@@ -59,7 +61,7 @@ codex mcp add kamikami -- $(which node) /abs/path/kamikami/server/mcp.mjs
 - **Connection:** the server talks to the service on `127.0.0.1` (port 4318 unless `KAMIKAMI_PORT` is set), with a heartbeat; `GET /api/agents` lists connected clients. Restart the MCP server after changing tool definitions.
 - **Timeouts:** editor commands time out after 30 s. A timeout can mean the edit happened, so read the project before retrying.
 - **Files:** `save_project` writes the user's project file once they've chosen one with Save (`get_project.projectFile`); agents never open file dialogs. A finished `get_export` returns the MP4's absolute `file` path.
-- **Isolated runs:** `KAMIKAMI_PORT`, `KAMIKAMI_EDITOR_PORT` and `KAMIKAMI_DATA` move the service, editor and workspace (`server/service-config.ts`). `npm run test:e2e` uses them to drive a whole music video through MCP without touching the running app or `.kamikami/`.
+- **Isolated runs:** `KAMIKAMI_PORT`, `KAMIKAMI_EDITOR_PORT` and `KAMIKAMI_DATA` move the service, editor and workspace (`server/service-config.ts`); `KAMIKAMI_USER_DATA` moves the desktop app's profile. `npm run test:e2e` uses them to drive a whole music video through MCP without touching the running app or `.kamikami/`.
 - **Analysis:** MCP needs no model key of its own; model tiers use the native assistant's connection.
 
 ## Adding a tool

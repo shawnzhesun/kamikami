@@ -14,6 +14,8 @@ npm run dev       # or: browser at http://127.0.0.1:5173
 
 Both start the local service on port 4318; run only one. The service restarts on source changes. After changes to `electron/`, or to effect schemas or engines, fully quit and restart the app.
 
+`npm run dist` builds an installer in `release/` that runs the service itself and ships an MCP launcher, so users need no Node. See [docs/distribution.md](docs/distribution.md).
+
 ## Checks
 
 | Command | Checks | Touches your workspace? |
@@ -38,9 +40,12 @@ Both start the local service on port 4318; run only one. The service restarts on
 | [docs/overlays.md](docs/overlays.md) | The overlay engine: placement, timing and shared styles |
 | [docs/assistant.md](docs/assistant.md) | Native assistant, MCP for Claude Code / Codex, tools and rules |
 | [docs/media-analysis.md](docs/media-analysis.md) | Probing, AI analysis, transcripts, metadata, editing tools |
+| [docs/distribution.md](docs/distribution.md) | Installer builds, the bundled service and MCP launcher, signing, shipping checklist |
 | [docs/roadmap.md](docs/roadmap.md) | Known gaps, next features, third-party sources and licenses |
 
 ## Before distributing
+
+See the full checklist in [docs/distribution.md](docs/distribution.md#before-shipping).
 
 - The bundled `ffmpeg-static` is GPL with nonfree parts; replace it (override with `KAMIKAMI_FFMPEG` / `KAMIKAMI_FFPROBE`).
 - Review the [Remotion license](https://www.remotion.dev/docs/license/pricing).

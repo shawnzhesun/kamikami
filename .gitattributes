@@ -1,0 +1,4 @@
+# The MCP launchers ship as-is in the installed app: a CRLF shebang breaks the
+# shell script, and cmd.exe expects CRLF.
+electron/bin/kamikami-mcp text eol=lf
+*.cmd text eol=crlf

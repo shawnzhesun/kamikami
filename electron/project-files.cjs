@@ -162,6 +162,7 @@ class ProjectFiles {
 
 function installProjectFiles() {
   const { ipcMain, dialog, BrowserWindow, app } = require("electron");
+  const { editorOrigin } = require("./runtime.cjs");
   const workspace = createHash("sha256")
     .update(path.resolve(__dirname, ".."))
     .digest("hex")
@@ -205,7 +206,7 @@ function installProjectFiles() {
       if (
         !event.senderFrame ||
         event.senderFrame !== event.sender.mainFrame ||
-        new URL(event.senderFrame.url).origin !== "http://127.0.0.1:5173"
+        new URL(event.senderFrame.url).origin !== editorOrigin
       )
         throw new Error("Only the editor can access project files.");
       owner = BrowserWindow.fromWebContents(event.sender);

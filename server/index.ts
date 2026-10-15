@@ -2,6 +2,7 @@ import { agentConventions } from "./agent-conventions";
 import {
   dataOverride,
   editorPort,
+  packaged,
   serviceOrigin,
   servicePort,
 } from "./service-config";
@@ -54,7 +55,6 @@ import { EditorBridge } from "./editor-bridge";
 import { AssistantService } from "./assistant";
 import { runTool, toolError } from "./tool-runner";
 
-import { bundle } from "@remotion/bundler";
 import {
   renderMedia,
   renderStill,
@@ -243,8 +243,18 @@ app.post("/api/assistant/confirm", (req, res) => {
 app.delete("/api/assistant/messages", (_req, res) =>
   res.json(assistant.clear()),
 );
+// What an MCP client should run. The installed app ships a launcher that uses
+// its own runtime, so users need neither Node nor the sources.
+const mcpLaunch = packaged.mcpCommand
+  ? { command: packaged.mcpCommand, args: [] }
+  : { command: process.execPath, args: [path.join(root, "server/mcp.mjs")] };
 app.get("/api/agents", (_req, res) =>
-  res.json({ ...bridge.status(), workspace: root, node: process.execPath }),
+  res.json({
+    ...bridge.status(),
+    workspace: root,
+    node: process.execPath,
+    mcp: mcpLaunch,
+  }),
 );
 app.post("/api/agents/connect", (req, res) =>
   res.json(
@@ -698,14 +708,21 @@ let active = false;
 let bundled: Promise<string> | undefined;
 const renders = new Map<string, Job & { frame: number; revision: string }>();
 async function getBundle() {
-  bundled ??= bundle({ entryPoint: path.join(root, "src/render.tsx") }).catch(
-    (e) => {
+  // The installed app ships a prebuilt bundle and no webpack toolchain.
+  if (packaged.renderBundle) return packaged.renderBundle;
+  bundled ??= import("@remotion/bundler")
+    .then(({ bundle }) =>
+      bundle({ entryPoint: path.join(root, "src/render.tsx") }),
+    )
+    .catch((e) => {
       bundled = undefined;
       throw e;
-    },
-  );
+    });
   return bundled;
 }
+// Remotion otherwise downloads its browser next to the nearest package.json,
+// which in the installed app is inside the read-only app bundle.
+const browserExecutable = packaged.browser || null;
 /**
  * Review a timeline range as rendered output: frames plus the mixed-audio
  * waveform, for the agent's self-check after cuts (one PNG, quarter scale).
@@ -731,10 +748,12 @@ app.post("/api/render-range", async (req, res) => {
     const composition = await selectComposition({
       serveUrl,
       id: "KamiKami",
+      browserExecutable,
       inputProps,
     });
     await renderMedia({
       composition,
+      browserExecutable,
       serveUrl,
       codec: "h264",
       inputProps,
@@ -792,10 +811,12 @@ app.post("/api/render", async (req, res) => {
       const composition = await selectComposition({
         serveUrl,
         id: "KamiKami",
+        browserExecutable,
         inputProps,
       });
       await renderStill({
         composition,
+        browserExecutable,
         serveUrl,
         inputProps,
         frame,
@@ -836,22 +857,18 @@ app.post("/api/export", async (req, res) => {
     res.json(job);
     void (async () => {
       try {
-        bundled ??= bundle({
-          entryPoint: path.join(root, "src/render.tsx"),
-        }).catch((e) => {
-          bundled = undefined;
-          throw e;
-        });
-        const serveUrl = await bundled,
+        const serveUrl = await getBundle(),
           inputProps = { project, mediaOrigin: serviceOrigin };
         const composition = await selectComposition({
           serveUrl,
           id: "KamiKami",
+          browserExecutable,
           inputProps,
         });
         job.status = "rendering";
         await renderMedia({
           composition,
+          browserExecutable,
           serveUrl,
           codec: "h264",
           inputProps,
@@ -901,6 +918,8 @@ app.get("/api/export/:id", (req, res) => {
       : job,
   );
 });
+// The installed app serves the built editor itself; development uses Vite.
+if (packaged.editorDist) app.use(express.static(packaged.editorDist));
 app.use(
   (
     error: Error,

@@ -7,3 +7,5 @@ dist/
 .DS_Store
 .env.*
 !.env.example
+desktop-build/
+release/

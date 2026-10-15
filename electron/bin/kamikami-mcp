@@ -1,0 +1,13 @@
+#!/bin/sh
+# KamiKami's MCP server, run on the app's own runtime so clients need no Node.
+# Installed in KamiKami.app/Contents/Resources/bin (macOS) or
+# /opt/KamiKami/resources/bin (Linux). Register this file with your MCP client.
+bin="$(cd "$(dirname "$0")" && pwd -P)"
+resources="$(dirname "$bin")"
+case "$(uname)" in
+  Darwin) app="$(dirname "$resources")/MacOS/KamiKami" ;;
+  *) app="$(dirname "$resources")/kamikami" ;;
+esac
+export KAMIKAMI_APP="$app"
+export ELECTRON_RUN_AS_NODE=1
+exec "$app" "$resources/app/desktop-build/mcp.mjs" "$@"

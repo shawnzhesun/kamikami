@@ -54,6 +54,8 @@ test("desktop startup registers project IPC before loading the editor and Save r
         setPath() {},
         setName() {},
         on() {},
+        isPackaged: false,
+        requestSingleInstanceLock: () => true,
         dock: { setIcon() {} },
         whenReady: () => ({
           then: (callback: () => unknown) => {
@@ -79,8 +81,20 @@ test("desktop startup registers project IPC before loading the editor and Save r
       session: { defaultSession: { setPermissionRequestHandler() {} } },
     };
     const nativeRequire = createRequire(import.meta.url);
-    const projectModule = { exports: {} as { installProjectFiles(): void } };
     const electronDir = path.resolve("electron");
+    // Shared origins, evaluated against the mocked app (development mode).
+    const runtimeModule = { exports: {} };
+    runInNewContext(
+      await readFile(path.join(electronDir, "runtime.cjs"), "utf8"),
+      {
+        module: runtimeModule,
+        __dirname: electronDir,
+        process,
+        require: (name: string) =>
+          name === "electron" ? electron : nativeRequire(name),
+      },
+    );
+    const projectModule = { exports: {} as { installProjectFiles(): void } };
     runInNewContext(
       await readFile(path.join(electronDir, "project-files.cjs"), "utf8"),
       {
@@ -88,8 +102,11 @@ test("desktop startup registers project IPC before loading the editor and Save r
         __dirname: electronDir,
         Buffer,
         URL,
-        require: (name: string) =>
-          name === "electron" ? electron : nativeRequire(name),
+        require: (name: string) => {
+          if (name === "electron") return electron;
+          if (name === "./runtime.cjs") return runtimeModule.exports;
+          return nativeRequire(name);
+        },
       },
     );
     runInNewContext(
@@ -101,6 +118,7 @@ test("desktop startup registers project IPC before loading the editor and Save r
         require: (name: string) => {
           if (name === "electron") return electron;
           if (name === "./project-files.cjs") return projectModule.exports;
+          if (name === "./runtime.cjs") return runtimeModule.exports;
           if (name === "./assistant-credentials.cjs")
             return async () => assertHandlers();
           return nativeRequire(name);

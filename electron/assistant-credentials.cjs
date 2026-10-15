@@ -7,6 +7,7 @@ const {
   mkdir,
 } = require("node:fs/promises");
 const path = require("node:path");
+const { editorOrigin, serviceOrigin } = require("./runtime.cjs");
 
 module.exports = async function installAssistantCredentials() {
   const filename = path.join(
@@ -20,18 +21,15 @@ module.exports = async function installAssistantCredentials() {
     (process.platform !== "linux" ||
       safeStorage.getSelectedStorageBackend() !== "basic_text");
   async function api(method, body) {
-    const response = await fetch(
-      "http://127.0.0.1:4318/api/assistant/settings",
-      {
-        method,
-        headers: {
-          "Content-Type": "application/json",
-          "X-KamiKami": "desktop",
-        },
-        body: body ? JSON.stringify(body) : undefined,
-        signal: AbortSignal.timeout(5000),
+    const response = await fetch(serviceOrigin + "/api/assistant/settings", {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+        "X-KamiKami": "desktop",
       },
-    );
+      body: body ? JSON.stringify(body) : undefined,
+      signal: AbortSignal.timeout(5000),
+    });
     if (!response.ok) {
       const value = await response.json();
       throw new Error(
@@ -43,7 +41,7 @@ module.exports = async function installAssistantCredentials() {
     if (
       !event.senderFrame ||
       event.senderFrame !== event.sender.mainFrame ||
-      new URL(event.senderFrame.url).origin !== "http://127.0.0.1:5173"
+      new URL(event.senderFrame.url).origin !== editorOrigin
     ) {
       throw new Error("Only the editor can change the assistant connection.");
     }
@@ -155,7 +153,7 @@ module.exports = async function installAssistantCredentials() {
     if (!connection || updating) return;
     updating = true;
     try {
-      const response = await fetch("http://127.0.0.1:4318/api/assistant", {
+      const response = await fetch(serviceOrigin + "/api/assistant", {
         signal: AbortSignal.timeout(3000),
       });
       if (response.ok && !(await response.json()).configured)

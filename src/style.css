@@ -3208,6 +3208,29 @@ button[aria-pressed="true"] {
   color: var(--blue);
   background: color-mix(in srgb, var(--blue) 11%, var(--cream));
 }
+.prefs-copy {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+.prefs-copy textarea {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: var(--cream);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  resize: none;
+  overflow-wrap: anywhere;
+}
+.prefs-copy .prefs-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
 .prefs-value {
   font-size: 12px;
   color: var(--muted);

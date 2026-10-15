@@ -1,6 +1,13 @@
-const { app, BrowserWindow, session, nativeImage } = require("electron");
+const {
+  app,
+  BrowserWindow,
+  dialog,
+  session,
+  nativeImage,
+} = require("electron");
 const path = require("node:path");
 const { existsSync } = require("node:fs");
+const { bundled, editorOrigin } = require("./runtime.cjs");
 // Keep existing installations' encrypted credentials and local preferences.
 const legacyProfile = path.join(app.getPath("appData"), "frameforge");
 const currentProfile = path.join(app.getPath("appData"), "KamiKami");
@@ -9,9 +16,30 @@ const useLegacyProfile =
 // Electron selects the OS encryption service before ready. Preserve that identity
 // for legacy profiles, then apply the new display name after initialization.
 app.setName(useLegacyProfile ? "frameforge" : "KamiKami");
-app.setPath("userData", useLegacyProfile ? legacyProfile : currentProfile);
+app.setPath(
+  "userData",
+  // Isolated runs (like KAMIKAMI_PORT and KAMIKAMI_DATA) keep their own profile.
+  process.env.KAMIKAMI_USER_DATA ||
+    (useLegacyProfile ? legacyProfile : currentProfile),
+);
+// One app owns the service port and the workspace. A second launch (including
+// one an MCP client starts) focuses the open window instead.
+if (!app.requestSingleInstanceLock()) app.exit(0);
+let win = null;
+app.on("second-instance", () => {
+  if (!win) return;
+  if (win.isMinimized()) win.restore();
+  win.focus();
+});
 app.whenReady().then(async () => {
   app.setName("KamiKami");
+  if (bundled)
+    try {
+      await require("./service.cjs")();
+    } catch (error) {
+      dialog.showErrorBox("KamiKami could not start", error.message);
+      return app.exit(1);
+    }
   const icon = nativeImage.createFromPath(
     path.join(__dirname, "../public/kamikami-icon-macos.png"),
   );
@@ -21,7 +49,7 @@ app.whenReady().then(async () => {
   session.defaultSession.setPermissionRequestHandler(
     (_webContents, _permission, callback) => callback(false),
   );
-  const win = new BrowserWindow({
+  win = new BrowserWindow({
     width: 1510,
     height: 980,
     minWidth: 1100,
@@ -38,8 +66,8 @@ app.whenReady().then(async () => {
   });
   win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   win.webContents.on("will-navigate", (event, url) => {
-    if (new URL(url).origin !== "http://127.0.0.1:5173") event.preventDefault();
+    if (new URL(url).origin !== editorOrigin) event.preventDefault();
   });
-  win.loadURL("http://127.0.0.1:5173");
+  win.loadURL(editorOrigin);
 });
 app.on("window-all-closed", () => app.quit());
