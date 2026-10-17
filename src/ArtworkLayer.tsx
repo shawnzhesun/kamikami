@@ -105,34 +105,66 @@ export function ArtworkStack({
         behind={behind}
       />
     ) : null;
-  const main = slices
-    ? sliceBands(
-        slices.art,
-        slices.amount,
-        time,
-        projectTime,
-        duration,
-        side,
-      ).map((band, i) => (
-        <div
-          key={i}
-          style={{
-            ...fill,
-            clipPath: band.clip,
-            transform: `translate(${band.x}px,${band.y}px)`,
-          }}
-        >
-          {content(t)}
-        </div>
-      ))
-    : content(t);
+  const bands = slices
+    ? sliceBands(slices.art, slices.amount, time, projectTime, duration, side)
+    : [];
+  // One filter moves bands of a single copy: copying the element per band
+  // repeated all of its effects, and a full-frame filter per band stalled
+  // playback.
+  const main = bands.some((b) => b.x || b.y) ? (
+    <div style={{ ...fill, filter: `url(#${id}-slices)` }}>{content(t)}</div>
+  ) : (
+    content(t)
+  );
+  const across = slices?.art.direction !== "vertical";
+  const reach = Math.max(0, ...bands.map((b) => Math.abs(b.x + b.y)));
   return (
     <>
-      {copies.length > 0 && (
+      {(copies.length > 0 || bands.length > 0) && (
         <svg width="0" height="0" style={{ position: "absolute" }}>
           {copies.map((c, i) => (
             <TintFilter key={i} id={`${id}-trail-${i}`} color={c.color} />
           ))}
+          {bands.length > 0 && (
+            <filter
+              id={`${id}-slices`}
+              filterUnits="userSpaceOnUse"
+              primitiveUnits="userSpaceOnUse"
+              colorInterpolationFilters="sRGB"
+              x={across ? -width / 2 - reach : 0}
+              y={across ? 0 : -height / 2 - reach}
+              width={across ? width * 2 + reach * 2 : width}
+              height={across ? height : height * 2 + reach * 2}
+            >
+              {bands.map((b, i) => (
+                <feOffset
+                  key={i}
+                  in="SourceGraphic"
+                  dx={b.x}
+                  dy={b.y}
+                  {...(across
+                    ? {
+                        x: -width / 2 + b.x,
+                        width: width * 2,
+                        y: b.start * height,
+                        height: (b.end - b.start) * height,
+                      }
+                    : {
+                        x: b.start * width,
+                        width: (b.end - b.start) * width,
+                        y: -height / 2 + b.y,
+                        height: height * 2,
+                      })}
+                  result={`band${i}`}
+                />
+              ))}
+              <feMerge>
+                {bands.map((_, i) => (
+                  <feMergeNode key={i} in={`band${i}`} />
+                ))}
+              </feMerge>
+            </filter>
+          )}
         </svg>
       )}
       {copies.map((c, i) => {

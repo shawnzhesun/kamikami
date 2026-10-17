@@ -433,6 +433,30 @@ try {
   await click('button[aria-label="Font family"]');
   await click('button[aria-label="Use Arial"]');
   await save();
+  // The move handle drags the selected element even where others cover it.
+  const titleX = project.layers.find((e) => e.id === "title").x;
+  const handle = await page.evaluate(() => {
+    const r = document
+      .querySelector(".canvas-selection .canvas-move")
+      .getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  });
+  for (const [type, dx] of [
+    ["mousePressed", 0],
+    ["mouseMoved", 20],
+    ["mouseMoved", 40],
+    ["mouseReleased", 40],
+  ])
+    await page._client().send("Input.dispatchMouseEvent", {
+      type,
+      x: handle.x + dx,
+      y: handle.y,
+      button: "left",
+      buttons: type === "mouseReleased" ? 0 : 1,
+      clickCount: 1,
+    });
+  await save();
+  assert.ok(project.layers.find((e) => e.id === "title").x > titleX + 10);
   await page.evaluate(() =>
     document
       .querySelector(".preview-area")

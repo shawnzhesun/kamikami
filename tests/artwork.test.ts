@@ -142,7 +142,10 @@ test("copies trail behind and slices cut bands", () => {
   assert.match(trail, /mix-blend-mode:screen/);
   assert.match(trail, /feColorMatrix/);
   const slices = render(makeArt("slices", { count: 5 }), 0.52);
-  assert.equal(slices.match(/clip-path:inset\(/g)?.length, 5);
+  // One copy of the element; a filter moves its bands.
+  assert.equal(slices.match(/<feOffset/g)?.length, 5);
+  assert.equal(slices.match(/data-t=/g)?.length, 1);
+  assert.match(slices, /filter:url\(#[^)]*-slices\)/);
   assert.equal(
     sliceBands(makeArt("slices", { timing: "in" }), 1, 5, 5, 6, 1080).every(
       (b) => b.x === 0,

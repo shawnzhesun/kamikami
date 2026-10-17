@@ -1,6 +1,6 @@
 import { orderedElements } from "../model";
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { AlignCenter, AlignCenterVertical, Magnet } from "lucide-react";
+import { AlignCenter, AlignCenterVertical, Magnet, Move } from "lucide-react";
 import type { Layer, Project } from "../model";
 import type { MediaAsset } from "../media";
 import {
@@ -141,14 +141,7 @@ export function CanvasEditor({
     onPause();
     cleanup.current?.();
     const base = project;
-    let ids = selected.includes(layer.id) ? selected : [layer.id];
-    if (e.shiftKey && mode === "move") {
-      ids = selected.includes(layer.id)
-        ? selected.filter((id) => id !== layer.id)
-        : [...selected, layer.id];
-      onSelect(ids);
-      return;
-    }
+    const ids = selected.includes(layer.id) ? selected : [layer.id];
     onSelect(ids);
     const origin = point(e),
       bounds = box(layer);
@@ -289,7 +282,13 @@ export function CanvasEditor({
           if (e.button !== 0 || editing) return;
           if (playing) onPause();
           const l = hit(e);
-          if (l) gesture(e, l, "move");
+          if (l && e.shiftKey)
+            onSelect(
+              selected.includes(l.id)
+                ? selected.filter((id) => id !== l.id)
+                : [...selected, l.id],
+            );
+          else if (l) gesture(e, l, "move");
           else onSelect([]);
         }}
         onDoubleClick={(e) => {
@@ -356,6 +355,15 @@ export function CanvasEditor({
                     onPointerDown={(e) => gesture(e, l, "rotate")}
                   >
                     ↻
+                  </button>
+                  <button
+                    className="canvas-move"
+                    aria-label={`Move ${l.name}`}
+                    title="Move. Alt skips snapping"
+                    onPointerDown={(e) => gesture(e, l, "move")}
+                    onDoubleClick={(e) => e.stopPropagation()}
+                  >
+                    <Move size={12} />
                   </button>
                 </div>
               );

@@ -7,7 +7,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { z } from "zod";
 import { animationEffects, builtinEffects } from "../src/builtin-effects";
-import { GraphicEffects } from "../src/GraphicEffects";
+import { GraphicEffects, screenCell } from "../src/GraphicEffects";
 import { effectPosterTime, EffectSample } from "../src/editor/EffectSample";
 import { visualFrame, VisualPassSchema } from "../src/visual-effects";
 import {
@@ -198,5 +198,45 @@ test("transition envelopes reach their endpoints and pass schema rejects invalid
     { strength: 2 },
   ]) {
     assert.throws(() => VisualPassSchema.parse({ ...pass, ...patch }));
+  }
+});
+
+test("line and dot screens repeat a small whole-pixel cell close to their settings", () => {
+  // Chrome rasterizes every feImage again whenever its filter changes, so a
+  // full-frame screen image stalled playback; the cell keeps it cheap.
+  for (const [spacing, angle] of [
+    [12.53, 0],
+    [11.47, -35],
+    [8, 63],
+    [20, 90],
+  ]) {
+    const cell = screenCell("lines", spacing, angle, "#000000", 3.2);
+    assert.ok(Number.isInteger(cell.width) && Number.isInteger(cell.height));
+    assert.ok(cell.width * cell.height < 400 * 400);
+    const turn = Number(cell.body.match(/rotate\(([^)]+)\)/)![1]);
+    const bands = [...cell.body.matchAll(/M[^ ]+ ([^h]+)h/g)].map((m) => +m[1]);
+    assert.ok(Math.abs(turn - angle) < 0.1, `${angle}° drew at ${turn}°`);
+    assert.ok(Math.abs(bands[1] - bands[0] - spacing) / spacing < 0.005);
+  }
+  for (const angle of [0, 30, -35]) {
+    const cell = screenCell("dots", 10, angle, "#000000");
+    assert.ok(Number.isInteger(cell.width));
+    const dots = [
+      ...cell.body.matchAll(/cx="([^"]+)" cy="([^"]+)" r="([^"]+)"/g),
+    ].map((m) => m.slice(1).map(Number));
+    const has = (x: number, y: number) =>
+      dots.some(([a, b]) => Math.abs(a - x) < 1e-6 && Math.abs(b - y) < 1e-6);
+    // A dot cut by an edge also appears on the opposite edge.
+    for (const [x, y, r] of dots)
+      for (const [dx, dy] of [
+        [cell.width, 0],
+        [-cell.width, 0],
+        [0, cell.height],
+        [0, -cell.height],
+      ]) {
+        const [X, Y] = [x + dx, y + dy];
+        if (X > -r && Y > -r && X < cell.width + r && Y < cell.height + r)
+          assert.ok(has(X, Y), `${angle}°: no copy of the dot at ${x},${y}`);
+      }
   }
 });

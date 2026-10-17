@@ -243,10 +243,8 @@ test("title thumbnails use Title, and transition masks keep one source and neutr
         }),
       );
     assert.equal((render(0.2).match(/<video /g) ?? []).length, 1);
-    assert.match(
-      decodeURIComponent(render(0)),
-      /<rect[^>]*(?:width|height)="0"/,
-    );
+    // Fully closed at the start: every slat is empty.
+    assert.match(render(0), /<feFlood[^>]*(?:width|height)="0"/);
     assert.doesNotMatch(render(2), /filter="url|filter:url/);
     assert.notEqual(render(0.1), render(0.5));
   }

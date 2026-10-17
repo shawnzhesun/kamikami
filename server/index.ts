@@ -59,7 +59,9 @@ import {
   renderMedia,
   renderStill,
   selectComposition,
+  type ChromiumOptions,
 } from "@remotion/renderer";
+import { availableParallelism } from "node:os";
 import {
   validateProject,
   initialProject,
@@ -723,6 +725,37 @@ async function getBundle() {
 // Remotion otherwise downloads its browser next to the nearest package.json,
 // which in the installed app is inside the read-only app bundle.
 const browserExecutable = packaged.browser || null;
+// The effects are SVG and CSS filters, which Chrome's GPU renderer draws
+// about eight times faster than its software one. Past a few tabs they only
+// wait on the same GPU.
+const renderGl: ChromiumOptions["gl"] =
+  process.platform === "darwin" || process.platform === "win32"
+    ? "angle"
+    : null;
+const renderConcurrency = Math.max(
+  1,
+  Math.min(4, Math.floor(availableParallelism() / 3)),
+);
+/** Renders on the GPU, and again in software if the GPU render fails. */
+async function withRenderer<T>(
+  render: (options: {
+    chromiumOptions: ChromiumOptions;
+    concurrency: number;
+  }) => Promise<T>,
+) {
+  try {
+    return await render({
+      chromiumOptions: { gl: renderGl },
+      concurrency: renderConcurrency,
+    });
+  } catch (e) {
+    if (!renderGl) throw e;
+    console.error(
+      `GPU render failed, rendering in software: ${(e as Error).message}`,
+    );
+    return render({ chromiumOptions: {}, concurrency: 2 });
+  }
+}
 /**
  * Review a timeline range as rendered output: frames plus the mixed-audio
  * waveform, for the agent's self-check after cuts (one PNG, quarter scale).
@@ -751,17 +784,19 @@ app.post("/api/render-range", async (req, res) => {
       browserExecutable,
       inputProps,
     });
-    await renderMedia({
-      composition,
-      browserExecutable,
-      serveUrl,
-      codec: "h264",
-      inputProps,
-      frameRange: [first, last],
-      scale: Math.min(1, 640 / project.width),
-      outputLocation: clip,
-      concurrency: 2,
-    });
+    await withRenderer((options) =>
+      renderMedia({
+        composition,
+        browserExecutable,
+        serveUrl,
+        codec: "h264",
+        inputProps,
+        frameRange: [first, last],
+        scale: Math.min(1, 640 / project.width),
+        outputLocation: clip,
+        ...options,
+      }),
+    );
     const id = randomUUID();
     await viewRange(
       clip,
@@ -814,15 +849,18 @@ app.post("/api/render", async (req, res) => {
         browserExecutable,
         inputProps,
       });
-      await renderStill({
-        composition,
-        browserExecutable,
-        serveUrl,
-        inputProps,
-        frame,
-        imageFormat: "png",
-        output: path.join(data, "exports", id + ".png"),
-      });
+      await withRenderer(({ chromiumOptions }) =>
+        renderStill({
+          composition,
+          browserExecutable,
+          serveUrl,
+          inputProps,
+          frame,
+          imageFormat: "png",
+          output: path.join(data, "exports", id + ".png"),
+          chromiumOptions,
+        }),
+      );
       Object.assign(job, { status: "done", progress: 1 });
     } catch (e) {
       Object.assign(job, { status: "error", error: (e as Error).message });
@@ -866,18 +904,20 @@ app.post("/api/export", async (req, res) => {
           inputProps,
         });
         job.status = "rendering";
-        await renderMedia({
-          composition,
-          browserExecutable,
-          serveUrl,
-          codec: "h264",
-          inputProps,
-          outputLocation: path.join(data, "exports", id + ".mp4"),
-          concurrency: 2,
-          onProgress: ({ progress }) => {
-            job.progress = progress;
-          },
-        });
+        await withRenderer((options) =>
+          renderMedia({
+            composition,
+            browserExecutable,
+            serveUrl,
+            codec: "h264",
+            inputProps,
+            outputLocation: path.join(data, "exports", id + ".mp4"),
+            onProgress: ({ progress }) => {
+              job.progress = progress;
+            },
+            ...options,
+          }),
+        );
         // Optional loudness normalization (e.g. −14 LUFS for social platforms).
         if (
           typeof project.exportLoudness === "number" &&

@@ -80,6 +80,137 @@ export function affineMaps(regions: MapRegion[], w: number, h: number) {
   return { x: maps[0], y: maps[1], scale };
 }
 
+const crcTable = Array.from({ length: 256 }, (_, n) => {
+  let c = n;
+  for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+  return c >>> 0;
+});
+
+function concat(parts: Uint8Array[]) {
+  const out = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+  let at = 0;
+  for (const part of parts) {
+    out.set(part, at);
+    at += part.length;
+  }
+  return out;
+}
+
+/** An uncompressed RGBA PNG; `rgba` holds rows top first. */
+export function png(rgba: Uint8Array, width: number, height: number) {
+  const u32 = (v: number) =>
+    Uint8Array.of(v >>> 24, (v >>> 16) & 255, (v >>> 8) & 255, v & 255);
+  const chunk = (type: string, data: Uint8Array) => {
+    const body = concat([Uint8Array.from(type, (c) => c.charCodeAt(0)), data]);
+    let crc = 0xffffffff;
+    for (const byte of body) crc = crcTable[(crc ^ byte) & 255] ^ (crc >>> 8);
+    return concat([u32(data.length), body, u32((crc ^ 0xffffffff) >>> 0)]);
+  };
+  const row = width * 4;
+  const raw = new Uint8Array(height * (row + 1));
+  for (let y = 0; y < height; y++)
+    raw.set(rgba.subarray(y * row, (y + 1) * row), y * (row + 1) + 1);
+  // zlib with stored deflate blocks.
+  let a = 1,
+    b = 0;
+  for (const byte of raw) {
+    a = (a + byte) % 65521;
+    b = (b + a) % 65521;
+  }
+  const blocks: Uint8Array[] = [Uint8Array.of(0x78, 0x01)];
+  for (let i = 0; i < raw.length; i += 65535) {
+    const part = raw.subarray(i, i + 65535);
+    const last = i + 65535 >= raw.length ? 1 : 0;
+    const n = part.length;
+    blocks.push(
+      Uint8Array.of(last, n & 255, n >> 8, ~n & 255, (~n >> 8) & 255),
+    );
+    blocks.push(part);
+  }
+  blocks.push(u32(((b << 16) | a) >>> 0));
+  const bytes = concat([
+    Uint8Array.of(137, 80, 78, 71, 13, 10, 26, 10),
+    chunk(
+      "IHDR",
+      concat([u32(width), u32(height), Uint8Array.of(8, 6, 0, 0, 0)]),
+    ),
+    chunk("IDAT", concat(blocks)),
+    chunk("IEND", new Uint8Array()),
+  ]);
+  let text = "";
+  for (const byte of bytes) text += String.fromCharCode(byte);
+  return `data:image/png;base64,${btoa(text)}`;
+}
+
+/**
+ * A smooth full-frame image as a tiny PNG that an feImage stretches over the
+ * frame. Chrome draws a filter's images again whenever the filter or the
+ * content under it changes, so a full-frame image costs 20–60 ms per played
+ * frame; a stretched 32×32 one costs almost nothing. `pixel(x, y)` gives the
+ * RGBA (0–255) at a point in frame pixels. Pixel centers 1 and size − 2 sit
+ * on the frame edges, so the stretch is smooth all the way to them. Only
+ * smooth content survives the stretch (gradients, linear maps).
+ */
+export function stretchedImage(
+  w: number,
+  h: number,
+  pixel: (x: number, y: number) => [number, number, number, number],
+  size = 32,
+) {
+  const sx = w / (size - 3),
+    sy = h / (size - 3);
+  const rgba = new Uint8Array(size * size * 4);
+  for (let j = 0; j < size; j++)
+    for (let i = 0; i < size; i++)
+      rgba.set(
+        pixel((i - 1) * sx, (j - 1) * sy).map((v) =>
+          Math.max(0, Math.min(255, Math.round(v))),
+        ),
+        (j * size + i) * 4,
+      );
+  return {
+    href: png(rgba, size, size),
+    x: -1.5 * sx,
+    y: -1.5 * sy,
+    width: size * sx,
+    height: size * sy,
+  };
+}
+
+/**
+ * The same sampling map as `affineMaps` for one matrix over the whole
+ * frame, as two stretched images that hold X and Y in alpha. Alpha is never
+ * color-managed, so the map survives a display color space unchanged.
+ */
+export function affineAlphaMaps(m: SampleMatrix, w: number, h: number) {
+  const shift = (x: number, y: number) => [
+    m[0] * x + m[2] * y + m[4] - x,
+    m[1] * x + m[3] * y + m[5] - y,
+  ];
+  // The outermost pixel centers of the stretched image, one pixel past the
+  // frame edges.
+  const size = 32,
+    [sx, sy] = [w / (size - 3), h / (size - 3)];
+  let maximum = 0;
+  for (const [x, y] of [
+    [-sx, -sy],
+    [w + sx, -sy],
+    [-sx, h + sy],
+    [w + sx, h + sy],
+  ])
+    maximum = Math.max(maximum, ...shift(x, y).map(Math.abs));
+  const scale = Math.max(1, maximum * 2.01);
+  const [x, y] = [0, 1].map((axis) =>
+    stretchedImage(
+      w,
+      h,
+      (px, py) => [0, 0, 0, (0.5 + shift(px, py)[axis] / scale) * 255],
+      size,
+    ),
+  );
+  return { x, y, scale };
+}
+
 export function repeatRegions(
   mode: "grid" | "mirror" | "kaleidoscope" | "tunnel",
   count: number,

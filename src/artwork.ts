@@ -212,13 +212,16 @@ export function sliceBands(
   } else
     shift = (i) =>
       Math.sin(time * art.speed * Math.PI * 2 * (0.3 + r(i) * 0.4) + i) * max;
+  // Each band spans from `start` to `end` (fractions of the frame) across
+  // the cut, and half a frame past both edges along it.
   return Array.from({ length: n }, (_, i) => {
-    const from = (i / n) * 100,
-      to = 100 - ((i + 1) / n) * 100;
     const s = shift(i);
-    return art.direction === "horizontal"
-      ? { clip: `inset(${from}% -50% ${to}% -50%)`, x: s, y: 0 }
-      : { clip: `inset(-50% ${to}% -50% ${from}%)`, x: 0, y: s };
+    return {
+      start: i / n,
+      end: (i + 1) / n,
+      x: art.direction === "horizontal" ? s : 0,
+      y: art.direction === "horizontal" ? 0 : s,
+    };
   });
 }
 

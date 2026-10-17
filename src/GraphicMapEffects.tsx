@@ -1,8 +1,8 @@
 import React, { memo } from "react";
 import {
+  affineAlphaMaps,
   affineMaps,
   centeredMatrix,
-  rectangle,
   repeatRegions,
 } from "./graphic-maps";
 import type { VisualPass } from "./visual-effects";
@@ -120,20 +120,53 @@ export const GraphicMapEffects = memo(function GraphicMapEffects({
                 mode === "zoom" ? 1 + amount * 0.65 : 1,
                 mode === "spin" ? amount * angle : 0,
               );
-        const maps = affineMaps(
-          [{ matrix, path: rectangle(0, 0, w, h) }],
-          w,
-          h,
-        );
+        const maps = affineAlphaMaps(matrix, w, h);
+        const name = `sample${i}`;
         return (
           <React.Fragment key={i}>
             {i > 0 && (
-              <MappedSample
-                maps={maps}
-                name={`sample${i}`}
-                width={w}
-                height={h}
-              />
+              <>
+                {(["x", "y"] as const).map((axis) => (
+                  <React.Fragment key={axis}>
+                    <feImage
+                      href={maps[axis].href}
+                      preserveAspectRatio="none"
+                      x={maps[axis].x}
+                      y={maps[axis].y}
+                      width={maps[axis].width}
+                      height={maps[axis].height}
+                      result={`${name}${axis}a`}
+                    />
+                    {/* Alpha moves into red (X) or green (Y). */}
+                    <feColorMatrix
+                      in={`${name}${axis}a`}
+                      type="matrix"
+                      values={
+                        axis === "x"
+                          ? "0 0 0 1 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1"
+                          : "0 0 0 0 0 0 0 0 1 0 0 0 0 0 0 0 0 0 0 1"
+                      }
+                      result={`${name}${axis}`}
+                    />
+                  </React.Fragment>
+                ))}
+                <feComposite
+                  in={`${name}x`}
+                  in2={`${name}y`}
+                  operator="arithmetic"
+                  k2={1}
+                  k3={1}
+                  result={`${name}map`}
+                />
+                <feDisplacementMap
+                  in="SourceGraphic"
+                  in2={`${name}map`}
+                  scale={maps.scale}
+                  xChannelSelector="R"
+                  yChannelSelector="G"
+                  result={name}
+                />
+              </>
             )}
             {i === 0 ? (
               <feOffset in="SourceGraphic" dx={0} dy={0} result="average0" />

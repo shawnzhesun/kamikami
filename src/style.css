@@ -1055,9 +1055,10 @@ footer > span:first-child {
   bottom: -6px;
   cursor: nesw-resize;
 }
-.canvas-rotate {
+.canvas-rotate,
+.canvas-move {
   position: absolute;
-  left: calc(50% - 11px);
+  left: calc(50% - 25px);
   top: -28px;
   border-radius: 50%;
   background: var(--cream);
@@ -1069,6 +1070,12 @@ footer > span:first-child {
   padding: 0;
   pointer-events: auto;
   cursor: grab;
+}
+.canvas-move {
+  left: calc(50% + 3px);
+  display: grid;
+  place-items: center;
+  cursor: move;
 }
 .canvas-guide {
   position: absolute;
@@ -1384,7 +1391,8 @@ button[aria-pressed="true"] {
   padding-inline: 5px;
   font-size: 11px;
 }
-.canvas-rotate {
+.canvas-rotate,
+.canvas-move {
   top: 8px;
 }
 

@@ -3,7 +3,7 @@ import { effectRandom, visualFrame, type VisualPass } from "./visual-effects";
 import { frameUnit, type Effect, type Layer } from "./model";
 import { instanceAmountAt, resolveEffectInstanceAt } from "./effect-instance";
 import { GraphicMapEffects } from "./GraphicMapEffects";
-import { svgImage } from "./graphic-maps";
+import { stretchedImage, svgImage } from "./graphic-maps";
 import { ObjectField, depthParticleSvg } from "./SpatialGraphicEffects";
 import {
   isRevealKind,
@@ -18,6 +18,120 @@ import {
 
 const rgb = (color: string) =>
   [1, 3, 5].map((i) => parseInt(color.slice(i, i + 2), 16) / 255);
+
+/**
+ * The whole number of pixels, within `min`–`max`, that holds a whole number
+ * of repeats closest to one every `period` pixels (none when `period` is 0
+ * or longer than the cell).
+ */
+function wholeCell(period: number, min: number, max: number) {
+  let best = { size: min, count: 0, error: Infinity };
+  for (let size = min; size <= max; size++) {
+    const count = period ? Math.round(size / period) : 0;
+    const error = Math.abs(count / size - (period ? 1 / period : 0));
+    if (error < best.error - 1e-12) best = { size, count, error };
+  }
+  return best;
+}
+
+/**
+ * One repeating cell of a line or dot screen at `angle` degrees, with its
+ * origin `shift` pixels below the cell's top left. feTile repeats a cell
+ * of whole pixels, so the cell holds whole repeats of the screen, with the
+ * spacing and angle adjusted by a small fraction to fit. The cell stays at
+ * the origin, because feTile repeats an offset cell at the wrong period.
+ */
+export function screenCell(
+  pattern: "lines" | "dots" | undefined,
+  spacing: number,
+  angle: number,
+  color: string,
+  shift = 0,
+) {
+  // Big enough that fitting whole repeats barely changes the screen.
+  const [min, max] = [Math.ceil(spacing * 4), Math.ceil(spacing * 4) + 160];
+  if (pattern !== "dots") {
+    const a = (angle * Math.PI) / 180;
+    // Lines repeat every spacing / |sin| across and spacing / |cos| down.
+    const across = wholeCell(
+      Math.abs(Math.sin(a)) < 1e-6 ? 0 : spacing / Math.abs(Math.sin(a)),
+      min,
+      max,
+    );
+    const down = wholeCell(
+      Math.abs(Math.cos(a)) < 1e-6 ? 0 : spacing / Math.abs(Math.cos(a)),
+      min,
+      max,
+    );
+    // The fitted lines: whole cycles per cell in each direction.
+    const fx = (Math.sign(-Math.sin(a)) * across.count) / across.size,
+      fy = (Math.sign(Math.cos(a)) * down.count) / down.size;
+    const gap = 1 / Math.hypot(fx, fy),
+      turn = (Math.atan2(-fx, fy) * 180) / Math.PI;
+    const t = (turn * Math.PI) / 180;
+    // The cell's corners in the rotated space bound the bands it needs.
+    const v = [
+      [0, 0],
+      [across.size, 0],
+      [0, down.size],
+      [across.size, down.size],
+    ].map(([x, y]) => (y - shift) * Math.cos(t) - x * Math.sin(t));
+    const reach = across.size + down.size;
+    let d = "";
+    for (
+      let k = Math.floor(Math.min(...v) / gap) - 1;
+      k * gap <= Math.max(...v) + gap;
+      k++
+    )
+      d += `M${-reach} ${k * gap}h${2 * reach}v${gap * 0.32}h${-2 * reach}Z`;
+    return {
+      width: across.size,
+      height: down.size,
+      body: `<path transform="translate(0 ${shift}) rotate(${turn})" fill="${color}" d="${d}"/>`,
+    };
+  }
+  // A rotated dot grid repeats only at a rational slope n/m, every
+  // spacing·√(m²+n²); the grid looks the same every quarter turn.
+  const quarter = (((((angle + 45) % 90) + 90) % 90) - 45) * (Math.PI / 180);
+  let m = 1,
+    n = 0;
+  for (let mm = 1; mm <= 16; mm++)
+    for (let nn = -16; nn <= 16; nn++)
+      if (
+        Math.abs(Math.atan2(nn, mm) - quarter) <
+        Math.abs(Math.atan2(n, m) - quarter) - 1e-9
+      ) {
+        m = mm;
+        n = nn;
+      }
+  const r = Math.hypot(m, n);
+  const cell = wholeCell(
+    spacing * r,
+    Math.max(min, Math.ceil(spacing * r)),
+    max + Math.ceil(spacing * r),
+  );
+  const gap = cell.size / (cell.count * r),
+    c = m / r,
+    s = n / r;
+  const reach = Math.ceil(cell.size / gap) + 2;
+  let dots = "";
+  for (let i = -reach; i <= reach * 2; i++)
+    for (let j = -reach; j <= reach * 2; j++) {
+      const u = (i + 0.5) * gap,
+        w = (j + 0.5) * gap;
+      const x = u * c - w * s,
+        y = u * s + w * c + shift;
+      // Dots near an edge also draw on the far side, so the cell repeats.
+      if (x < -gap || y < -gap || x > cell.size + gap || y > cell.size + gap)
+        continue;
+      dots += `<circle cx="${x}" cy="${y}" r="${gap * 0.22}"/>`;
+    }
+  return {
+    width: cell.size,
+    height: cell.size,
+    body: `<g fill="${color}">${dots}</g>`,
+  };
+}
 
 function Pass({
   pass,
@@ -60,12 +174,13 @@ function Pass({
     </feMerge>
   );
   // Overlay paint is clipped to the existing alpha, so cutouts stay transparent.
+  // `paint` is an SVG body, or filter nodes that draw a result named paint.
   const overlay = (
-    body: string,
+    paint: string | React.ReactNode,
     mode: "normal" | "screen" | "multiply" = "normal",
   ) => (
     <>
-      {image(body)}
+      {typeof paint === "string" ? image(paint) : paint}
       <feComposite
         in="paint"
         in2="SourceAlpha"
@@ -175,14 +290,38 @@ function Pass({
       case "blinds": {
         const count = pass.count ?? 8;
         const horizontal = pass.blindsDirection !== "vertical";
-        const body = Array.from({ length: count }, (_, i) =>
+        // Flooded regions, not an image: the filter changes every frame of
+        // the transition, and Chrome draws its images again each time.
+        const slats = Array.from({ length: count }, (_, i) =>
           horizontal
-            ? `<rect x="0" y="${(i * h) / count}" width="${w}" height="${(h / count) * (1 - s)}" fill="white"/>`
-            : `<rect x="${(i * w) / count}" y="0" width="${(w / count) * (1 - s)}" height="${h}" fill="white"/>`,
-        ).join("");
+            ? {
+                x: 0,
+                y: (i * h) / count,
+                width: w,
+                height: (h / count) * (1 - s),
+              }
+            : {
+                x: (i * w) / count,
+                y: 0,
+                width: (w / count) * (1 - s),
+                height: h,
+              },
+        );
         nodes = (
           <>
-            {image(body, "blinds-mask")}
+            {slats.map((slat, i) => (
+              <feFlood
+                key={i}
+                floodColor="white"
+                {...slat}
+                result={`slat${i}`}
+              />
+            ))}
+            <feMerge result="blinds-mask">
+              {slats.map((_, i) => (
+                <feMergeNode key={i} in={`slat${i}`} />
+              ))}
+            </feMerge>
             <feComposite in="SourceGraphic" in2="blinds-mask" operator="in" />
           </>
         );
@@ -199,11 +338,29 @@ function Pass({
         nodes = overlay(`<g opacity="${s}">${body}</g>`, "screen");
         break;
       }
-      case "vignette":
+      case "vignette": {
+        // A stretched tiny image: Chrome draws a full-frame one again on
+        // every frame where anything under the vignette changes.
+        const inner = 0.12 + (1 - z) * 0.4;
+        const [r, g, b] = rgb(pass.color).map((c) => c * 255);
+        const shade = stretchedImage(w, h, (x, y) => {
+          const t = Math.hypot((x - w / 2) / (w / 2), (y - h / 2) / (h / 2));
+          const ramp = Math.max(0, Math.min(1, (t - inner) / (1 - inner)));
+          return [r, g, b, ramp * s * 255];
+        });
         nodes = overlay(
-          `<defs><radialGradient id="g"><stop offset="${0.12 + (1 - z) * 0.4}" stop-color="${pass.color}" stop-opacity="0"/><stop offset="1" stop-color="${pass.color}" stop-opacity="${s}"/></radialGradient></defs><rect width="100%" height="100%" fill="url(#g)"/>`,
+          <feImage
+            href={shade.href}
+            preserveAspectRatio="none"
+            x={shade.x}
+            y={shade.y}
+            width={shade.width}
+            height={shade.height}
+            result="paint"
+          />,
         );
         break;
+      }
       case "spotlight": {
         const x = 50 + Math.sin(f.time * 0.6) * 16;
         nodes = overlay(
@@ -276,12 +433,45 @@ function Pass({
         const spacing = (3 + z * 16) * unit;
         const angle = pass.kind === "hatch" ? pass.angle : 0;
         const color = pass.kind === "scanlines" ? "#000000" : pass.color;
-        const mark =
-          pass.screenPattern === "dots"
-            ? `<circle cx="${spacing / 2}" cy="${spacing / 2}" r="${spacing * 0.22}" fill="${color}" opacity="${s}"/>`
-            : `<rect width="${spacing}" height="${spacing * 0.32}" fill="${color}" opacity="${s}"/>`;
-        nodes = overlay(
-          `<defs><pattern id="p" width="${spacing}" height="${spacing}" patternUnits="userSpaceOnUse" patternTransform="translate(0 ${(f.time * spacing) % spacing}) rotate(${angle})">${mark}</pattern></defs><rect width="100%" height="100%" fill="url(#p)"/>`,
+        // A filter is rebuilt whenever any of its values change, and every
+        // feImage is rasterized again with it: a full-frame screen costs
+        // 30–100 ms a frame. One small repeating cell costs almost nothing.
+        const cell = screenCell(
+          pass.screenPattern,
+          spacing,
+          angle,
+          color,
+          (f.time * spacing) % spacing,
+        );
+        nodes = (
+          <>
+            <feImage
+              href={svgImage(cell.body, cell.width, cell.height)}
+              x={0}
+              y={0}
+              width={cell.width}
+              height={cell.height}
+              result="cell"
+            />
+            <feTile
+              in="cell"
+              x={0}
+              y={0}
+              width={w}
+              height={h}
+              result="screen"
+            />
+            <feComponentTransfer in="screen" result="paint">
+              <feFuncA type="linear" slope={s} />
+            </feComponentTransfer>
+            <feComposite
+              in="paint"
+              in2="SourceAlpha"
+              operator="in"
+              result="clipped"
+            />
+            <feBlend in="clipped" in2="SourceGraphic" mode="normal" />
+          </>
         );
         break;
       }
@@ -509,8 +699,26 @@ function Pass({
       }
       case "letterbox": {
         const bar = h * (0.025 + z * 0.18);
+        // Flooded regions draw nothing per frame, unlike an image.
         nodes = overlay(
-          `<g fill="${pass.color}" opacity="${s}"><rect width="${w}" height="${bar}"/><rect y="${h - bar}" width="${w}" height="${bar}"/></g>`,
+          <>
+            {[0, h - bar].map((y, i) => (
+              <feFlood
+                key={i}
+                floodColor={pass.color}
+                floodOpacity={s}
+                x={0}
+                y={y}
+                width={w}
+                height={bar}
+                result={`bar${i}`}
+              />
+            ))}
+            <feMerge result="paint">
+              <feMergeNode in="bar0" />
+              <feMergeNode in="bar1" />
+            </feMerge>
+          </>,
         );
         break;
       }

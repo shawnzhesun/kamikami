@@ -483,16 +483,53 @@ export function revealFilterNodes(c: Context): React.ReactNode {
       const tick = Math.floor(c.time * 12);
       const rnd = (n: number) => effectRandom(pass.seed + tick * 977, n);
       const flicker = 1 + (rnd(0) - 0.5) * 0.18 * s;
-      let marks = "";
+      // Each mark is its own small image: the filter changes every frame,
+      // and Chrome draws its images again each time, so one full-frame
+      // image of a few marks stalled playback.
+      const marks: { body: string; box: [number, number, number, number] }[] =
+        [];
+      const mark = (
+        body: string,
+        left: number,
+        top: number,
+        right: number,
+        bottom: number,
+      ) => {
+        const [x, y] = [Math.floor(left), Math.floor(top)];
+        marks.push({
+          body: `<g transform="translate(${-x} ${-y})">${body}</g>`,
+          box: [x, y, Math.ceil(right) - x, Math.ceil(bottom) - y],
+        });
+      };
       const scratches = Math.floor(rnd(1) * 3.2);
       for (let i = 0; i < scratches; i++) {
         const x = rnd(10 + i) * w;
+        const x2 = x + (rnd(30 + i) - 0.5) * 12 * unit;
         const light = rnd(20 + i) > 0.5;
-        marks += `<line x1="${x}" y1="0" x2="${x + (rnd(30 + i) - 0.5) * 12 * unit}" y2="${h}" stroke="${light ? "#fff8e8" : "#1a120a"}" stroke-width="${(0.8 + rnd(40 + i) * 1.6) * unit}" opacity="${0.25 + rnd(50 + i) * 0.4}"/>`;
+        const width = (0.8 + rnd(40 + i) * 1.6) * unit;
+        mark(
+          `<line x1="${x}" y1="0" x2="${x2}" y2="${h}" stroke="${light ? "#fff8e8" : "#1a120a"}" stroke-width="${width}" opacity="${0.25 + rnd(50 + i) * 0.4}"/>`,
+          Math.min(x, x2) - width,
+          0,
+          Math.max(x, x2) + width,
+          h,
+        );
       }
       const specks = Math.floor(rnd(2) * 7);
-      for (let i = 0; i < specks; i++)
-        marks += `<ellipse cx="${rnd(60 + i) * w}" cy="${rnd(70 + i) * h}" rx="${(1 + rnd(80 + i) * 4) * unit}" ry="${(1 + rnd(90 + i) * 6) * unit}" fill="#120c06" opacity="${0.35 + rnd(100 + i) * 0.4}"/>`;
+      for (let i = 0; i < specks; i++) {
+        const [cx, cy] = [rnd(60 + i) * w, rnd(70 + i) * h];
+        const [rx, ry] = [
+          (1 + rnd(80 + i) * 4) * unit,
+          (1 + rnd(90 + i) * 6) * unit,
+        ];
+        mark(
+          `<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" fill="#120c06" opacity="${0.35 + rnd(100 + i) * 0.4}"/>`,
+          cx - rx - 1,
+          cy - ry - 1,
+          cx + rx + 1,
+          cy + ry + 1,
+        );
+      }
       // Sepia tone (luminance into warm channels), mixed by strength.
       return (
         <>
@@ -515,14 +552,32 @@ export function revealFilterNodes(c: Context): React.ReactNode {
             <feFuncG type="linear" slope={flicker} />
             <feFuncB type="linear" slope={flicker} />
           </feComponentTransfer>
-          {c.image(`<g opacity="${s}">${marks}</g>`, "marks")}
-          <feComposite
-            in="marks"
-            in2="SourceAlpha"
-            operator="in"
-            result="marksIn"
-          />
-          {c.merge(["flickered", "marksIn"])}
+          {marks.map((m, i) => (
+            <feImage
+              key={i}
+              href={svgImage(m.body, m.box[2], m.box[3])}
+              x={m.box[0]}
+              y={m.box[1]}
+              width={m.box[2]}
+              height={m.box[3]}
+              result={`mark${i}`}
+            />
+          ))}
+          {marks.length > 0 && (
+            <>
+              {c.merge(marks.map((_, i) => `mark${i}`))}
+              <feComponentTransfer result="marks">
+                <feFuncA type="linear" slope={s} />
+              </feComponentTransfer>
+              <feComposite
+                in="marks"
+                in2="SourceAlpha"
+                operator="in"
+                result="marksIn"
+              />
+            </>
+          )}
+          {c.merge(marks.length ? ["flickered", "marksIn"] : ["flickered"])}
         </>
       );
     }

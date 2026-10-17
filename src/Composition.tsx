@@ -248,17 +248,32 @@ function VisualLayer({
     ) : null;
   const style = (at: number): React.CSSProperties => {
     const v = layerAtTime(layer, project.effects, at, project);
+    // A 3D transform or a filter gives the element its own compositing layer,
+    // even at neutral values, and every layer adds work to each played frame.
+    const tilt =
+      v.rotateX || v.rotateY
+        ? ` perspective(${v.perspective}px) rotateX(${v.rotateX}deg) rotateY(${v.rotateY}deg)`
+        : "";
+    const filter = [
+      v.blur ? `blur(${v.blur}px)` : "",
+      v.brightness !== 1 ? `brightness(${v.brightness})` : "",
+      v.contrast !== 1 ? `contrast(${v.contrast})` : "",
+      v.saturation !== 1 ? `saturate(${v.saturation})` : "",
+      v.invert ? `invert(${v.invert})` : "",
+    ]
+      .filter(Boolean)
+      .join(" ");
     return {
       justifyContent: "center",
       alignItems: "center",
-      transform: `translate(${v.x}px,${v.y}px) scale(${v.scale}) rotate(${v.rotation}deg) perspective(${v.perspective}px) rotateX(${v.rotateX}deg) rotateY(${v.rotateY}deg) scale(${v.scaleX},${v.scaleY}) skewX(${v.skewX}deg)`,
+      transform: `translate(${v.x}px,${v.y}px) scale(${v.scale}) rotate(${v.rotation}deg)${tilt} scale(${v.scaleX},${v.scaleY}) skewX(${v.skewX}deg)`,
       opacity: v.opacity,
       // Finishes blend with every layer below them.
       ...(layer.backdrop && layer.backdrop.blend !== "normal"
         ? { mixBlendMode: layer.backdrop.blend }
         : {}),
       transformOrigin: `${50 + v.originX * 50}% ${50 + v.originY * 50}%`,
-      filter: `blur(${v.blur}px) brightness(${v.brightness}) contrast(${v.contrast}) saturate(${v.saturation})${v.invert ? ` invert(${v.invert})` : ""}`,
+      ...(filter ? { filter } : {}),
     };
   };
   // Stop-motion stutter holds effects and text animation along with the transform.
@@ -309,9 +324,7 @@ function VisualLayer({
             src={src}
             startFrom={Math.round(layer.offset * fps)}
             // Copies are silent: only the element itself plays its sound.
-            volume={
-              copy ? 0 : volume
-            }
+            volume={copy ? 0 : volume}
             muted={copy}
             style={{ width: "100%", height: "100%", objectFit: "contain" }}
           />
