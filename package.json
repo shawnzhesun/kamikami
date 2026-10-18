@@ -1,8 +1,14 @@
 {
   "name": "kamikami",
   "version": "0.1.0",
-  "description": "Local video editor for lyric videos and motion graphics",
+  "description": "Open source video editor designed for AI agents",
+  "license": "MIT",
   "author": "KamiKami",
+  "homepage": "https://shawnzhesun.github.io/kamikami/",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/shawnzhesun/kamikami.git"
+  },
   "private": true,
   "type": "module",
   "main": "electron/main.cjs",

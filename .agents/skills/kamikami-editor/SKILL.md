@@ -94,6 +94,7 @@ The server is the source of truth. Don't rely on numbers or kind lists from memo
   - **Keyframes snap to whole frames.** Two keys inside one frame collapse, so a "hard cut" written that way plays as a slow fade.
   - **Hard hits need frame-exact keys.** For punches, flashes and snaps, sample the curve once per frame and write a key wherever the value changes. Put the peak on the hit frame itself.
   - **An element with no keyframes takes `{}`, not `null`.
+  - **Keyframe times are animation time:** clip-local time plus the element's `effectOffset`. Trimming an element's head sets `effectOffset`, so the animation stays where it was. When you write keyframes for absolute frames, subtract `effectOffset`, or reset it to 0 first. Re-read the element before you re-time it, because the user may have trimmed it since your last edit.
 - **Audio:** `fadeIn`/`fadeOut` on any element, and `volume` keyframes for ducking music under speech.
 
 ### 6. Review

@@ -644,8 +644,11 @@ header .status-dot,
   width: 100%;
   height: 100%;
 }
-.cached-frame ~ * {
-  display: none !important;
+/* Hidden but laid out, so selection handles still measure the elements.
+   Descendants too: text sets an inline visibility of its own. */
+.cached-frame ~ *,
+.cached-frame ~ * * {
+  visibility: hidden !important;
 }
 .playhead {
   position: absolute;

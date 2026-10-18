@@ -181,6 +181,9 @@ export class PreviewCache {
         if (!run) break;
         await this.renderRun(plan, run);
       }
+    } catch (e) {
+      // Nothing awaits this loop, so an error here would end the service.
+      this.error = (e as Error).message;
     } finally {
       this.running = false;
       this.idleTimer = setTimeout(
@@ -246,7 +249,9 @@ export class PreviewCache {
         };
       if (cancelled) return;
       await renderFrames({
-        composition: this.composition.value,
+        // A selected composition carries the props it was selected with, and
+        // renderFrames draws those, so pass this plan's project.
+        composition: { ...this.composition.value, props: inputProps },
         serveUrl,
         inputProps,
         frameRange: [first, last],
@@ -262,6 +267,7 @@ export class PreviewCache {
         onStart: () => {},
         onFrameUpdate: () => {},
         onFrameBuffer: async (buffer, frame) => {
+          if (cancelled) return;
           const chunk = chunkOf(project, frame),
             [start, end] = chunkRange(project, chunk),
             key = keys[chunk];
@@ -295,12 +301,15 @@ export class PreviewCache {
     } finally {
       this.cancel = null;
       this.drawing = [];
+      // After a cancel, frame writes can still land while the folder is
+      // removed (ENOTEMPTY); a leftover goes with the session folder.
       await Promise.all(
         run.map((i) =>
           rm(path.join(this.dir, keys[i] + ".part"), {
             recursive: true,
             force: true,
-          }),
+            maxRetries: 3,
+          }).catch(() => {}),
         ),
       );
     }

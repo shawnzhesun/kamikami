@@ -1,7 +1,7 @@
 # Installer build: `npm run dist` (see docs/distribution.md).
 appId: app.kamikami.desktop
 productName: KamiKami
-copyright: Copyright © KamiKami
+copyright: Copyright © 2026 Shawn Sun
 directories:
   output: release
 # The service hands real file paths to ffmpeg, the Remotion compositor and the
@@ -29,6 +29,9 @@ extraResources:
   - from: electron/bin
     to: bin
 mac:
+  # No version in the name, so the website can link to
+  # releases/latest/download/KamiKami-mac-arm64.dmg.
+  artifactName: ${productName}-mac-${arch}.${ext}
   category: public.app-category.video
   icon: public/kamikami-icon.icns
   target: [dmg, zip]

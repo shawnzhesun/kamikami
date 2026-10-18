@@ -64,4 +64,4 @@ The analysis file has these fields: `probe`, `audio`, `visual{shots, samples, bl
 
 ## Licensing
 
-`ffmpeg-static` and `ffprobe-static` are GPL with nonfree parts. That's fine for development but can't be redistributed. Point `KAMIKAMI_FFMPEG` / `KAMIKAMI_FFPROBE` at other builds.
+Development uses `ffmpeg-static` and `ffprobe-static`, which are GPL with nonfree parts and can't be redistributed. The installed app ships LGPL builds made by `scripts/build-ffmpeg.mjs` (see [distribution.md](distribution.md#ffmpeg)). `KAMIKAMI_FFMPEG` / `KAMIKAMI_FFPROBE` point the service at other builds. A new filter, encoder or muxer must also be listed in `required` in that script, which checks every build for it.

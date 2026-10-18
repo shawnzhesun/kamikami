@@ -1,0 +1,384 @@
+@font-face {
+  font-family: "Host Grotesk";
+  src: url("assets/HostGrotesk-VariableFont_wght.ttf") format("truetype");
+  font-weight: 300 800;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Dela Gothic One";
+  src: url("assets/DelaGothicOne-Regular.woff2") format("woff2");
+  font-display: swap;
+}
+
+/* The app's palette. */
+:root {
+  --cream: #f5ebdd;
+  --coral: #f2765e;
+  --blue: #315b8c;
+  --brown: #413333;
+  --panel: #efe3d3;
+  --line: color-mix(in srgb, var(--brown) 18%, var(--cream));
+  --muted: color-mix(in srgb, var(--brown) 75%, var(--cream));
+  --display: "Dela Gothic One", "Host Grotesk", system-ui, sans-serif;
+  color-scheme: light;
+}
+* {
+  box-sizing: border-box;
+}
+html {
+  scroll-behavior: smooth;
+}
+body {
+  margin: 0;
+  font-family: "Host Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 17px;
+  line-height: 1.55;
+  color: var(--brown);
+  background: var(--cream);
+  -webkit-font-smoothing: antialiased;
+}
+a {
+  color: var(--blue);
+  text-underline-offset: 3px;
+}
+a:hover {
+  color: var(--coral);
+}
+:focus-visible {
+  outline: 3px solid var(--coral);
+  outline-offset: 3px;
+}
+img,
+video {
+  display: block;
+  max-width: 100%;
+}
+h1,
+h2 {
+  font-family: var(--display);
+  font-weight: 400;
+  line-height: 1.08;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+h1 {
+  font-size: clamp(2.4rem, 5.4vw, 4.4rem);
+}
+h2 {
+  font-size: clamp(1.8rem, 3.6vw, 2.8rem);
+}
+h3 {
+  font-size: 1.1rem;
+  margin: 0 0 0.4rem;
+}
+.skip {
+  position: absolute;
+  left: -9999px;
+}
+.skip:focus {
+  left: 1rem;
+  top: 1rem;
+  z-index: 10;
+  background: var(--brown);
+  color: var(--cream);
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+}
+
+.nav {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.8rem clamp(1rem, 4vw, 3rem);
+  background: var(--brown);
+  color: var(--cream);
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--cream);
+  text-decoration: none;
+  font-weight: 700;
+  font-size: 1.15rem;
+}
+.brand img {
+  border-radius: 8px;
+}
+.nav nav {
+  display: flex;
+  gap: clamp(0.8rem, 2.5vw, 2rem);
+}
+.nav nav a {
+  color: var(--cream);
+  text-decoration: none;
+  font-weight: 500;
+}
+.nav nav a:hover {
+  color: var(--coral);
+}
+
+main > section {
+  padding: clamp(3.5rem, 8vw, 6.5rem) clamp(1.25rem, 5vw, 4rem);
+  max-width: 1240px;
+  margin: 0 auto;
+}
+main > section.band {
+  max-width: none;
+  background: var(--blue);
+  color: var(--cream);
+}
+.band > * {
+  max-width: 1112px;
+  margin-left: auto;
+  margin-right: auto;
+}
+.band a {
+  color: var(--cream);
+}
+.eyebrow {
+  margin: 0 0 0.8rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--coral);
+}
+.lede {
+  font-size: 1.2rem;
+  max-width: 40rem;
+  margin: 1.2rem 0 0;
+}
+.section-head {
+  margin-bottom: 2.5rem;
+}
+.small {
+  font-size: 0.92rem;
+  color: var(--muted);
+}
+.band .small {
+  color: color-mix(in srgb, var(--cream) 80%, var(--blue));
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  gap: clamp(2rem, 5vw, 4rem);
+  align-items: center;
+}
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  margin-top: 2rem;
+}
+.button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.85rem 1.4rem;
+  border-radius: 999px;
+  border: 2px solid var(--brown);
+  color: var(--brown);
+  font-weight: 700;
+  text-decoration: none;
+  transition: transform 0.15s ease;
+}
+.button:hover {
+  transform: translateY(-2px);
+  color: var(--brown);
+}
+.button.primary {
+  background: var(--coral);
+  border-color: var(--coral);
+  color: #2a1d1d;
+  box-shadow: 4px 4px 0 var(--brown);
+}
+.fineprint {
+  margin: 1rem 0 0;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+.hero-video {
+  margin: 0;
+}
+.hero-video video {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: 16px;
+  border: 3px solid var(--brown);
+  box-shadow: 10px 10px 0 var(--coral);
+  background: var(--blue);
+}
+.hero-video figcaption {
+  margin-top: 1.2rem;
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+
+.steps {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.5rem;
+}
+.steps li {
+  background: color-mix(in srgb, var(--cream) 8%, var(--blue));
+  border: 1px solid color-mix(in srgb, var(--cream) 22%, var(--blue));
+  border-radius: 16px;
+  padding: 1.5rem;
+  min-width: 0;
+}
+.step-num {
+  display: inline-grid;
+  place-items: center;
+  width: 2.2rem;
+  height: 2.2rem;
+  border-radius: 50%;
+  background: var(--coral);
+  color: #2a1d1d;
+  font-family: var(--display);
+  margin-bottom: 1rem;
+}
+.steps blockquote {
+  margin: 0.4rem 0 0.8rem;
+  padding-left: 0.9rem;
+  border-left: 3px solid var(--coral);
+  font-style: italic;
+}
+.code {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  margin: 0.8rem 0;
+  padding: 0.75rem 0.8rem;
+  background: var(--brown);
+  color: var(--cream);
+  border-radius: 10px;
+}
+.code code {
+  flex: 1;
+  min-width: 0;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.code button {
+  flex: none;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 0.25rem 0.7rem;
+  border-radius: 999px;
+  border: 0;
+  background: var(--coral);
+  color: #2a1d1d;
+  cursor: pointer;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.25rem;
+}
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 1.5rem;
+}
+.card p {
+  margin: 0;
+  color: var(--muted);
+}
+.shot {
+  margin: 3rem 0 0;
+}
+.shot img {
+  width: 100%;
+  height: auto;
+  border-radius: 14px;
+  border: 3px solid var(--brown);
+  box-shadow: 10px 10px 0 var(--blue);
+}
+
+.install {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 2rem;
+  align-items: start;
+}
+.install ol {
+  margin: 0;
+  padding-left: 1.3rem;
+  font-size: 1.1rem;
+}
+.install li + li {
+  margin-top: 0.7rem;
+}
+.note {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-left: 5px solid var(--coral);
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem;
+}
+.note p {
+  margin: 0 0 0.6rem;
+}
+#install > .small {
+  margin-top: 2rem;
+}
+
+footer {
+  background: var(--brown);
+  color: var(--cream);
+  padding: 2.5rem clamp(1.25rem, 5vw, 4rem);
+  text-align: center;
+}
+footer p {
+  margin: 0.3rem 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+footer a {
+  color: var(--cream);
+}
+footer .small {
+  color: color-mix(in srgb, var(--cream) 70%, var(--brown));
+}
+footer img {
+  border-radius: 5px;
+}
+
+@media (max-width: 900px) {
+  .hero,
+  .install {
+    grid-template-columns: 1fr;
+  }
+  .steps,
+  .grid {
+    grid-template-columns: 1fr;
+  }
+  .nav nav a:not(:last-child) {
+    display: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .button {
+    transition: none;
+  }
+}
