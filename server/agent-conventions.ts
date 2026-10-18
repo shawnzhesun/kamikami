@@ -31,7 +31,7 @@ export const agentConventions = [
   "- delete_media on used media returns requiresConfirmation; retry with confirmUsed:true only if the user authorized it.",
   "- set_project_settings that shortens the project past elements needs trimAffected:true after the user reviews them.",
   "- analyze_assets model tiers upload media and need the user's approval of the estimate.",
-  "- Set effect author and license only as the user stated them. Export bundles only when asked.",
+  "- Set an effect's author only as the user stated it. Export bundles only when asked.",
   "",
   "EFFECTS",
   "- Choose with find_effects (filter role and elementType), read candidates with describe_effect, apply with apply_effect (variationId for a named variation), tune one element with update_effect_instance. get_capabilities.effectLibrary lists roles, feels and counts.",

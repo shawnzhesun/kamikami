@@ -529,25 +529,29 @@ export const editorTools: ToolDefinition[] = [
   tool(
     "save_user_effect",
     "add",
-    "Save a project effect to My effects (library effects are copied under a new ID), with author and license terms. Set those only as the user stated them. Returns the entry and effect ID.",
+    "Save a project effect to My effects (library effects are copied under a new ID), with an author. Set it only as the user stated it. Returns the entry and effect ID.",
     {
       effectId: z.string(),
       author: z.string().optional(),
-      license: z.string().optional(),
       ...rev,
     },
   ),
   tool(
     "import_effect_bundle",
     "add",
-    "Validate and import a portable effect bundle into the local library. IDs are remapped to avoid collisions; apply the returned ID.",
+    "Validate and import an effect file into the local library: a single-effect bundle (format frameforge-effect) or a pack of several (format kamikami-effect-pack, the effectPack schema in get_capabilities). Effect IDs are remapped; apply the returned IDs. Importing a pack whose id is already installed updates it in place.",
     { bundle: z.record(z.string(), z.unknown()) },
   ),
   tool(
     "export_effect_bundle",
     "read",
-    "Return a My effects or imported entry as a portable bundle; userEffectId is the library entry ID. Only when the user asks.",
-    { userEffectId: z.string() },
+    "Return My effects or imported entries as one portable pack (.kamikami-effects.json); userEffectIds are library entry IDs. name defaults to the first effect's; set author only as the user stated it. Shared effects are free to use and share. Only when the user asks.",
+    {
+      userEffectIds: z.array(z.string()).min(1),
+      name: z.string().optional(),
+      author: z.string().optional(),
+      description: z.string().optional(),
+    },
   ),
   tool(
     "delete_user_effect",

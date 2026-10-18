@@ -166,7 +166,7 @@ The server is the source of truth. Don't rely on numbers or kind lists from memo
 2. `create_effect` with a new ID. Only `id`, `name` and the sections you use are required; it's saved to My effects. Apply it, then render the start, middle and end. Refine with `update_effect`.
 3. Library originals are read-only: fork by creating a new ID and keeping `presetFamilyId`.
 4. Sharing:
-   - `save_user_effect` sets author and sharing terms, only as the user gave them.
-   - `export_effect_bundle` returns a `.kamikami-effect.json` when the user asks.
-   - `import_effect_bundle` remaps IDs, so apply the returned ID.
+   - `save_user_effect` sets the author, only as the user gave it. Shared effects are free to use and share, so there are no license terms.
+   - `export_effect_bundle` returns one pack (`.kamikami-effects.json`) of the entries you name, when the user asks.
+   - `import_effect_bundle` takes a pack or a single-effect bundle and remaps IDs, so apply the returned IDs. Importing a pack that is installed updates it.
    - `delete_user_effect` removes a My effects entry when asked; applied copies stay.

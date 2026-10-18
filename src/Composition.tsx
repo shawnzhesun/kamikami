@@ -244,6 +244,10 @@ function VisualLayer({
         src={src}
         volume={volume}
         startFrom={Math.round(layer.offset * fps)}
+        // Remotion's default lets preview audio drift 0.65 s from the picture
+        // (more than a beat) before it re-syncs, so cuts and hits judged in
+        // the editor could be off by that much. Exports ignore this.
+        acceptableTimeShiftInSeconds={0.1}
       />
     ) : null;
   const style = (at: number): React.CSSProperties => {

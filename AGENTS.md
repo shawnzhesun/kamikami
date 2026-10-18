@@ -39,6 +39,7 @@ How to work on KamiKami's code. This file is for coding agents. To edit a *video
   3. Add a card with 3–5 variations in `src/overlay-cards.ts`.
 
   `tests/overlays.test.ts` renders every variation and checks for finite values and unique keys.
+- **A pack-only kind** (a style that ships as an effect pack, not built-in cards): add it to `packOnlyPassKinds` or `packOnlyOverlayKinds` instead of adding a card, gate it in a new engine, and build its presets as a pack in `examples/effects/`. The built-in library must not duplicate it.
 - **A text or kinetic kind:**
   1. Add the kind list, names and controls in its engine file.
   2. Add the render logic.

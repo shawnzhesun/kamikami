@@ -36,7 +36,7 @@ import {
   FORMAT_LOCKED,
   type Project,
 } from "./model";
-import { EffectBundleSchema } from "./effect-bundle";
+import { EffectBundleSchema, EffectPackSchema } from "./effect-bundle";
 import { ShapeSchema } from "./shapes";
 import {
   BackdropSchema,
@@ -297,16 +297,18 @@ export const AgentCommandSchema = z.discriminatedUnion("action", [
     action: z.literal("save_user_effect"),
     effectId: z.string(),
     author: z.string().max(100).default(""),
-    license: z.string().max(200).default("Free to use and share"),
     ...revision,
   }),
   z.object({
     action: z.literal("import_effect_bundle"),
-    bundle: EffectBundleSchema,
+    bundle: z.union([EffectBundleSchema, EffectPackSchema]),
   }),
   z.object({
     action: z.literal("export_effect_bundle"),
-    userEffectId: z.string(),
+    userEffectIds: z.array(z.string()).min(1).max(LIMITS.packEffects),
+    name: z.string().max(80).optional(),
+    author: z.string().max(100).optional(),
+    description: z.string().max(1000).optional(),
   }),
   z.object({
     action: z.literal("delete_user_effect"),

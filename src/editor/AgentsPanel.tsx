@@ -1,3 +1,4 @@
+import { packFileName } from "../effect-bundle";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ArrowUp,
@@ -150,9 +151,10 @@ export function AgentsPanel({
         )
       : artifact.url!;
     a.href = url;
+    const pack = artifact.bundle as { id?: string } | undefined;
     a.download =
       artifact.kind === "effect"
-        ? "my-effect.kamikami-effect.json"
+        ? packFileName({ id: pack?.id ?? "my-effects" })
         : "kamikami.mp4";
     a.click();
     if (artifact.bundle) setTimeout(() => URL.revokeObjectURL(url), 1000);

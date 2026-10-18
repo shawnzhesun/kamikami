@@ -41,6 +41,7 @@ Feels per role are in `roleFeels`; overlay feels are the overlay sections.
 - **Retiming:** the timeline's In/Out handles scale the timing of all of a clip's In or Out effects together (`src/editor/envelope.ts`).
 
 **Targets** (`effectTarget`):
+
 - `text`: anything with `effect.text`; text elements only.
 - `picture`: artwork `trail` and `slices`; images, video, shapes, scenes and backdrops.
 - `any`: everything else, for any visual element.
@@ -69,18 +70,36 @@ A bundle or recipe declares the lowest engine it needs. `effectEngine()` in `src
 | `kamikami-visual-v6` | Warp, bevel, extrude, sheen, paper, ink, pixel, dissolve, goo, glow and lens passes; scaleX/scaleY/skewX/rotateX; spring curves; channel `seconds`/`align` |
 | `kamikami-visual-v7` | Title text kinds, `text.direction`/`variant`, `origin`; shape, doors, clock, feather, lumawipe, reflection, tiltshift, oldfilm, ripple and cells passes |
 | `kamikami-visual-v8` | `art`, `overlay`, kinetic/look/layout text kinds, `text.tempo`/`angle`, stagger order center/edges |
+| `kamikami-visual-v9` | The riso print pass (`riso`, `risoInks`, `risoPaper`, `registration`, `inkGrain`) and the halftone wash overlay (`halftonewash`) |
 
 The ladder is `effectEngines` in `src/visual-effects.ts`; a new engine is appended there and gated in `effectEngine`.
 
-## Bundles
+**Pack-only kinds** (`packOnlyPassKinds`, `packOnlyOverlayKinds`) are engine features with no built-in card; their presets ship in effect packs, such as `examples/effects/riso.kamikami-effects.json`. Agents still build recipes with them from the schemas in `get_capabilities`.
 
-A portable effect is a `.kamikami-effect.json` file (older `.frameforge-effect.json` files also import):
+## Bundles and packs
+
+Effects travel as JSON files. Both kinds import from **Import effects** in the Effects tab (several files at once) or through `import_effect_bundle`.
+
+**Packs** (`.kamikami-effects.json`, `EffectPackSchema` in `src/effect-bundle.ts`) hold several effects. **Export effects** and `export_effect_bundle` write them.
+
+```json
+{ "format": "kamikami-effect-pack", "version": 1, "engine": "kamikami-visual-v8",
+  "id": "neon-nights", "name": "Neon nights", "author": "…", "description": "…",
+  "effects": [ { "effect": { … } }, { "author": "…", "effect": { … } } ] }
+```
+
+- `id` names the pack across versions. Importing a pack whose ID is installed updates it in place: its effects keep their library IDs, so projects and agents still find them; new effects are added and dropped ones removed. Exporting an imported pack under its own name keeps its ID.
+- `engine` is the newest one any of its effects needs (`packEngine`). Effect IDs must be unique within the pack. An effect's `author` is written only where it differs from the pack's.
+- **No licenses.** Every shared effect is free to use and share, so effect files carry no license. A `license` in an older file is ignored.
+- An installed pack is a collection in the library filter. Removing it takes its effects out of the library; elements that use them keep their copies, and importing the file again restores the same IDs.
+
+**Single-effect bundles** (`.kamikami-effect.json`, `EffectBundleSchema`) are the older format, and still import (as do `.frameforge-effect.json` files):
 
 ```json
 { "format": "frameforge-effect", "version": 1, "engine": "kamikami-visual-v8",
-  "name": "…", "author": "…", "license": "…", "description": "…", "effect": { … } }
+  "name": "…", "author": "…", "description": "…", "effect": { … } }
 ```
 
-- Import remaps the effect ID. Legacy decorations are migrated on import.
-- The bundle's engine must be at least `effectEngine(effect)`. Bundles below v5 omit `presetFamilyId`.
+- Import remaps effect IDs. Legacy decorations are migrated on import.
+- A bundle's engine must be at least `effectEngine(effect)`.
 - My effects and imported effects are stored in `.kamikami/effects.json`, separate from the project and from undo.

@@ -6,8 +6,12 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import {
   EffectBundleSchema,
+  EffectPackSchema,
   applyEffectToLayers,
   effectCollections,
+  importSummary,
+  makeEffectPack,
+  parseEffectFile,
 } from "../src/effect-bundle";
 import { EffectLibrary } from "../server/effect-library";
 import { MediaLibrary } from "../server/media-library";
@@ -35,7 +39,8 @@ test("portable effects validate versions, reject executable payloads, remap coll
     const a = await lib.import(bundle),
       b = await lib.import(bundle);
     assert.notEqual(a.bundle.effect.id, b.bundle.effect.id);
-    assert.equal(a.bundle.license, "CC0-1.0");
+    // Shared effects are free to share; older files' licenses are dropped.
+    assert.equal("license" in a.bundle, false);
     assert.equal((await new EffectLibrary(dir).list()).length, 2);
     const c = await lib.import(a.bundle);
     assert.deepEqual(c.bundle.effect.channels, a.bundle.effect.channels);
@@ -190,7 +195,7 @@ test("agent creations and refinements persist in My effects without gallery dupl
       imported.bundle.effect.channels,
       saved.bundle.effect.channels,
     );
-    assert.equal(imported.bundle.license, "CC0-1.0");
+    assert.equal("license" in imported.bundle, false);
     // Project Undo/removal does not delete reusable saved entries.
     await lib.syncProjectEffects(initialProject.effects);
     assert.equal((await new EffectLibrary(dir).list()).length, 2);
@@ -249,6 +254,187 @@ test("concurrent refinements keep one saved entry and invalid synchronization is
     assert.equal((await lib.list())[0].bundle.effect.tint, 0.4);
     await assert.rejects(lib.syncProjectEffects([{ ...effect, tint: 9 }]));
     assert.equal((await lib.list())[0].bundle.effect.tint, 0.4);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+const recipe = (id: string, name: string, patch = {}) => ({
+  ...effect,
+  id,
+  name,
+  ...patch,
+});
+test("packs carry several effects with their authors and need a fitting engine", () => {
+  const slam = builtinEffects.find((e) => e.id === "kinetic-slam")!;
+  const pack = makeEffectPack(
+    {
+      name: "  Night Shift: Vol. 2 ",
+      author: "QA",
+      description: "Test pack",
+    },
+    [
+      { author: "QA", effect: recipe("a", "Sway") },
+      { author: "Guest", effect: slam },
+    ],
+  );
+  assert.equal(pack.id, "night-shift-vol-2");
+  assert.equal(pack.name, "Night Shift: Vol. 2");
+  // The newest engine any effect needs.
+  assert.equal(pack.engine, "kamikami-visual-v8");
+  assert.deepEqual(Object.keys(pack.effects[0]), ["effect"]);
+  assert.equal(pack.effects[1].author, "Guest");
+  const read = parseEffectFile(JSON.parse(JSON.stringify(pack)));
+  assert.equal(read.pack?.id, "night-shift-vol-2");
+  assert.equal(read.bundles.length, 2);
+  assert.equal(read.bundles[0].author, "QA");
+  assert.equal(read.bundles[1].author, "Guest");
+  // Packs written with licenses still read, without them.
+  const licensed = parseEffectFile({
+    ...pack,
+    license: "CC0-1.0",
+    effects: pack.effects.map((e) => ({ ...e, license: "MIT" })),
+  });
+  assert.equal(licensed.bundles.length, 2);
+  assert.equal("license" in licensed.pack!, false);
+  assert.equal("license" in licensed.bundles[0], false);
+  assert.equal("license" in JSON.parse(JSON.stringify(pack)), false);
+  assert.equal(read.bundles[1].engine, "kamikami-visual-v8");
+  // Single-effect bundles still read.
+  assert.equal(parseEffectFile(bundle).bundles[0].name, "Test effect");
+  assert.throws(() => parseEffectFile({ effects: [] }), /isn't a KamiKami/);
+  assert.throws(() =>
+    EffectPackSchema.parse({ ...pack, engine: "frameforge-curves-v1" }),
+  );
+  assert.throws(
+    () =>
+      EffectPackSchema.parse({
+        ...pack,
+        effects: [pack.effects[0], pack.effects[0]],
+      }),
+    /own ID/,
+  );
+  assert.throws(() => EffectPackSchema.parse({ ...pack, id: "Bad ID" }));
+  assert.throws(() =>
+    EffectPackSchema.parse({
+      ...pack,
+      effects: [{ effect: { ...slam, shader: "x" } }],
+    }),
+  );
+  assert.throws(() =>
+    makeEffectPack({ ...pack, name: " " }, [pack.effects[0]]),
+  );
+  assert.throws(() => makeEffectPack(pack, []), /at least one/);
+});
+
+test("importing a pack again updates it in place, and removed packs stay removed", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "kamikami-effect-packs-"));
+  const info = {
+    name: "Neon",
+    author: "QA",
+    description: "",
+  };
+  const terms = { author: "QA" };
+  try {
+    const lib = new EffectLibrary(dir);
+    const v1 = makeEffectPack(info, [
+      { ...terms, effect: recipe("glow", "Glow") },
+      { ...terms, effect: recipe("buzz", "Buzz") },
+    ]);
+    const first = await lib.importFile(v1);
+    assert.equal(first.pack?.id, "neon");
+    assert.equal(first.imported.length, 2);
+    assert.equal(importSummary(first), "Imported Neon (2 effects)");
+    const glowId = first.imported[0].bundle.effect.id;
+    assert.match(glowId, /^user-/);
+    assert.equal(first.imported[0].packEffectId, "glow");
+
+    const v2 = makeEffectPack({ ...info, description: "v2" }, [
+      { ...terms, effect: recipe("glow", "Glow", { tint: 0.3 }) },
+      { ...terms, effect: recipe("flare", "Flare") },
+    ]);
+    const second = await lib.importFile(v2);
+    assert.equal(
+      importSummary(second),
+      "Updated Neon: 1 effect updated, 1 added, 1 removed",
+    );
+    let listed = await lib.list();
+    assert.equal(listed.length, 2);
+    const glow = listed.find((e) => e.packEffectId === "glow")!;
+    assert.equal(glow.bundle.effect.id, glowId);
+    assert.equal(glow.bundle.effect.tint, 0.3);
+    assert.equal(glow.pack?.description, "v2");
+
+    // A single bundle is never part of a pack.
+    const single = await lib.importFile(bundle);
+    assert.equal(single.pack, undefined);
+    assert.equal(single.imported[0].pack, undefined);
+
+    assert.deepEqual(await lib.removePack("neon"), {
+      removed: 2,
+      packId: "neon",
+    });
+    await assert.rejects(lib.removePack("neon"), /isn't installed/);
+    // A project that used the pack doesn't bring its effects back as My effects.
+    await lib.syncProjectEffects([glow.bundle.effect]);
+    assert.deepEqual(
+      (await lib.list()).map((e) => e.bundle.name),
+      ["Test effect"],
+    );
+    // Importing it again restores the same IDs.
+    const third = await lib.importFile(v2);
+    assert.equal(third.imported[0].bundle.effect.id, glowId);
+    assert.equal(importSummary(third), "Imported Neon (2 effects)");
+    listed = await new EffectLibrary(dir).list();
+    assert.equal(listed.length, 3);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("agents export several entries as one pack", () => {
+  assert.ok(
+    AgentCommandSchema.safeParse({
+      action: "export_effect_bundle",
+      userEffectIds: ["a", "b"],
+      name: "Mine",
+    }).success,
+  );
+  assert.equal(
+    AgentCommandSchema.safeParse({
+      action: "export_effect_bundle",
+      userEffectIds: [],
+    }).success,
+    false,
+  );
+  const pack = makeEffectPack({ name: "P", author: "", description: "" }, [
+    { author: "", effect: recipe("a", "A") },
+  ]);
+  for (const file of [bundle, pack])
+    assert.ok(
+      AgentCommandSchema.safeParse({
+        action: "import_effect_bundle",
+        bundle: file,
+      }).success,
+    );
+});
+
+test("libraries saved with licenses read without them", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "kamikami-effect-licenses-"));
+  try {
+    const old = {
+      id: "e1",
+      savedAt: "2026-01-01",
+      collection: "library",
+      bundle: { ...bundle, license: "CC0-1.0" },
+      pack: { id: "p", name: "P", author: "", description: "", license: "MIT" },
+      packEffectId: "a",
+    };
+    await writeFile(path.join(dir, "effects.json"), JSON.stringify([old]));
+    const [entry] = await new EffectLibrary(dir).list();
+    assert.equal("license" in entry.bundle, false);
+    assert.equal("license" in entry.pack!, false);
+    assert.equal(entry.pack?.name, "P");
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

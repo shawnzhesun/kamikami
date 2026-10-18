@@ -17,7 +17,7 @@ import { editorTools } from "./editor-tools";
 import { effectEngines } from "../src/visual-effects";
 import { z } from "zod";
 import { EffectLibrary } from "./effect-library";
-import { EffectBundleSchema } from "../src/effect-bundle";
+import { EffectBundleSchema, EffectPackSchema } from "../src/effect-bundle";
 import { AgentCommandSchema } from "../src/agent-protocol";
 import { MediaLibrary } from "./media-library";
 import { AnalysisStore } from "./analysis/store";
@@ -608,7 +608,10 @@ app.post("/api/media/restore", async (req, res) => {
 });
 app.get("/api/effects", async (_req, res) => res.json(await effects.list()));
 app.post("/api/effects/import", async (req, res) =>
-  res.json(await effects.import(req.body)),
+  res.json(await effects.importFile(req.body)),
+);
+app.post("/api/effects/remove-pack", async (req, res) =>
+  res.json(await effects.removePack(req.body.packId)),
 );
 app.post("/api/effects/save", async (req, res) =>
   res.json(await effects.save(req.body)),
@@ -637,6 +640,7 @@ app.get("/api/capabilities", async (_req, res) =>
     project: z.toJSONSchema(ProjectSchema),
     effect: z.toJSONSchema(EffectSchema),
     effectBundle: z.toJSONSchema(EffectBundleSchema),
+    effectPack: z.toJSONSchema(EffectPackSchema),
     commands: z.toJSONSchema(AgentCommandSchema),
     limits: {
       elements: LIMITS.elements,

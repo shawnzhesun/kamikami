@@ -7,7 +7,7 @@ Requires `kamikami-visual-v8`. An effect with an `overlay` recipe draws vector m
 - `src/overlay-kit.ts` — shared geometry (curves, arcs, polygons, arrowheads) and the drawing context.
 - `src/overlay-style.ts` — the shared line and fill styles.
 - `src/OverlayLayer.tsx` — the SVG renderer (patterns, glows, chalk grain, draw-on masks, wipe clips).
-- `src/overlay-cards.ts` — the gallery cards and their variations.
+- `src/overlay-cards.ts` — the gallery cards and their variations. Pack-only kinds (`packOnlyOverlayKinds`, such as the v9 halftone wash) have no card; their presets come in effect packs.
 
 ## Placement and units
 

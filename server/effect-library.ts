@@ -4,6 +4,8 @@ import { randomUUID } from "node:crypto";
 import {
   EffectBundleSchema,
   effectEngine,
+  parseEffectFile,
+  type EffectBundle,
   type UserEffect,
 } from "../src/effect-bundle";
 import { EffectSchema, type Effect } from "../src/model";
@@ -11,6 +13,28 @@ import { allBuiltinEffects, getEffectFamily } from "../src/builtin-effects";
 
 // Retain deleted IDs so project autosync cannot recreate removed personal presets.
 type StoredEffect = UserEffect & { deleted?: boolean };
+
+/** A library entry for an imported bundle, under a new effect ID. */
+function importedEntry(
+  bundle: EffectBundle,
+  id: string = randomUUID(),
+): UserEffect {
+  const presetFamilyId =
+    bundle.effect.presetFamilyId ?? getEffectFamily(bundle.effect.id)?.id;
+  return {
+    id,
+    collection: "library",
+    savedAt: new Date().toISOString(),
+    bundle: {
+      ...bundle,
+      effect: {
+        ...bundle.effect,
+        id: "user-" + id,
+        ...(presetFamilyId ? { presetFamilyId } : {}),
+      },
+    },
+  };
+}
 
 export class EffectLibrary {
   private queue = Promise.resolve();
@@ -20,11 +44,22 @@ export class EffectLibrary {
       const entries: StoredEffect[] = JSON.parse(
         await readFile(path.join(this.directory, "effects.json"), "utf8"),
       );
-      // Version-1 saved entries belonged to My effects.
-      return entries.map((entry) => ({
-        ...entry,
-        collection: entry.collection ?? "mine",
-      }));
+      // Version-1 saved entries belonged to My effects. Licenses are gone:
+      // every shared effect is free to use and share.
+      return entries.map(({ bundle, pack, ...entry }) => {
+        const { license: _l, ...plain } = bundle as typeof bundle & {
+          license?: string;
+        };
+        const { license: _p, ...packInfo } = (pack ?? {}) as NonNullable<
+          typeof pack
+        > & { license?: string };
+        return {
+          ...entry,
+          bundle: plain,
+          ...(pack ? { pack: packInfo } : {}),
+          collection: entry.collection ?? "mine",
+        };
+      });
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code === "ENOENT") return [];
       throw e;
@@ -56,25 +91,74 @@ export class EffectLibrary {
   }
   async import(input: unknown) {
     const bundle = EffectBundleSchema.parse(input);
-    const presetFamilyId =
-      bundle.effect.presetFamilyId ?? getEffectFamily(bundle.effect.id)?.id;
     return this.mutate((entries) => {
-      const id = randomUUID();
-      const entry: UserEffect = {
-        id,
-        collection: "library",
-        savedAt: new Date().toISOString(),
-        bundle: {
-          ...bundle,
-          effect: {
-            ...bundle.effect,
-            id: "user-" + id,
-            ...(presetFamilyId ? { presetFamilyId } : {}),
-          },
-        },
-      };
+      const entry = importedEntry(bundle);
       entries.push(entry);
       return entry;
+    });
+  }
+  /**
+   * Imports a single-effect bundle or a pack. A pack that is already
+   * installed is updated: effects keep their IDs (so projects and agents
+   * still find them), new ones are added and dropped ones are removed.
+   */
+  async importFile(input: unknown) {
+    const { pack, bundles } = parseEffectFile(input);
+    return this.mutate((entries) => {
+      if (!pack) {
+        const entry = importedEntry(bundles[0]);
+        entries.push(entry);
+        return { imported: [entry], updated: 0, removed: 0 };
+      }
+      const installed = entries.filter(
+        (e) => e.collection === "library" && e.pack?.id === pack.id,
+      );
+      const imported: UserEffect[] = [];
+      let updated = 0;
+      for (const bundle of bundles) {
+        const sourceId = bundle.effect.id;
+        const existing = installed.find((e) => e.packEffectId === sourceId);
+        if (existing) {
+          const live = !existing.deleted;
+          Object.assign(existing, importedEntry(bundle, existing.id), {
+            pack,
+            packEffectId: sourceId,
+          });
+          delete existing.deleted;
+          if (live) updated++;
+          imported.push(existing);
+        } else {
+          const entry = {
+            ...importedEntry(bundle),
+            pack,
+            packEffectId: sourceId,
+          };
+          entries.push(entry);
+          imported.push(entry);
+        }
+      }
+      let removed = 0;
+      for (const entry of installed)
+        if (!entry.deleted && !imported.includes(entry)) {
+          entry.deleted = true;
+          removed++;
+        }
+      return { pack, imported, updated, removed };
+    });
+  }
+  /** Removes an imported pack. Elements that use its effects keep their copies. */
+  async removePack(packId: string) {
+    if (typeof packId !== "string" || !packId)
+      throw new Error("Choose an imported pack.");
+    return this.mutate((entries) => {
+      const pack = entries.filter(
+        (e) => e.collection === "library" && e.pack?.id === packId,
+      );
+      const live = pack.filter((e) => !e.deleted);
+      if (!live.length) throw new Error("That pack isn't installed.");
+      // Kept as deleted, so project sync doesn't bring the effects back.
+      for (const entry of live) entry.deleted = true;
+      return { removed: live.length, packId };
     });
   }
   async save(input: unknown) {

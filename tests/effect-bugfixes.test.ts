@@ -22,7 +22,6 @@ import { GraphicEffects } from "../src/GraphicEffects";
 import { AnimatedText } from "../src/AnimatedText";
 import { effectPosterTime } from "../src/editor/EffectSample";
 import { fieldFrames, FieldSchema, DepthSchema } from "../src/motion";
-import { portableBundle, effectEngine } from "../src/effect-bundle";
 import { splitClips, trimClip } from "../src/editor/editing";
 import { TextEffectSchema } from "../src/text-effects";
 
@@ -199,23 +198,6 @@ test("gradient keeps an earlier neon glow", () => {
     }),
   );
   assert.match(html, /text-shadow:0 0/);
-});
-
-test("exported pre-v5 bundles omit presetFamilyId", () => {
-  const fork = effect({ presetFamilyId: "camera-zoom" });
-  const bundle = {
-    format: "frameforge-effect" as const,
-    version: 1 as const,
-    engine: effectEngine(fork),
-    name: "Fork",
-    author: "",
-    license: "",
-    description: "",
-    effect: fork,
-  };
-  assert.equal(portableBundle(bundle).effect.presetFamilyId, undefined);
-  const v5 = { ...bundle, engine: "kamikami-visual-v5" as const };
-  assert.equal(portableBundle(v5).effect.presetFamilyId, "camera-zoom");
 });
 
 test("right trims move a whole clip's exit timing but keep split timelines", () => {

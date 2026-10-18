@@ -325,11 +325,12 @@ export function OverlaySvg({
       (p.draw === undefined || p.draw > 0.001),
   );
   if (!shown.length) return null;
-  // Blended parts get their own SVG so they blend with what lies beneath it.
+  // Blended parts get their own SVG so they blend with what lies beneath it,
+  // other blended parts included: two multiplied inks overprint.
   const groups: OverlayPart[][] = [];
   for (const part of shown) {
     const last = groups.at(-1);
-    if (last && (last[0].blend ?? "") === (part.blend ?? "")) last.push(part);
+    if (last && !last[0].blend && !part.blend) last.push(part);
     else groups.push([part]);
   }
   return (

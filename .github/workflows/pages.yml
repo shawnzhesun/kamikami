@@ -5,7 +5,7 @@ name: Pages
 on:
   push:
     branches: [main]
-    paths: [site/**, .github/workflows/pages.yml]
+    paths: [site/**, examples/effects/**, .github/workflows/pages.yml]
   workflow_dispatch:
 
 permissions:
@@ -26,6 +26,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
+      # Packs are published from examples/effects, so there's one copy of each.
+      - run: mkdir -p site/packs && cp examples/effects/*.kamikami-effects.json site/packs/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site

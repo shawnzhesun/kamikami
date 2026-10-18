@@ -4,7 +4,6 @@
   "engine": "frameforge-curves-v1",
   "name": "Retro title sway",
   "author": "KamiKami demo",
-  "license": "Unspecified; contact the author before redistribution",
   "description": "Gentle horizontal oscillation (\u00b118 px) with a slight, phase-offset rotation sway (\u00b11.5\u00b0) for a nostalgic main-title feel.",
   "effect": {
     "id": "user-80271d00-e9f6-4965-bd7a-c18dda0282a4",

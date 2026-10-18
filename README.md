@@ -51,7 +51,7 @@ Most video editors are built for hands on a mouse. KamiKami is built so an agent
 - Hundreds of built-in effects, organized by what they do: how an element arrives, moves, leaves, what's drawn around it, its surface, its layout, and the final grade.
 - Kinetic typography, title animations, text looks, hand-drawn annotations, comic and broadcast overlays, film grain, light leaks and more.
 - Hover any card to preview it; drag it onto a clip to apply it.
-- Fork any effect into your own, and share effects as portable `.kamikami-effect.json` bundles.
+- Fork any effect into your own, and share a set of effects as one portable `.kamikami-effects.json` pack. Try [Riso](examples/effects/riso.kamikami-effects.json), a pack of risograph prints, type and halftone washes: **Effects → Import effects**.
 - Built-in open-licensed fonts, plus your own.
 
 ## Install on macOS

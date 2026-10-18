@@ -44,6 +44,8 @@ import { isLookKind } from "./text-looks";
 import { isLayoutKind } from "./text-layouts";
 import { visualNames, type VisualPass } from "./visual-effects";
 import { isStyleKind, styleControls } from "./StyleGraphicEffects";
+import { isPrintKind, printControls } from "./PrintGraphicEffects";
+import { RisoControls } from "./editor/RisoControls";
 import { isRevealKind, revealControls } from "./TransitionGraphicEffects";
 import { FontPicker } from "./editor/FontPicker";
 import { EffectSettingsDialog } from "./editor/EffectSettingsDialog";
@@ -85,6 +87,7 @@ import {
   Eye,
   EyeOff,
   Film,
+  FileDown,
   FilePlus2,
   FolderOpen,
   Pause,
@@ -129,9 +132,11 @@ import {
   effectCollections,
   libraryEffect,
   effectForApplication,
-  EffectBundleSchema,
   effectEngine,
-  portableBundle,
+  importSummary,
+  makeEffectPack,
+  type EffectImport,
+  type PackInfo,
   type UserEffect,
   type EffectBundle,
 } from "./effect-bundle";
@@ -152,6 +157,12 @@ import { EffectCard } from "./editor/EffectCard";
 import { MediaBrowser } from "./editor/MediaBrowser";
 import { AnalyzeDialog, AssetDetails } from "./editor/AnalysisDialogs";
 import { AgentsPanel } from "./editor/AgentsPanel";
+import {
+  ExportEffectsDialog,
+  PackHeader,
+  RemovePackDialog,
+  readEffectFiles,
+} from "./editor/EffectPacks";
 import { LibraryResize, libraryLimit } from "./editor/LibraryResize";
 import {
   AgentCommandSchema,
@@ -300,6 +311,12 @@ export function App() {
   const [effectTargetFilter, setEffectTargetFilter] = useState<
     "all" | "text" | "picture"
   >("all");
+  // "all", "builtin", "imported" (single files) or "pack:<id>".
+  const [effectCollection, setEffectCollection] = useState("all");
+  const [exportEffects, setExportEffects] = useState<{
+    preset?: PackInfo;
+  } | null>(null);
+  const [removePack, setRemovePack] = useState<PackInfo | null>(null);
   const deletedByTransaction = useRef(new WeakMap<Project, string[]>());
   const [mediaTrash, setMediaTrash] = useState<MediaAsset[]>([]);
   const [deleteProposal, setDeleteProposal] = useState<MediaAsset | null>(null);
@@ -354,8 +371,25 @@ export function App() {
       target === effectTargetFilter
     );
   };
+  const importedEntries = userEffects.filter((e) => e.collection === "library");
+  const installedPacks = [
+    ...new Map(
+      importedEntries.flatMap((e) => (e.pack ? [[e.pack.id, e.pack]] : [])),
+    ).values(),
+  ];
+  const shownPack = effectCollection.startsWith("pack:")
+    ? installedPacks.find((p) => "pack:" + p.id === effectCollection)
+    : undefined;
+  const inCollection = (effect: Effect) => {
+    if (effectCollection === "all") return true;
+    const entry = importedEntries.find((e) => e.bundle.effect.id === effect.id);
+    if (effectCollection === "builtin") return !entry;
+    if (effectCollection === "imported") return !!entry && !entry.pack;
+    return "pack:" + entry?.pack?.id === effectCollection;
+  };
   const visibleLibraryEffects = libraryEffects.filter(
     (e) =>
+      inCollection(e) &&
       matchesEffect(e) &&
       fitsTarget(e) &&
       (effectRoleFilter === "all" || effectRole(e).role === effectRoleFilter),
@@ -585,11 +619,20 @@ export function App() {
       return snapshot();
     }
     if (command.action === "export_effect_bundle") {
-      const entry = (await refreshEffects()).find(
-        (e) => e.id === command.userEffectId,
+      const entries = await refreshEffects();
+      const chosen = command.userEffectIds.map((id) => {
+        const entry = entries.find((e) => e.id === id);
+        if (!entry) throw new Error(`No library entry has the ID ${id}.`);
+        return entry.bundle;
+      });
+      return makeEffectPack(
+        {
+          name: command.name ?? chosen[0].name,
+          author: command.author ?? chosen[0].author,
+          description: command.description ?? "",
+        },
+        chosen,
       );
-      if (!entry) throw new Error("User effect not found.");
-      return portableBundle(entry.bundle);
     }
     if (editing())
       throw new Error(
@@ -691,18 +734,29 @@ export function App() {
           userEffects.find((e) => e.bundle.effect.id === effect.id)?.bundle
             .author ??
           "",
-        command.license ??
-          userEffects.find((e) => e.bundle.effect.id === effect.id)?.bundle
-            .license ??
-          "Free to use and share",
       );
       return { ...snapshot(), userEffect: entry };
     }
     if (command.action === "import_effect_bundle") {
-      const entry = await api("/api/effects/import", "POST", command.bundle);
+      const result: EffectImport = await api(
+        "/api/effects/import",
+        "POST",
+        command.bundle,
+      );
       await refreshEffects();
       setTab("effects");
-      return { ...snapshot(), userEffect: entry };
+      setStatus(`${request.clientName}: ${importSummary(result)}`);
+      return {
+        ...snapshot(),
+        pack: result.pack,
+        imported: result.imported.map((e) => ({
+          userEffectId: e.id,
+          effectId: e.bundle.effect.id,
+          name: e.bundle.effect.name,
+        })),
+        updated: result.updated,
+        removed: result.removed,
+      };
     }
     if (command.action === "render_frame") {
       if (command.frame >= current.current.duration * current.current.fps)
@@ -1179,12 +1233,41 @@ export function App() {
       setStatus((e as Error).message);
     }
   }
+  /** Imports bundles and packs; shows a pack on its own once it's in. */
+  async function importEffectFiles(files: File[]) {
+    if (!files.length) return;
+    const { ok, errors } = await readEffectFiles(files);
+    const done: string[] = [];
+    let pack: PackInfo | undefined;
+    for (const data of ok)
+      try {
+        const result: EffectImport = await api(
+          "/api/effects/import",
+          "POST",
+          data,
+        );
+        done.push(importSummary(result));
+        pack = result.pack ?? pack;
+      } catch (e) {
+        errors.push((e as Error).message);
+      }
+    await refreshEffects();
+    setTab("effects");
+    // Show the new pack whole, whatever the filters were.
+    if (done.length === 1 && pack) {
+      setEffectCollection("pack:" + pack.id);
+      setEffectRoleFilter("all");
+      setEffectTargetFilter("all");
+      setEffectSearch("");
+    }
+    setStatus(
+      [...done, ...errors.map((e) => `Couldn't import ${e}`)].join(" · "),
+    );
+  }
   async function persistEffect(
     effect: Effect,
     author = userEffects.find((entry) => entry.bundle.effect.id === effect.id)
       ?.bundle.author ?? "",
-    license = userEffects.find((entry) => entry.bundle.effect.id === effect.id)
-      ?.bundle.license ?? "Free to use and share",
   ) {
     const bundle: EffectBundle = {
       format: "frameforge-effect",
@@ -1193,7 +1276,6 @@ export function App() {
       name: effect.name,
       description: effect.description,
       author,
-      license,
       effect,
     };
     const entry: UserEffect = await api("/api/effects/save", "POST", bundle);
@@ -2218,9 +2300,11 @@ export function App() {
                   | (typeof revealControls)[keyof typeof revealControls]
                   | undefined = isStyleKind(pass.kind)
                   ? styleControls[pass.kind]
-                  : isRevealKind(pass.kind)
-                    ? revealControls[pass.kind]
-                    : undefined;
+                  : isPrintKind(pass.kind)
+                    ? printControls[pass.kind]
+                    : isRevealKind(pass.kind)
+                      ? revealControls[pass.kind]
+                      : undefined;
                 const hasColor = style
                   ? !!style.color
                   : ![
@@ -2511,6 +2595,9 @@ export function App() {
                       {style?.note && (
                         <small className="muted">{style.note}</small>
                       )}
+                      {pass.kind === "riso" && (
+                        <RisoControls pass={pass} onChange={change} />
+                      )}
                       <SpatialPassControls pass={pass} onChange={change} />
                       {!pass.field &&
                         !pass.particles &&
@@ -2725,6 +2812,39 @@ export function App() {
           base={project}
           onClose={() => setNewProjectSetup(false)}
           onCreate={(format, name) => void createProject(format, name)}
+        />
+      )}
+      {exportEffects && (
+        <ExportEffectsDialog
+          entries={userEffects}
+          preset={exportEffects.preset}
+          onClose={() => setExportEffects(null)}
+          onExported={(pack) => {
+            setExportEffects(null);
+            setStatus(
+              `Exported ${pack.name} (${pack.effects.length} effect${pack.effects.length === 1 ? "" : "s"})`,
+            );
+          }}
+        />
+      )}
+      {removePack && (
+        <RemovePackDialog
+          pack={removePack}
+          onClose={() => setRemovePack(null)}
+          onRemove={async () => {
+            const pack = removePack;
+            setRemovePack(null);
+            try {
+              await api("/api/effects/remove-pack", "POST", {
+                packId: pack.id,
+              });
+              await refreshEffects();
+              setEffectCollection("all");
+              setStatus(`Removed ${pack.name}`);
+            } catch (e) {
+              setStatus((e as Error).message);
+            }
+          }}
         />
       )}
       {projectSettings && (
@@ -2995,30 +3115,20 @@ export function App() {
               <div className="effect-library-actions">
                 <button onClick={() => effectFile.current?.click()}>
                   <FolderOpen size={13} />
-                  Import effect bundle
+                  Import effects
+                </button>
+                <button onClick={() => setExportEffects({})}>
+                  <FileDown size={13} />
+                  Export effects
                 </button>
                 <input
                   hidden
+                  multiple
                   type="file"
                   accept="application/json,.json"
                   ref={effectFile}
-                  onChange={async (e) => {
-                    try {
-                      const f = e.target.files?.[0];
-                      if (f) {
-                        if (f.size > 1024 * 1024)
-                          throw new Error("Effect bundle exceeds 1 MB.");
-                        await api(
-                          "/api/effects/import",
-                          "POST",
-                          EffectBundleSchema.parse(JSON.parse(await f.text())),
-                        );
-                        await refreshEffects();
-                        setStatus("Effect imported into the effects library");
-                      }
-                    } catch (err) {
-                      setStatus((err as Error).message);
-                    }
+                  onChange={(e) => {
+                    void importEffectFiles([...(e.target.files ?? [])]);
                     e.target.value = "";
                   }}
                 />
@@ -3043,6 +3153,24 @@ export function App() {
                     { value: "picture", label: "Fits pictures" },
                   ]}
                 />
+                {!!importedEntries.length && (
+                  <Dropdown
+                    label="Effect collection"
+                    value={effectCollection}
+                    onChange={setEffectCollection}
+                    options={[
+                      { value: "all", label: "All collections" },
+                      { value: "builtin", label: "Built-in" },
+                      ...installedPacks.map((p) => ({
+                        value: "pack:" + p.id,
+                        label: p.name,
+                      })),
+                      ...(importedEntries.some((e) => !e.pack)
+                        ? [{ value: "imported", label: "Imported effects" }]
+                        : []),
+                    ]}
+                  />
+                )}
               </div>
               <div
                 className="effect-roles"
@@ -3062,6 +3190,17 @@ export function App() {
                   </button>
                 ))}
               </div>
+              {shownPack && (
+                <PackHeader
+                  pack={shownPack}
+                  count={
+                    importedEntries.filter((e) => e.pack?.id === shownPack.id)
+                      .length
+                  }
+                  onExport={() => setExportEffects({ preset: shownPack })}
+                  onRemove={() => setRemovePack(shownPack)}
+                />
+              )}
               {!visibleLibraryEffects.length && (
                 <p className="effect-library-hint">
                   No matching library effects.

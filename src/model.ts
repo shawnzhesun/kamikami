@@ -61,6 +61,8 @@ export const LIMITS = {
   effects: 200,
   /** Effects stacked on one element. */
   elementEffects: 16,
+  /** Effects in one portable pack. */
+  packEffects: 100,
   seconds: 3600,
   importBytes: 4 * 1024 * 1024 * 1024,
 } as const;

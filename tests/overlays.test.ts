@@ -26,6 +26,7 @@ import {
   makeOverlay,
   overlayFeelNames,
   overlayKinds,
+  packOnlyOverlayKinds,
   overlayParts,
   overlayProgress,
   overlaySpecs,
@@ -73,11 +74,12 @@ const finite = (parts: unknown, label: string) =>
   assert.doesNotMatch(JSON.stringify(parts), /NaN|null|Infinity/, label);
 
 test("overlay cards cover every kind as v8 effects with finite previews", () => {
-  assert.equal(overlayKinds.length, 75);
+  assert.equal(overlayKinds.length, 76);
   assert.equal(overlayEffects.length, 76);
+  // Pack-only kinds have no card; their presets come in effect packs.
   assert.deepEqual(
     [...new Set(overlayEffects.map((e) => e.overlay!.kind))].sort(),
-    [...overlayKinds].sort(),
+    overlayKinds.filter((k) => !packOnlyOverlayKinds.includes(k)).sort(),
   );
   assert.ok(variants.length >= 280, `${variants.length} variations`);
   for (const effect of variants) {

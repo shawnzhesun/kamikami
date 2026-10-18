@@ -337,6 +337,14 @@ export function effectRole(effect: Effect): RoleInfo {
         ? R("out", "Break")
         : R("throughout", "Signal");
   }
+  // A riso print grows its dots in, prints them away, or stays a print.
+  const riso = effect.passes?.find((p) => p.kind === "riso");
+  if (riso)
+    return riso.timing === "in"
+      ? R("in", "Reveal")
+      : riso.timing === "out"
+        ? R("out", "Conceal")
+        : R("finish", "Illustration");
   // Custom pass and channel recipes: transitions by timing, else a finish.
   const timed = effect.passes?.find(
     (p) => p.timing === "in" || p.timing === "out",

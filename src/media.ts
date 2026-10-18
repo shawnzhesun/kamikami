@@ -5,6 +5,7 @@ import {
   usesV6Features,
   usesV7Features,
   usesV8Features,
+  usesV9Features,
 } from "./visual-effects";
 import { z } from "zod";
 
@@ -86,6 +87,9 @@ export async function api(url: string, method = "GET", body?: unknown) {
   const needsV8Engine = [...definitions, ...instanceSettings].some(
     usesV8Features,
   );
+  const needsV9Engine = [...definitions, ...instanceSettings].some(
+    usesV9Features,
+  );
   const needsV6Engine = [...definitions, ...instanceSettings].some(
     usesV6Features,
   );
@@ -111,6 +115,7 @@ export async function api(url: string, method = "GET", body?: unknown) {
         needsV6Engine ||
         needsV7Engine ||
         needsV8Engine ||
+        needsV9Engine ||
         needsMotionEngine))
   ) {
     const health = await api("/api/health");
@@ -119,6 +124,13 @@ export async function api(url: string, method = "GET", body?: unknown) {
     if (needsInstanceSupport && !(health.projectVersion >= 2))
       throw new Error(
         "The local service is outdated. Restart KamiKami's development process before saving independent effect settings.",
+      );
+    if (
+      needsV9Engine &&
+      !engineAtLeast(health.effectEngine, "kamikami-visual-v9")
+    )
+      throw new Error(
+        "The local service is outdated. Restart KamiKami with npm run desktop before saving or rendering riso print effects.",
       );
     if (
       needsV8Engine &&

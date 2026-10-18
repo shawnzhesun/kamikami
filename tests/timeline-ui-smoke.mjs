@@ -106,7 +106,9 @@ const fixture = {
       else if (req.url === "/api/effects/sync")
         result = await effectLibrary.syncProjectEffects(JSON.parse(body));
       else if (req.url === "/api/effects/import")
-        result = await effectLibrary.import(JSON.parse(body));
+        result = await effectLibrary.importFile(JSON.parse(body));
+      else if (req.url === "/api/effects/remove-pack")
+        result = await effectLibrary.removePack(JSON.parse(body).packId);
       else if (req.url === "/api/effects") result = await effectLibrary.list();
       else if (req.url === "/api/editor/poll")
         result = { primary: true, requests: [] };
@@ -1487,6 +1489,100 @@ try {
     path.join(output, "overlay-settings.png"),
     Buffer.from(settings.value.data, "base64"),
   );
+  // Effect packs: import a pack file, find it as its own collection, export
+  // it again, then remove it.
+  await click('button[aria-label="Close effect settings"]');
+  await wait(async () => !(await exists("dialog[open]")));
+  const packFile = {
+    format: "kamikami-effect-pack",
+    version: 1,
+    engine: "frameforge-curves-v1",
+    id: "ui-pack",
+    name: "UI Pack",
+    author: "QA",
+    description: "Two test effects",
+    effects: ["One", "Two"].map((name) => ({
+      effect: { ...initialProject.effects[0], id: name.toLowerCase(), name },
+    })),
+  };
+  await page.evaluate(
+    (files) => {
+      const input = [...document.querySelectorAll('input[type="file"]')].find(
+        (e) => e.accept === "application/json,.json",
+      );
+      const transfer = new DataTransfer();
+      for (const [name, body] of files)
+        transfer.items.add(new File([body], name));
+      input.files = transfer.files;
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    },
+    [
+      ["ui-pack.kamikami-effects.json", JSON.stringify(packFile)],
+      ["broken.json", "{"],
+    ],
+  );
+  await wait(() => exists('.pack-header[aria-label="UI Pack pack"]'));
+  assert.ok((await text()).includes("Imported UI Pack (2 effects)"));
+  assert.ok((await text()).includes("Couldn't import broken.json"));
+  assert.equal(
+    await page.evaluate(
+      () => document.querySelectorAll(".effects-grid .effect-card").length >= 2,
+    ),
+    true,
+  );
+  await page.evaluate(() => {
+    window.downloads = [];
+    HTMLAnchorElement.prototype.click = function () {
+      window.downloads.push(
+        fetch(this.href)
+          .then((r) => r.text())
+          .then((body) => ({ name: this.download, body })),
+      );
+    };
+  });
+  await page.evaluate(() =>
+    [...document.querySelectorAll(".pack-header button")]
+      .find((b) => b.textContent.trim() === "Export")
+      .click(),
+  );
+  await wait(() => exists("dialog[open] .export-effects"));
+  assert.equal(
+    await page.evaluate(
+      () => document.querySelector("dialog[open] .primary").textContent,
+    ),
+    "Export 2 effects",
+  );
+  const capture = async (name) =>
+    writeFile(
+      path.join(output, name),
+      Buffer.from(
+        (await client.send("Page.captureScreenshot", { format: "png" })).value
+          .data,
+        "base64",
+      ),
+    );
+  await capture("export-effects.png");
+  await click("dialog[open] .primary");
+  await wait(async () => !(await exists("dialog[open]")));
+  await capture("effect-pack.png");
+  const [download] = await page.evaluate(() => Promise.all(window.downloads));
+  assert.equal(download.name, "ui-pack.kamikami-effects.json");
+  const exportedPack = JSON.parse(download.body);
+  assert.equal(exportedPack.id, "ui-pack");
+  assert.deepEqual(
+    exportedPack.effects.map((e) => e.effect.name),
+    ["One", "Two"],
+  );
+  await page.evaluate(() =>
+    [...document.querySelectorAll(".pack-header button")]
+      .find((b) => b.textContent.trim() === "Remove pack")
+      .click(),
+  );
+  await wait(() => exists("dialog[open]"));
+  await click("dialog[open] .primary");
+  await wait(() => text().then((t) => t.includes("Removed UI Pack")));
+  assert.equal(await exists(".pack-header"), false);
+  assert.equal((await effectLibrary.list()).filter((e) => e.pack).length, 0);
   assert.deepEqual(errors, []);
   console.log(`Browser checks passed. Screenshots: ${output}`);
 } finally {

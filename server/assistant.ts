@@ -561,7 +561,7 @@ export class AssistantService {
             if (call.name === "export_effect_bundle")
               message.artifacts.push({
                 kind: "effect",
-                label: "Download effect",
+                label: "Download effects",
                 bundle: output,
               });
             step.status = "done";

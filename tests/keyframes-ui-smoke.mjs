@@ -96,7 +96,9 @@ const fixture = {
       else if (req.url === "/api/effects/sync")
         result = await effectLibrary.syncProjectEffects(JSON.parse(body));
       else if (req.url === "/api/effects/import")
-        result = await effectLibrary.import(JSON.parse(body));
+        result = await effectLibrary.importFile(JSON.parse(body));
+      else if (req.url === "/api/effects/remove-pack")
+        result = await effectLibrary.removePack(JSON.parse(body).packId);
       else if (req.url === "/api/effects") result = await effectLibrary.list();
       else if (req.url === "/api/editor/poll")
         result = { primary: true, requests: [] };

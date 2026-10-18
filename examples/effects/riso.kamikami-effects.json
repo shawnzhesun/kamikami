@@ -1,0 +1,498 @@
+{
+  "format": "kamikami-effect-pack",
+  "version": 1,
+  "engine": "kamikami-visual-v9",
+  "id": "riso",
+  "name": "Riso",
+  "author": "KamiKami",
+  "description": "Risograph printing for video: pictures and type separated into spot-ink halftone plates, printed out of register on warm paper, plus halftone washes behind elements. Darks come from overprinting, never black ink. Needs KamiKami's riso print engine (kamikami-visual-v9).",
+  "effects": [
+    {
+      "effect": {
+        "id": "riso-blue-pink",
+        "name": "Riso duo: blue and pink",
+        "description": "Prints any picture in blue and fluorescent pink, each its own halftone screen, a little out of register on warm paper. The classic riso pair.",
+        "channels": [],
+        "color": "#ffffff",
+        "tint": 0,
+        "passes": [
+          {
+            "kind": "riso",
+            "strength": 1,
+            "size": 0.45,
+            "speed": 0,
+            "color": "#f2ede3",
+            "secondary": "#0078bf",
+            "angle": 0,
+            "timing": "constant",
+            "seconds": 0.8,
+            "seed": 11,
+            "risoInks": ["#0078bf", "#ff48b0"],
+            "registration": 0.35,
+            "inkGrain": 0.3
+          }
+        ]
+      }
+    },
+    {
+      "effect": {
+        "id": "riso-teal-orange",
+        "name": "Riso duo: teal and orange",
+        "description": "Prints any picture in teal and orange halftone plates on warm paper, a sunset riso pairing.",
+        "channels": [],
+        "color": "#ffffff",
+        "tint": 0,
+        "passes": [
+          {
+            "kind": "riso",
+            "strength": 1,
+            "size": 0.45,
+            "speed": 0,
+            "color": "#f2ede3",
+            "secondary": "#0078bf",
+            "angle": 0,
+            "timing": "constant",
+            "seconds": 0.8,
+            "seed": 23,
+            "risoInks": ["#00838a", "#ff6c2f"],
+            "registration": 0.35,
+            "inkGrain": 0.3
+          }
+        ]
+      }
+    },
+    {
+      "effect": {
+        "id": "riso-mono-blue",
+        "name": "Riso mono: federal blue",
+        "description": "A single blue plate: every tone is one ink at a different dot size, on cream paper.",
+        "channels": [],
+        "color": "#ffffff",
+        "tint": 0,
+        "passes": [
+          {
+            "kind": "riso",
+            "strength": 1,
+            "size": 0.5,
+            "speed": 0,
+            "color": "#f2ede3",
+            "secondary": "#0078bf",
+            "angle": 0,
+            "timing": "constant",
+            "seconds": 0.8,
+            "seed": 31,
+            "risoInks": ["#3255a4"],
+            "registration": 0.35,
+            "inkGrain": 0.3
+          }
+        ]
+      }
+    },
+    {
+      "effect": {
+        "id": "riso-three-ink",
+        "name": "Riso three-ink",
+        "description": "Blue, fluorescent pink and yellow plates on their own screen angles, the closest riso gets to full color.",
+        "channels": [],
+        "color": "#ffffff",
+        "tint": 0,
+        "passes": [
+          {
+            "kind": "riso",
+            "strength": 1,
+            "size": 0.4,
+            "speed": 0,
+            "color": "#f2ede3",
+            "secondary": "#0078bf",
+            "angle": 0,
+            "timing": "constant",
+            "seconds": 0.8,
+            "seed": 47,
+            "risoInks": ["#0078bf", "#ff48b0", "#ffe800"],
+            "registration": 0.35,
+            "inkGrain": 0.3
+          }
+        ]
+      }
+    },
+    {
+      "effect": {
+        "id": "riso-shaky-press",
+        "name": "Shaky press",
+        "description": "A blue and pink print whose plates land somewhere new three times a second, like flipping through hand-pulled prints.",
+        "channels": [],
+        "color": "#ffffff",
+        "tint": 0,
+        "passes": [
+          {
+            "kind": "riso",
+            "strength": 1,
+            "size": 0.45,
+            "speed": 3,
+            "color": "#f2ede3",
+            "secondary": "#0078bf",
+            "angle": 0,
+            "timing": "constant",
+            "seconds": 0.8,
+            "seed": 59,
+            "risoInks": ["#0078bf", "#ff48b0"],
+            "registration": 0.7,
+            "inkGrain": 0.3
+          }
+        ]
+      }
+    },
+    {
+      "effect": {
+        "id": "riso-print-in",
+        "name": "Print in",
+        "description": "Entrance: the picture prints onto bare paper, dots growing from nothing to full ink.",
+        "channels": [],
+        "color": "#ffffff",
+        "tint": 0,
+        "passes": [
+          {
+            "kind": "riso",
+            "strength": 1,
+            "size": 0.45,
+            "speed": 0,
+            "color": "#f2ede3",
+            "secondary": "#0078bf",
+            "angle": 0,
+            "timing": "in",
+            "seconds": 1.2,
+            "seed": 67,
+            "risoInks": ["#0078bf", "#ff48b0"],
+            "registration": 0.35,
+            "inkGrain": 0.3
+          }
+        ]
+      }
+    },
+    {
+      "effect": {
+        "id": "riso-overprint-type",
+        "name": "Overprint type",
+        "description": "Text printed in two inks that miss each other: pink and blue fringes where the plates don't meet, a darker overprint where they do. Leaves no paper behind the letters.",
+        "channels": [],
+        "color": "#ffffff",
+        "tint": 0,
+        "passes": [
+          {
+            "kind": "riso",
+            "strength": 1,
+            "size": 0.3,
+            "speed": 0,
+            "color": "#f2ede3",
+            "secondary": "#0078bf",
+            "angle": 0,
+            "timing": "constant",
+            "seconds": 0.8,
+            "seed": 71,
+            "risoInks": ["#ff48b0", "#0078bf"],
+            "risoPaper": "clear",
+            "registration": 0.75,
+            "inkGrain": 0.3
+          }
+        ]
+      }
+    },
+    {
+      "effect": {
+        "id": "riso-gradient-type",
+        "name": "Screened gradient type",
+        "description": "A pink-to-blue gradient through the letters, printed as two halftone plates so the blend turns into dots.",
+        "channels": [],
+        "color": "#ffffff",
+        "tint": 0,
+        "passes": [
+          {
+            "kind": "riso",
+            "strength": 1,
+            "size": 0.35,
+            "speed": 0,
+            "color": "#f2ede3",
+            "secondary": "#0078bf",
+            "angle": 0,
+            "timing": "constant",
+            "seconds": 0.8,
+            "seed": 79,
+            "risoInks": ["#ff48b0", "#0078bf"],
+            "risoPaper": "clear",
+            "registration": 0.35,
+            "inkGrain": 0.3
+          }
+        ],
+        "text": {
+          "kind": "gradient",
+          "seconds": 1.5,
+          "stagger": 0.6,
+          "distance": 0.6,
+          "speed": 0.25,
+          "style": "rise",
+          "unit": "character",
+          "cursor": true,
+          "color": "#ff48b0",
+          "secondary": "#0078bf",
+          "seed": 17
+        }
+      }
+    },
+    {
+      "effect": {
+        "id": "riso-ink-in",
+        "name": "Ink in",
+        "description": "Entrance: letters print themselves, dots growing from nothing to solid ink. Leaves no paper behind the letters.",
+        "channels": [],
+        "color": "#ffffff",
+        "tint": 0,
+        "passes": [
+          {
+            "kind": "riso",
+            "strength": 1,
+            "size": 0.35,
+            "speed": 0,
+            "color": "#f2ede3",
+            "secondary": "#0078bf",
+            "angle": 0,
+            "timing": "in",
+            "seconds": 0.9,
+            "seed": 83,
+            "risoInks": ["#3255a4"],
+            "risoPaper": "clear",
+            "registration": 0.35,
+            "inkGrain": 0.3
+          }
+        ]
+      }
+    },
+    {
+      "effect": {
+        "id": "riso-ink-out",
+        "name": "Ink out",
+        "description": "Exit: the ink wears away into shrinking dots at the end of the clip.",
+        "channels": [],
+        "color": "#ffffff",
+        "tint": 0,
+        "passes": [
+          {
+            "kind": "riso",
+            "strength": 1,
+            "size": 0.35,
+            "speed": 0,
+            "color": "#f2ede3",
+            "secondary": "#0078bf",
+            "angle": 0,
+            "timing": "out",
+            "seconds": 0.9,
+            "seed": 89,
+            "risoInks": ["#3255a4"],
+            "risoPaper": "clear",
+            "registration": 0.35,
+            "inkGrain": 0.3
+          }
+        ]
+      }
+    },
+    {
+      "effect": {
+        "id": "riso-wash-sun",
+        "name": "Halftone sun",
+        "description": "A fluorescent pink halftone sun behind the element, its dots shrinking toward the edge.",
+        "channels": [],
+        "color": "#ffffff",
+        "tint": 0,
+        "overlay": {
+          "kind": "halftonewash",
+          "color": "#ff48b0",
+          "secondary": "#0078bf",
+          "strength": 1,
+          "anchor": "block",
+          "placement": "auto",
+          "pad": 1,
+          "size": 1,
+          "weight": 1,
+          "angle": 0,
+          "count": 1,
+          "seconds": 0.8,
+          "timing": "in",
+          "speed": 1,
+          "wobble": 0,
+          "boil": 0,
+          "seed": 3,
+          "variant": 0,
+          "stroke": "plain",
+          "fill": "auto",
+          "fillOpacity": 1,
+          "density": 1,
+          "roughness": 1,
+          "enter": "draw",
+          "exit": "match",
+          "loop": "none",
+          "tempo": 120,
+          "loopDepth": 0.5,
+          "offsetX": 0,
+          "offsetY": 0,
+          "rotate": 0,
+          "mirror": false,
+          "blend": "auto",
+          "layer": "behind",
+          "font": "auto",
+          "caps": false,
+          "shadow": 0,
+          "stagger": 0.3
+        }
+      }
+    },
+    {
+      "effect": {
+        "id": "riso-wash-horizon",
+        "name": "Halftone horizon",
+        "description": "Blue and pink halftone bands rising under the element, overprinting to navy where the dots meet.",
+        "channels": [],
+        "color": "#ffffff",
+        "tint": 0,
+        "overlay": {
+          "kind": "halftonewash",
+          "color": "#0078bf",
+          "secondary": "#ff48b0",
+          "strength": 1,
+          "anchor": "block",
+          "placement": "auto",
+          "pad": 1,
+          "size": 1,
+          "weight": 1,
+          "angle": 0,
+          "count": 2,
+          "seconds": 0.8,
+          "timing": "in",
+          "speed": 1,
+          "wobble": 0,
+          "boil": 0,
+          "seed": 5,
+          "variant": 1,
+          "stroke": "plain",
+          "fill": "auto",
+          "fillOpacity": 1,
+          "density": 1,
+          "roughness": 1,
+          "enter": "draw",
+          "exit": "match",
+          "loop": "none",
+          "tempo": 120,
+          "loopDepth": 0.5,
+          "offsetX": 0,
+          "offsetY": 0,
+          "rotate": 0,
+          "mirror": false,
+          "blend": "auto",
+          "layer": "behind",
+          "font": "auto",
+          "caps": false,
+          "shadow": 0,
+          "stagger": 0.3
+        }
+      }
+    },
+    {
+      "effect": {
+        "id": "riso-wash-corner",
+        "name": "Halftone corner",
+        "description": "An orange tone fading in from the lower left corner.",
+        "channels": [],
+        "color": "#ffffff",
+        "tint": 0,
+        "overlay": {
+          "kind": "halftonewash",
+          "color": "#ff6c2f",
+          "secondary": "#0078bf",
+          "strength": 1,
+          "anchor": "block",
+          "placement": "auto",
+          "pad": 1,
+          "size": 1,
+          "weight": 1,
+          "angle": 0,
+          "count": 1,
+          "seconds": 0.8,
+          "timing": "in",
+          "speed": 1,
+          "wobble": 0,
+          "boil": 0,
+          "seed": 7,
+          "variant": 2,
+          "stroke": "plain",
+          "fill": "auto",
+          "fillOpacity": 1,
+          "density": 1,
+          "roughness": 1,
+          "enter": "draw",
+          "exit": "match",
+          "loop": "none",
+          "tempo": 120,
+          "loopDepth": 0.5,
+          "offsetX": 0,
+          "offsetY": 0,
+          "rotate": 0,
+          "mirror": false,
+          "blend": "auto",
+          "layer": "behind",
+          "font": "auto",
+          "caps": false,
+          "shadow": 0,
+          "stagger": 0.3
+        }
+      }
+    },
+    {
+      "effect": {
+        "id": "riso-wash-ring",
+        "name": "Halftone halo",
+        "description": "A teal halftone ring around the element, densest in its middle.",
+        "channels": [],
+        "color": "#ffffff",
+        "tint": 0,
+        "overlay": {
+          "kind": "halftonewash",
+          "color": "#00838a",
+          "secondary": "#ffe800",
+          "strength": 1,
+          "anchor": "block",
+          "placement": "auto",
+          "pad": 1,
+          "size": 1,
+          "weight": 1,
+          "angle": 0,
+          "count": 2,
+          "seconds": 0.8,
+          "timing": "in",
+          "speed": 1,
+          "wobble": 0,
+          "boil": 0,
+          "seed": 9,
+          "variant": 3,
+          "stroke": "plain",
+          "fill": "auto",
+          "fillOpacity": 1,
+          "density": 1,
+          "roughness": 1,
+          "enter": "draw",
+          "exit": "match",
+          "loop": "none",
+          "tempo": 120,
+          "loopDepth": 0.5,
+          "offsetX": 0,
+          "offsetY": 0,
+          "rotate": 0,
+          "mirror": false,
+          "blend": "auto",
+          "layer": "behind",
+          "font": "auto",
+          "caps": false,
+          "shadow": 0,
+          "stagger": 0.3
+        }
+      }
+    }
+  ]
+}

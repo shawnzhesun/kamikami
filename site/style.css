@@ -382,3 +382,53 @@ footer img {
     transition: none;
   }
 }
+
+/* Effect packs. */
+.pack {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  gap: clamp(1.5rem, 4vw, 3rem);
+  align-items: center;
+}
+.pack-preview {
+  width: 100%;
+  height: auto;
+  border-radius: 14px;
+  border: 3px solid var(--brown);
+  box-shadow: 10px 10px 0 var(--coral);
+  background: var(--cream);
+}
+.pack-body h3 {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: clamp(1.6rem, 3vw, 2.2rem);
+  margin: 0 0 0.8rem;
+}
+.pack-body p {
+  margin: 0 0 0.8rem;
+}
+.pack-body .actions {
+  margin: 1.4rem 0 0.8rem;
+}
+.pack-how {
+  margin-top: 3rem;
+  padding: 1.5rem;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--cream) 8%, var(--blue));
+  border: 1px solid color-mix(in srgb, var(--cream) 22%, var(--blue));
+}
+.pack-how h3 {
+  margin-top: 0;
+}
+.pack-how ol {
+  margin: 0 0 0.8rem;
+  padding-left: 1.3rem;
+}
+.pack-how li + li {
+  margin-top: 0.4rem;
+}
+@media (max-width: 900px) {
+  .pack {
+    grid-template-columns: 1fr;
+  }
+}

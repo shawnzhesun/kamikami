@@ -252,19 +252,22 @@ try {
   const saved = await edit("save_user_effect", {
     effectId: effect.id,
     author: "KamiKami QA",
-    license: "CC0-1.0",
   });
   const portable = await call("export_effect_bundle", {
-    userEffectId: saved.userEffect.id,
+    userEffectIds: [saved.userEffect.id],
+    name: "QA pack",
   });
+  assert.equal(portable.format, "kamikami-effect-pack");
   assert.equal(portable.engine, "frameforge-curves-v1");
+  assert.equal(portable.author, "KamiKami QA");
   const imported = await call("import_effect_bundle", { bundle: portable });
+  assert.equal(imported.pack.id, "qa-pack");
   assert.notEqual(
-    imported.userEffect.bundle.effect.id,
+    imported.imported[0].effectId,
     saved.userEffect.bundle.effect.id,
   );
   await edit("apply_effect", {
-    effectId: imported.userEffect.bundle.effect.id,
+    effectId: imported.imported[0].effectId,
     layerIds: [titleId],
   });
   await edit("remove_effect", { effectId: effect.id, layerIds: [imageId] });

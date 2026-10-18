@@ -1,209 +1,233 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>KamiKami: the open source video editor for AI agents</title>
-    <meta
-      name="description"
-      content="KamiKami is an open source video editor designed for AI agents. Connect Claude Code, Codex or any MCP client and edit video on a real timeline."
-    />
-    <meta property="og:title" content="KamiKami: the video editor for AI agents" />
-    <meta
-      property="og:description"
-      content="Open source. Local. Connect Claude Code, Codex or any MCP client and edit video on a real timeline."
-    />
-    <meta property="og:image" content="https://shawnzhesun.github.io/kamikami/assets/poster.jpg" />
-    <meta property="og:type" content="website" />
-    <meta name="twitter:card" content="summary_large_image" />
-    <link rel="icon" type="image/png" href="assets/favicon.png" />
-    <link rel="preload" href="assets/DelaGothicOne-Regular.woff2" as="font" type="font/woff2" crossorigin />
-    <link rel="stylesheet" href="style.css" />
-  </head>
-  <body>
-    <a class="skip" href="#main">Skip to content</a>
-    <header class="nav">
-      <a class="brand" href="#top" aria-label="KamiKami home">
-        <img src="assets/icon.png" alt="" width="32" height="32" />
-        <span>KamiKami</span>
-      </a>
-      <nav aria-label="Sections">
-        <a href="#features">Features</a>
-        <a href="#agents">Agents</a>
-        <a href="#install">Install</a>
-        <a href="https://github.com/shawnzhesun/kamikami">GitHub</a>
-      </nav>
-    </header>
 
-    <main id="main">
-      <section class="hero" id="top">
-        <div class="hero-copy">
-          <p class="eyebrow">Open source · Local · MCP</p>
-          <h1>The video editor your agent can drive.</h1>
-          <p class="lede">
-            KamiKami is a real timeline editor built for AI agents. Tell Claude Code, Codex or any MCP
-            client what you want, and watch it cut, title and animate your video while you stay in
-            control of every frame.
-          </p>
-          <div class="actions">
-            <a
-              class="button primary"
-              data-download
-              href="https://github.com/shawnzhesun/kamikami/releases/latest/download/KamiKami-mac-arm64.dmg"
-            >
-              <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20"><path fill="currentColor" d="M16.4 12.6c0-2.4 2-3.6 2.1-3.7-1.1-1.7-2.9-1.9-3.5-1.9-1.5-.2-2.9.9-3.7.9-.8 0-1.9-.9-3.2-.8-1.6 0-3.2 1-4 2.4-1.7 3-.4 7.4 1.2 9.8.8 1.2 1.8 2.5 3 2.4 1.2 0 1.7-.8 3.2-.8s1.9.8 3.2.8c1.3 0 2.2-1.2 3-2.4.9-1.4 1.3-2.7 1.3-2.8-.1 0-2.6-1-2.6-3.9zM14 5.5c.7-.8 1.1-1.9 1-3-1 0-2.1.7-2.8 1.5-.6.7-1.2 1.8-1 2.9 1 .1 2.1-.6 2.8-1.4z"/></svg>
-              <span>Download for macOS</span>
-            </a>
-            <a class="button" href="https://github.com/shawnzhesun/kamikami">View on GitHub</a>
-          </div>
-          <p class="fineprint" data-release>Apple Silicon · macOS 12 or later · Free and MIT licensed</p>
-        </div>
-        <figure class="hero-video">
-          <video
-            src="assets/demo.mp4"
-            poster="assets/poster.jpg"
-            autoplay
-            muted
-            loop
-            playsinline
-            aria-label="A short title sequence made in KamiKami"
-          ></video>
-          <figcaption>Made in KamiKami, entirely through MCP tool calls.</figcaption>
-        </figure>
-      </section>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>KamiKami: the open source video editor for AI agents</title>
+  <meta name="description"
+    content="KamiKami is an open source video editor designed for AI agents. Connect Claude Code, Codex or any MCP client and edit video on a real timeline." />
+  <meta property="og:title" content="KamiKami: the video editor for AI agents" />
+  <meta property="og:description"
+    content="Open source. Local. Connect Claude Code, Codex or any MCP client and edit video on a real timeline." />
+  <meta property="og:image" content="https://shawnzhesun.github.io/kamikami/assets/poster.jpg" />
+  <meta property="og:type" content="website" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="icon" type="image/png" href="assets/favicon.png" />
+  <link rel="preload" href="assets/DelaGothicOne-Regular.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="stylesheet" href="style.css" />
+</head>
 
-      <section class="band" id="agents" aria-labelledby="agents-title">
-        <div class="section-head">
-          <p class="eyebrow">How it works</p>
-          <h2 id="agents-title">Three steps from idea to export.</h2>
-        </div>
-        <ol class="steps">
-          <li>
-            <span class="step-num">1</span>
-            <h3>Install KamiKami</h3>
-            <p>One app with everything inside: the editor, the renderer and the MCP server. No Node, Python or Homebrew.</p>
-          </li>
-          <li>
-            <span class="step-num">2</span>
-            <h3>Connect your agent</h3>
-            <p>Run one command, or copy it from <strong>Assistant settings → Agent apps</strong> in the app.</p>
-            <div class="code">
-              <code id="cmd-claude">claude mcp add --transport stdio --scope user kamikami -- /Applications/KamiKami.app/Contents/Resources/bin/kamikami-mcp</code>
-              <button type="button" data-copy="cmd-claude">Copy</button>
-            </div>
-            <p class="small">Codex, Claude Desktop, Cursor and other MCP clients work too; see the <a href="https://github.com/shawnzhesun/kamikami#connect-your-agent">setup guide</a>.</p>
-          </li>
-          <li>
-            <span class="step-num">3</span>
-            <h3>Ask for the edit</h3>
-            <blockquote>“Cut these clips to the beat of the song, add a bold title, and give it a warm film look.”</blockquote>
-            <p>Every change lands on the open timeline, in your undo history.</p>
-          </li>
-        </ol>
-      </section>
+<body>
+  <a class="skip" href="#main">Skip to content</a>
+  <header class="nav">
+    <a class="brand" href="#top" aria-label="KamiKami home">
+      <img src="assets/icon.png" alt="" width="32" height="32" />
+      <span>KamiKami</span>
+    </a>
+    <nav aria-label="Sections">
+      <a href="#features">Features</a>
+      <a href="#agents">Agents</a>
+      <a href="#packs">Packs</a>
+      <a href="#install">Install</a>
+      <a href="https://github.com/shawnzhesun/kamikami">GitHub</a>
+    </nav>
+  </header>
 
-      <section id="features" aria-labelledby="features-title">
-        <div class="section-head">
-          <p class="eyebrow">Features</p>
-          <h2 id="features-title">Built for agents. Still a real editor.</h2>
-        </div>
-        <div class="grid">
-          <article class="card">
-            <h3>Agents edit the timeline you see</h3>
-            <p>A full MCP toolset: import media, cut and trim, place titles, apply effects, set keyframes and export. You watch it happen and can undo any step.</p>
-          </article>
-          <article class="card">
-            <h3>Agents check their work</h3>
-            <p>They render exact frames and timeline ranges, look through your footage, and verify the result before they say it's done.</p>
-          </article>
-          <article class="card">
-            <h3>Hundreds of effects</h3>
-            <p>Kinetic type, title animations, hand-drawn annotations, comic and broadcast overlays, film grain and light leaks, organized by what they do.</p>
-          </article>
-          <article class="card">
-            <h3>Effects are data</h3>
-            <p>Every effect is a declarative recipe, so agents can find, tune and write new ones safely. Share them as portable bundles.</p>
-          </article>
-          <article class="card">
-            <h3>Preview matches export</h3>
-            <p>Effects are pure functions of the frame. Idle time renders the timeline with the export renderer, so playback shows the final video.</p>
-          </article>
-          <article class="card">
-            <h3>Local and private</h3>
-            <p>Your media and projects stay on your Mac. Nothing leaves it unless you connect an AI provider for the built-in assistant or media analysis.</p>
-          </article>
-        </div>
-        <figure class="shot">
-          <img
-            src="assets/editor.jpg"
-            width="1600"
-            height="1000"
-            loading="lazy"
-            alt="The KamiKami editor with the effects library, the canvas, a multi-track timeline and the inspector"
-          />
-        </figure>
-      </section>
-
-      <section class="band" aria-labelledby="styles-title">
-        <div class="section-head">
-          <p class="eyebrow">Coming soon</p>
-          <h2 id="styles-title">Style packs</h2>
-          <p class="lede">
-            Download effect bundles grouped by visual style, from comic ink to broadcast to film, and
-            drop them into KamiKami. Your agent can use them right away.
-          </p>
-        </div>
-      </section>
-
-      <section id="install" aria-labelledby="install-title">
-        <div class="section-head">
-          <p class="eyebrow">Install</p>
-          <h2 id="install-title">Get KamiKami for macOS</h2>
-        </div>
-        <div class="install">
-          <ol>
-            <li>
-              Download
-              <a data-download href="https://github.com/shawnzhesun/kamikami/releases/latest/download/KamiKami-mac-arm64.dmg">KamiKami-mac-arm64.dmg</a>.
-            </li>
-            <li>Open it and drag <strong>KamiKami</strong> into <strong>Applications</strong>.</li>
-            <li>Open KamiKami from Applications.</li>
-          </ol>
-          <aside class="note">
-            <h3>First launch</h3>
-            <p>
-              Early releases aren't notarized by Apple yet, so macOS blocks the first launch. Close
-              the warning, open <strong>System Settings → Privacy &amp; Security</strong>, and click
-              <strong>Open Anyway</strong> next to the KamiKami message. You only do this once.
-            </p>
-            <p>Or run this in Terminal:</p>
-            <div class="code">
-              <code id="cmd-xattr">xattr -dr com.apple.quarantine /Applications/KamiKami.app</code>
-              <button type="button" data-copy="cmd-xattr">Copy</button>
-            </div>
-          </aside>
-        </div>
-        <p class="small">
-          Requires an Apple Silicon Mac (M1 or later) with macOS 12 or later. Windows and Linux are on the
-          <a href="https://github.com/shawnzhesun/kamikami/blob/main/docs/roadmap.md">roadmap</a>.
-          Prefer to build it yourself? See
-          <a href="https://github.com/shawnzhesun/kamikami/blob/main/docs/development.md">Build from source</a>.
+  <main id="main">
+    <section class="hero" id="top">
+      <div class="hero-copy">
+        <p class="eyebrow">Open source · Local · MCP</p>
+        <h1>The video editor your agent can drive.</h1>
+        <p class="lede">
+          KamiKami is a real timeline editor built for AI agents. Tell Claude Code, Codex or any MCP
+          client what you want, and watch it cut, title and animate your video while you stay in
+          control of every frame.
         </p>
-      </section>
-    </main>
+        <div class="actions">
+          <a class="button primary" data-download
+            href="https://github.com/shawnzhesun/kamikami/releases/latest/download/KamiKami-mac-arm64.dmg">
+            <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20">
+              <path fill="currentColor"
+                d="M16.4 12.6c0-2.4 2-3.6 2.1-3.7-1.1-1.7-2.9-1.9-3.5-1.9-1.5-.2-2.9.9-3.7.9-.8 0-1.9-.9-3.2-.8-1.6 0-3.2 1-4 2.4-1.7 3-.4 7.4 1.2 9.8.8 1.2 1.8 2.5 3 2.4 1.2 0 1.7-.8 3.2-.8s1.9.8 3.2.8c1.3 0 2.2-1.2 3-2.4.9-1.4 1.3-2.7 1.3-2.8-.1 0-2.6-1-2.6-3.9zM14 5.5c.7-.8 1.1-1.9 1-3-1 0-2.1.7-2.8 1.5-.6.7-1.2 1.8-1 2.9 1 .1 2.1-.6 2.8-1.4z" />
+            </svg>
+            <span>Download for macOS</span>
+          </a>
+          <a class="button" href="https://github.com/shawnzhesun/kamikami">View on GitHub</a>
+        </div>
+        <p class="fineprint" data-release>Apple Silicon · macOS 12 or later · Free and MIT licensed</p>
+      </div>
+      <figure class="hero-video">
+        <video src="assets/demo.mp4" poster="assets/poster.jpg" autoplay muted loop playsinline
+          aria-label="A short title sequence made in KamiKami"></video>
+        <figcaption>Made in KamiKami, entirely through MCP tool calls.</figcaption>
+      </figure>
+    </section>
 
-    <footer>
-      <p>
-        <img src="assets/icon.png" alt="" width="20" height="20" />
-        KamiKami is open source under the
-        <a href="https://github.com/shawnzhesun/kamikami/blob/main/LICENSE">MIT license</a>.
-      </p>
+    <section class="band" id="agents" aria-labelledby="agents-title">
+      <div class="section-head">
+        <p class="eyebrow">How it works</p>
+        <h2 id="agents-title">Three steps from idea to export.</h2>
+      </div>
+      <ol class="steps">
+        <li>
+          <span class="step-num">1</span>
+          <h3>Install KamiKami</h3>
+          <p>One app with everything inside: the editor, the renderer and the MCP server. No Node, Python or Homebrew.
+          </p>
+        </li>
+        <li>
+          <span class="step-num">2</span>
+          <h3>Connect your agent</h3>
+          <p>Run one command, or copy it from <strong>Assistant settings → Agent apps</strong> in the app.</p>
+          <div class="code">
+            <code
+              id="cmd-claude">claude mcp add --transport stdio --scope user kamikami -- /Applications/KamiKami.app/Contents/Resources/bin/kamikami-mcp</code>
+            <button type="button" data-copy="cmd-claude">Copy</button>
+          </div>
+          <p class="small">Codex, Claude Desktop, Cursor and other MCP clients work too; see the <a
+              href="https://github.com/shawnzhesun/kamikami#connect-your-agent">setup guide</a>.</p>
+        </li>
+        <li>
+          <span class="step-num">3</span>
+          <h3>Ask for the edit</h3>
+          <blockquote>“Cut these clips to the beat of the song, add a bold title, and give it a warm film look.”
+          </blockquote>
+          <p>Every change lands on the open timeline, in your undo history.</p>
+        </li>
+      </ol>
+    </section>
+
+    <section id="features" aria-labelledby="features-title">
+      <div class="section-head">
+        <p class="eyebrow">Features</p>
+        <h2 id="features-title">Built for agents. Still a real editor.</h2>
+      </div>
+      <div class="grid">
+        <article class="card">
+          <h3>Agents edit the timeline you see</h3>
+          <p>A full MCP toolset: import media, cut and trim, place titles, apply effects, set keyframes and export. You
+            watch it happen and can undo any step.</p>
+        </article>
+        <article class="card">
+          <h3>Agents check their work</h3>
+          <p>They render exact frames and timeline ranges, look through your footage, and verify the result before they
+            say it's done.</p>
+        </article>
+        <article class="card">
+          <h3>Hundreds of effects</h3>
+          <p>Kinetic type, title animations, hand-drawn annotations, comic and broadcast overlays, film grain and light
+            leaks, organized by what they do.</p>
+        </article>
+        <article class="card">
+          <h3>Effects are data</h3>
+          <p>Every effect is a declarative recipe, so agents can find, tune and write new ones safely. Share them as
+            portable bundles.</p>
+        </article>
+        <article class="card">
+          <h3>Preview matches export</h3>
+          <p>Effects are pure functions of the frame. Idle time renders the timeline with the export renderer, so
+            playback shows the final video.</p>
+        </article>
+        <article class="card">
+          <h3>Local and private</h3>
+          <p>Your media and projects stay on your Mac. Nothing leaves it unless you connect an AI provider for the
+            built-in assistant or media analysis.</p>
+        </article>
+      </div>
+      <figure class="shot">
+        <img src="assets/editor.jpg" width="1600" height="1000" loading="lazy"
+          alt="The KamiKami editor with the effects library, the canvas, a multi-track timeline and the inspector" />
+      </figure>
+    </section>
+
+    <section class="band" id="packs" aria-labelledby="packs-title">
+      <div class="section-head">
+        <p class="eyebrow">Effect packs</p>
+        <h2 id="packs-title">Download a style</h2>
+        <p class="lede">
+          Effect packs bundle a whole visual style into one file. Import it into KamiKami and your agent can use every
+          effect in it right away.
+        </p>
+      </div>
+      <article class="pack" aria-labelledby="pack-riso">
+        <img class="pack-preview" src="assets/packs/riso.gif" width="600" height="338" loading="lazy"
+          alt="A sunset landscape printing in as blue and pink risograph dots, then reprinted in teal and orange, then the word Riso overprinted on a pink halftone sun" />
+        <div class="pack-body">
+          <h3 id="pack-riso">Riso</h3>
+          <p>
+            Risograph printing for video. Pictures and type separate into spot-ink halftone plates, print a little
+            out of register on warm paper, and overprint into their darks. Plus halftone washes behind your titles.
+          </p>
+          <p class="small">14 effects: blue and pink, teal and orange, mono and three-ink prints; shaky press; print
+            in; overprint and screened gradient type; ink in and out; halftone sun, horizon, corner and halo.</p>
+          <div class="actions">
+            <a class="button primary" href="packs/riso.kamikami-effects.json" download>
+              Download pack
+            </a>
+          </div>
+          <p class="small">Free to use and share · Needs KamiKami 0.2 or later</p>
+        </div>
+      </article>
+      <div class="pack-how">
+        <h3>Add a pack</h3>
+        <ol>
+          <li>Download the pack file.</li>
+          <li>In KamiKami, open <strong>Effects</strong> and click <strong>Import effects</strong>, or ask your agent
+            to import it.</li>
+          <li>Pick the pack in the collection menu to see its effects, then drag one onto a clip.</li>
+        </ol>
+        <p class="small">To share your own, choose <strong>Export effects</strong>: it saves any of your effects as
+          one pack file.</p>
+      </div>
+    </section>
+
+    <section id="install" aria-labelledby="install-title">
+      <div class="section-head">
+        <p class="eyebrow">Install</p>
+        <h2 id="install-title">Get KamiKami for macOS</h2>
+      </div>
+      <div class="install">
+        <ol>
+          <li>
+            Download
+            <a data-download
+              href="https://github.com/shawnzhesun/kamikami/releases/latest/download/KamiKami-mac-arm64.dmg">KamiKami-mac-arm64.dmg</a>.
+          </li>
+          <li>Open it and drag <strong>KamiKami</strong> into <strong>Applications</strong>.</li>
+          <li>Open KamiKami from Applications.</li>
+        </ol>
+        <aside class="note">
+          <h3>First launch</h3>
+          <p>
+            Early releases aren't notarized by Apple yet, so macOS blocks the first launch. Close
+            the warning, open <strong>System Settings → Privacy &amp; Security</strong>, and click
+            <strong>Open Anyway</strong> next to the KamiKami message. You only do this once.
+          </p>
+          <p>Or run this in Terminal:</p>
+          <div class="code">
+            <code id="cmd-xattr">xattr -dr com.apple.quarantine /Applications/KamiKami.app</code>
+            <button type="button" data-copy="cmd-xattr">Copy</button>
+          </div>
+        </aside>
+      </div>
       <p class="small">
-        Bundled components keep their own licenses, including
-        <a href="https://www.remotion.dev/license">Remotion</a>. Site fonts:
-        <a href="assets/FONTS.txt">SIL Open Font License</a>.
+        Requires an Apple Silicon Mac (M1 or later) with macOS 12 or later. Windows and Linux are on the
+        <a href="https://github.com/shawnzhesun/kamikami/blob/main/docs/roadmap.md">roadmap</a>.
+        Prefer to build it yourself? See
+        <a href="https://github.com/shawnzhesun/kamikami/blob/main/docs/development.md">Build from source</a>.
       </p>
-    </footer>
-    <script src="main.js" defer></script>
-  </body>
+    </section>
+  </main>
+
+  <footer>
+    <p>
+      <img src="assets/icon.png" alt="" width="20" height="20" />
+      KamiKami is open source under the
+      <a href="https://github.com/shawnzhesun/kamikami/blob/main/LICENSE">MIT license</a>.
+    </p>
+  </footer>
+  <script src="main.js" defer></script>
+</body>
+
 </html>

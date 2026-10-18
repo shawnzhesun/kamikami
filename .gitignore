@@ -10,3 +10,6 @@ dist/
 desktop-build/
 release/
 .cache/
+
+# Copied from examples/effects by the Pages workflow.
+site/packs/

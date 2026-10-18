@@ -1,9 +1,15 @@
 import React, { useId } from "react";
-import { effectRandom, visualFrame, type VisualPass } from "./visual-effects";
+import {
+  clamp01,
+  effectRandom,
+  visualFrame,
+  type VisualPass,
+} from "./visual-effects";
+import { isPrintKind, risoFilterNodes } from "./PrintGraphicEffects";
 import { frameUnit, type Effect, type Layer } from "./model";
 import { instanceAmountAt, resolveEffectInstanceAt } from "./effect-instance";
 import { GraphicMapEffects } from "./GraphicMapEffects";
-import { stretchedImage, svgImage } from "./graphic-maps";
+import { stretchedImage, svgImage, wholeCell } from "./graphic-maps";
 import { ObjectField, depthParticleSvg } from "./SpatialGraphicEffects";
 import {
   isRevealKind,
@@ -18,21 +24,6 @@ import {
 
 const rgb = (color: string) =>
   [1, 3, 5].map((i) => parseInt(color.slice(i, i + 2), 16) / 255);
-
-/**
- * The whole number of pixels, within `min`–`max`, that holds a whole number
- * of repeats closest to one every `period` pixels (none when `period` is 0
- * or longer than the cell).
- */
-function wholeCell(period: number, min: number, max: number) {
-  let best = { size: min, count: 0, error: Infinity };
-  for (let size = min; size <= max; size++) {
-    const count = period ? Math.round(size / period) : 0;
-    const error = Math.abs(count / size - (period ? 1 / period : 0));
-    if (error < best.error - 1e-12) best = { size, count, error };
-  }
-  return best;
-}
 
 /**
  * One repeating cell of a line or dot screen at `angle` degrees, with its
@@ -152,7 +143,10 @@ function Pass({
 }) {
   const id = `fx-${useId().replace(/:/g, "")}`;
   const f = visualFrame(pass, time, duration, amount);
-  const s = f.strength,
+  // A riso print stays a print while its timing grows or wears the ink;
+  // other passes fade their whole strength with the timing.
+  const riso = pass.kind === "riso";
+  const s = riso ? clamp01(pass.strength * amount) : f.strength,
     z = pass.size;
   // Reference pixels at a 1080 short side, so vertical frames match landscape.
   const unit = frameUnit({ width: w, height: h });
@@ -193,7 +187,22 @@ function Pass({
   const radial = (inner: string, outer: string, x = 50, y = 50, radius = 65) =>
     `<defs><radialGradient id="g" cx="${x}%" cy="${y}%" r="${radius}%"><stop stop-color="${inner}"/><stop offset="1" stop-color="${outer}"/></radialGradient></defs><rect width="100%" height="100%" fill="url(#g)"/>`;
   let nodes: React.ReactNode = null;
-  if (s > 0 && isStyleKind(pass.kind))
+  if (s > 0 && isPrintKind(pass.kind))
+    nodes = risoFilterNodes({
+      pass,
+      w,
+      h,
+      unit,
+      s,
+      ink:
+        pass.timing === "in" || pass.timing === "out"
+          ? 1 - f.envelope
+          : pass.timing === "pulse"
+            ? 1 - 0.5 * f.envelope
+            : 1,
+      time: f.time,
+    });
+  else if (s > 0 && isStyleKind(pass.kind))
     nodes = styleFilterNodes({
       pass,
       w,

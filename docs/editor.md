@@ -49,7 +49,8 @@ Split cuts selected clips at the playhead, keeping at least three frames on each
   - Drag a card onto a clip, or press Enter on a card to apply it to the selection.
   - Click an applied effect to edit that instance; the preset picker loads a named variation.
   - Double-click a library card to view it and **Fork** a copy into My effects.
-  - My effects can be edited, forked and deleted. Bundles (`.kamikami-effect.json`) import and export from here.
+  - My effects can be edited, forked and deleted.
+- **Sharing:** **Export effects** saves any mix of My effects and imported effects as one pack file (`.kamikami-effects.json`) with a name, author and description. Shared effects are free for anyone to use and share. **Import effects** takes several files at once, packs or single-effect bundles. An imported pack is its own entry in the collection filter, where its header exports it again or removes it. See [effects.md](effects.md#bundles-and-packs).
 - **Keyframes:** each Inspector property has a stopwatch, ◀ ◆ ▶ navigation and an easing menu. **Animate parameter…** keys any numeric effect setting. Diamonds on clips can be clicked to seek or dragged to retime. See [project.md](project.md#keyframes).
 
 ## Safeguards

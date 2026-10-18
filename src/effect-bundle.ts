@@ -13,12 +13,13 @@ import {
 import { builtinEffects, allBuiltinEffects } from "./builtin-effects";
 import {
   effectEngines,
-  engineAtLeast,
   usesV6Features,
   usesV7Features,
   usesV8Features,
+  usesV9Features,
 } from "./visual-effects";
 export function effectEngine(effect: Effect) {
+  if (usesV9Features(effect)) return "kamikami-visual-v9" as const;
   if (usesV8Features(effect)) return "kamikami-visual-v8" as const;
   if (usesV7Features(effect)) return "kamikami-visual-v7" as const;
   if (usesV6Features(effect)) return "kamikami-visual-v6" as const;
@@ -64,14 +65,24 @@ export function effectEngine(effect: Effect) {
     ? ("kamikami-visual-v2" as const)
     : ("frameforge-curves-v1" as const);
 }
-export const EffectBundleSchema = z
+/**
+ * Every shared effect is free to use and share, so effect files carry no
+ * license. Files written before that kept one; it is dropped on read.
+ */
+function withoutLicense(input: unknown) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return input;
+  const { license: _license, ...rest } = input as Record<string, unknown>;
+  if (Array.isArray(rest.effects))
+    rest.effects = rest.effects.map(withoutLicense);
+  return rest;
+}
+const BundleObject = z
   .object({
     format: z.literal("frameforge-effect"),
     version: z.literal(1),
     engine: z.enum(effectEngines),
     name: z.string().min(1).max(80),
     author: z.string().max(100).default(""),
-    license: z.string().max(200).default("Free to use and share"),
     description: z.string().max(400).default(""),
     // Framing decorations from earlier v8 bundles are overlays now.
     effect: z.preprocess(migrateLegacyDecor, EffectSchema.strict()),
@@ -83,29 +94,161 @@ export const EffectBundleSchema = z
       effectEngines.indexOf(effectEngine(bundle.effect)),
     {
       message:
-        "Effect parameters require a newer engine: visual passes use kamikami-visual-v2; remap, repetition, smear and pattern modes use kamikami-visual-v3; text animation and blinds require kamikami-visual-v4; spatial motion and text glitches require kamikami-visual-v5; spring curves, stretch/skew/tilt channels and the illustration, 3D-look and organic passes require kamikami-visual-v6; title-pack text kinds require kamikami-visual-v7; kinetic type, text treatments, kinetic layouts, artwork treatments and overlays require kamikami-visual-v8.",
+        "Effect parameters require a newer engine: visual passes use kamikami-visual-v2; remap, repetition, smear and pattern modes use kamikami-visual-v3; text animation and blinds require kamikami-visual-v4; spatial motion and text glitches require kamikami-visual-v5; spring curves, stretch/skew/tilt channels and the illustration, 3D-look and organic passes require kamikami-visual-v6; title-pack text kinds require kamikami-visual-v7; kinetic type, text treatments, kinetic layouts, artwork treatments and overlays require kamikami-visual-v8; the riso print pass and the halftone overlay require kamikami-visual-v9.",
       path: ["engine"],
     },
   );
+export const EffectBundleSchema = z.preprocess(withoutLicense, BundleObject);
 export type EffectBundle = z.infer<typeof EffectBundleSchema>;
-/**
- * presetFamilyId postdates the first v4 readers, whose strict schema rejects
- * it. Only v5 readers are guaranteed to know it, so older engines omit it.
- */
-export function portableBundle(bundle: EffectBundle): EffectBundle {
-  if (
-    engineAtLeast(bundle.engine, "kamikami-visual-v5") ||
-    !bundle.effect.presetFamilyId
-  )
-    return bundle;
-  const { presetFamilyId: _family, ...effect } = bundle.effect;
-  return { ...bundle, effect };
+
+const engineIndex = (engine: string) =>
+  effectEngines.indexOf(engine as (typeof effectEngines)[number]);
+/** The lowest engine that reads every effect in the list. */
+export function packEngine(effects: Effect[]) {
+  return effects
+    .map(effectEngine)
+    .reduce((a, b) => (engineIndex(b) > engineIndex(a) ? b : a));
 }
+export const packIdPattern = /^[a-z0-9][a-z0-9-]{0,63}$/;
+/** A pack ID from its name: lowercase words joined by hyphens. */
+export function packSlug(name: string) {
+  return (
+    name
+      .normalize("NFKD")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 64)
+      .replace(/-+$/, "") || "effects"
+  );
+}
+/**
+ * Several effects in one portable file (`.kamikami-effects.json`). `id`
+ * names the pack across versions: importing a pack with an ID that is
+ * already installed updates it in place, keeping its effects' IDs.
+ */
+const PackObject = z
+  .object({
+    format: z.literal("kamikami-effect-pack"),
+    version: z.literal(1),
+    engine: z.enum(effectEngines),
+    id: z
+      .string()
+      .regex(
+        packIdPattern,
+        "Pack IDs use lowercase letters, digits and hyphens.",
+      ),
+    name: z.string().trim().min(1).max(80),
+    author: z.string().max(100).default(""),
+    description: z.string().max(1000).default(""),
+    effects: z
+      .array(
+        z
+          .object({
+            // Only where an effect's author differs from the pack's.
+            author: z.string().max(100).optional(),
+            effect: z.preprocess(migrateLegacyDecor, EffectSchema.strict()),
+          })
+          .strict(),
+      )
+      .min(1)
+      .max(LIMITS.packEffects),
+  })
+  .strict()
+  .refine(
+    (pack) =>
+      new Set(pack.effects.map((e) => e.effect.id)).size ===
+      pack.effects.length,
+    { message: "Each effect in a pack needs its own ID.", path: ["effects"] },
+  )
+  .refine(
+    (pack) =>
+      engineIndex(pack.engine) >=
+      engineIndex(packEngine(pack.effects.map((e) => e.effect))),
+    {
+      message:
+        "The pack's engine is older than one of its effects needs. Export it again from KamiKami.",
+      path: ["engine"],
+    },
+  );
+export const EffectPackSchema = z.preprocess(withoutLicense, PackObject);
+export type EffectPack = z.infer<typeof EffectPackSchema>;
+export type PackInfo = Pick<
+  EffectPack,
+  "id" | "name" | "author" | "description"
+>;
+/** The pack's effects as single bundles, with the pack's author filled in. */
+export function packBundles(pack: EffectPack): EffectBundle[] {
+  return pack.effects.map((item) => ({
+    format: "frameforge-effect",
+    version: 1,
+    engine: pack.engine,
+    name: item.effect.name.slice(0, 80),
+    author: item.author ?? pack.author,
+    description: item.effect.description.slice(0, 400),
+    effect: item.effect,
+  }));
+}
+/** Reads a single-effect bundle or a pack, whichever the file holds. */
+export function parseEffectFile(input: unknown): {
+  pack?: PackInfo;
+  bundles: EffectBundle[];
+} {
+  const format = (input as { format?: unknown } | null)?.format;
+  if (format === "kamikami-effect-pack") {
+    const pack = EffectPackSchema.parse(input);
+    const {
+      effects: _effects,
+      format: _f,
+      version: _v,
+      engine: _e,
+      ...info
+    } = pack;
+    return { pack: info, bundles: packBundles(pack) };
+  }
+  if (format === "frameforge-effect")
+    return { bundles: [EffectBundleSchema.parse(input)] };
+  throw new Error(
+    "This isn't a KamiKami effect file. Choose a .kamikami-effects.json or .kamikami-effect.json file.",
+  );
+}
+/** Writes entries as one pack. Each effect keeps its own author where it differs from the pack's. */
+export function makeEffectPack(
+  info: Omit<PackInfo, "id"> & { id?: string },
+  entries: { author?: string; effect: Effect }[],
+): EffectPack {
+  if (!entries.length) throw new Error("Choose at least one effect to export.");
+  const name = info.name.trim();
+  if (!name) throw new Error("Name the pack before exporting it.");
+  const author = info.author.trim();
+  return EffectPackSchema.parse({
+    format: "kamikami-effect-pack",
+    version: 1,
+    engine: packEngine(entries.map((e) => e.effect)),
+    id: info.id || packSlug(name),
+    name,
+    author,
+    description: info.description.trim(),
+    effects: entries.map((entry) => ({
+      ...(entry.author && entry.author !== author
+        ? { author: entry.author }
+        : {}),
+      effect: entry.effect,
+    })),
+  });
+}
+/** File name for a downloaded pack. */
+export const packFileName = (pack: { id: string }) =>
+  `${pack.id}.kamikami-effects.json`;
 export type UserEffect = {
   id: string;
   savedAt: string;
   collection?: "mine" | "library";
   bundle: EffectBundle;
+  /** The pack it was imported from; imported effects only. */
+  pack?: PackInfo;
+  /** Its ID inside that pack, which matches it when the pack is updated. */
+  packEffectId?: string;
 };
 
 export function libraryEffect(
@@ -215,3 +358,28 @@ export function applyEffectToLayers(
   });
 }
 export const EFFECT_DRAG_TYPE = "application/x-kamikami-effect";
+export type EffectImport = {
+  pack?: PackInfo;
+  imported: UserEffect[];
+  updated: number;
+  removed: number;
+};
+const effects = (n: number) => `${n} effect${n === 1 ? "" : "s"}`;
+/** One status line for an import. */
+export function importSummary({
+  pack,
+  imported,
+  updated,
+  removed,
+}: EffectImport) {
+  if (!pack) return `Imported ${imported[0]?.bundle.name ?? "the effect"}`;
+  const added = imported.length - updated;
+  if (!updated && !removed) return `Imported ${pack.name} (${effects(added)})`;
+  return `Updated ${pack.name}: ${[
+    updated && `${effects(updated)} updated`,
+    added && `${added} added`,
+    removed && `${removed} removed`,
+  ]
+    .filter(Boolean)
+    .join(", ")}`;
+}

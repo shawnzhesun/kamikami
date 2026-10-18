@@ -110,6 +110,7 @@ export const overlayKinds = [
   "registration",
   "colorbars",
   "stamp",
+  "halftonewash",
   // Geometry
   "orbit",
   "wireframe",
@@ -807,6 +808,8 @@ export function migrateProjectDecor(input: unknown): unknown {
 
 // --------------------------------------------------------------- controls
 
+/** Kinds that ship without a built-in card: their presets come in effect packs. */
+export const packOnlyOverlayKinds: readonly OverlayKind[] = ["halftonewash"];
 export type OverlayField =
   | "anchor"
   | "placement"

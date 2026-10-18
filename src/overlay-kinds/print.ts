@@ -9,6 +9,7 @@ import {
   regMark,
   smooth,
   stage,
+  type Ctx,
   type KindSpec,
   type P,
 } from "../overlay-kit";
@@ -241,4 +242,99 @@ export const printKinds: Partial<Record<OverlayKind, KindSpec>> = {
       return parts;
     },
   },
+  halftonewash: {
+    name: "Halftone wash",
+    feel: "Print",
+    description:
+      "A riso tone behind the element: one or two spot inks screened into dots that shrink toward the edge of a sun, a horizon, a corner or a ring.",
+    defaults: {
+      color: "#ff48b0",
+      secondary: "#0078bf",
+      count: 1,
+      seconds: 0.8,
+      timing: "in",
+      layer: "behind",
+    },
+    controls: {
+      timing: "Draw",
+      seconds: "Draw-on (seconds)",
+      strength: "Opacity",
+      color: "Ink",
+      secondary: "Second ink",
+      count: "Inks",
+      size: "Size",
+      weight: "Dot size",
+      angle: "Screen angle",
+      pad: "Gap",
+      variant: "Shape",
+    },
+    variants: ["Sun", "Horizon", "Corner", "Ring"],
+    draw: halftoneWash,
+  },
 };
+
+/**
+ * Riso tone as dots: the dot area matches the shape's coverage at that point,
+ * as a screen prints a gradient. Draw-on grows the dots from the densest
+ * point outward. Each ink is one path, multiplied onto what lies beneath, and
+ * a second ink sits on its own screen angle a little out of register.
+ */
+function halftoneWash(c: Ctx): OverlayPart[] {
+  const { o, a, p, W2, H2, P, m, key, cx, cy } = c;
+  const R = Math.max(W2, H2) * 0.85 * o.size + P;
+  const shapes = [
+    // Sun: dense at the center.
+    (x: number, y: number) => 1 - Math.pow(Math.hypot(x, y) / R, 1.5),
+    // Horizon: a band under the element, dense at the bottom.
+    (x: number, y: number) =>
+      Math.abs(x) > W2 + R * 0.6 ? 0 : (y - H2 * 0.5) / (R * 0.8),
+    // Corner: fades from the lower left corner.
+    (x: number, y: number) =>
+      1 - Math.hypot(x + W2 + P, y - H2 - P) / (R * 1.5),
+    // Ring: a halo around the element.
+    (x: number, y: number) =>
+      0.9 * Math.exp(-Math.pow((Math.hypot(x, y) - R * 0.8) / (R * 0.22), 2)),
+  ];
+  const cover = shapes[o.variant] ?? shapes[0];
+  const reach = R * 1.6 + W2;
+  // Coarse enough to read as a riso screen, and to keep the dot count small.
+  let pitch = Math.max(0.16, m * 0.035) * o.weight;
+  pitch = Math.max(pitch, Math.sqrt((reach * 2 * reach * 2) / 4000));
+  const inks = Math.max(1, Math.min(2, o.count));
+  const parts: OverlayPart[] = [];
+  for (let k = 0; k < inks; k++) {
+    const angle = ((o.angle + 15 + k * 60) * Math.PI) / 180;
+    const ca = Math.cos(angle),
+      sa = Math.sin(angle);
+    // The second plate misses the first by a fraction of a dot.
+    const [mx, my] = k
+      ? [(c.fixed(1) - 0.5) * pitch, (c.fixed(2) - 0.5) * pitch]
+      : [0, 0];
+    const shift = k ? 0.12 * R : 0;
+    const n = Math.ceil(reach / pitch);
+    let d = "";
+    for (let i = -n; i <= n; i++)
+      for (let j = -n; j <= n; j++) {
+        const x = (i * ca - j * sa) * pitch + mx,
+          y = (i * sa + j * ca) * pitch + my;
+        const t = clamp01(cover(x - shift, y + shift * 0.6)) * 0.92;
+        if (t <= 0.02) continue;
+        // Dots near the densest point land first.
+        const grow = smooth(stage(p, (1 - t) * 0.6, (1 - t) * 0.6 + 0.4));
+        const r = pitch * Math.sqrt(t / Math.PI) * grow;
+        if (r < pitch * 0.04) continue;
+        d += `M${f(x - r)} ${f(y)}a${f(r)} ${f(r)} 0 1 0 ${f(2 * r)} 0a${f(r)} ${f(r)} 0 1 0 ${f(-2 * r)} 0`;
+      }
+    if (!d) continue;
+    parts.push({
+      key: `${key}-ink${k}`,
+      behind: true,
+      opacity: a,
+      d,
+      fill: k ? o.secondary : o.color,
+      transform: `translate(${f(cx)} ${f(cy)})`,
+      blend: "multiply",
+    });
+  }
+  return parts;
+}

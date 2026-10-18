@@ -47,8 +47,18 @@ The kinds are `artKinds` in `src/artwork.ts`: camera kinds (`artCameraKinds`: sw
 - **Beats** count from the project start, so elements on one tempo hit together.
 - **Video copies:** copies of video are muted, and slices decode the video once per band, so keep the band count low.
 
+## Riso print
+
+The `riso` pass (kamikami-visual-v9, `src/PrintGraphicEffects.tsx`) prints any element as a risograph: one plate per spot ink in `risoInks` (one to three).
+
+- **Plates:** a plate's coverage is how much of the light its ink absorbs is missing from the element, measured against the paper (`color`), so paper-colored areas take no ink. There is no black: darks come from overprinting plates, which multiply.
+- **Screens:** each plate is screened into dots whose area matches the tone, at its own angle (15°, 75°, 0°, turned by `angle`), with the pitch set by `size`. One plate never prints a true solid.
+- **Press faults:** `registration` sets how far the plates miss each other; `speed` above 0 moves them a few times a second. `inkGrain` starves the ink unevenly.
+- **Paper:** `risoPaper: "clear"` prints the inks alone, so text keeps no paper behind it.
+- **Timing:** unlike other passes, timing changes the ink rather than the strength: at clip start the dots grow from bare paper, at clip end they print away.
+
 ## Costs and limits
 
-- Heavy passes run about 10 or more SVG primitives per frame: paper, glow, ink and pixel dither. They're fine on titles but slower on full-frame video.
+- Heavy passes run about 10 or more SVG primitives per frame: paper, glow, ink, pixel dither and riso (about eight per ink). They're fine on titles but slower on full-frame video.
 - Warp samples outside the element, giving full-frame art a ragged edge. Scale it up slightly to hide it.
 - Line boil and flicker rates follow `speed`, not the project frame rate.

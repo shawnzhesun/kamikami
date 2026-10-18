@@ -51,6 +51,7 @@ export const visualKinds = [
   "oldfilm",
   "ripple",
   "cells",
+  "riso",
 ] as const;
 export const visualNames: Record<(typeof visualKinds)[number], string> = {
   vignette: "Vignette",
@@ -98,6 +99,7 @@ export const visualNames: Record<(typeof visualKinds)[number], string> = {
   oldfilm: "Old film",
   ripple: "Ripple",
   cells: "Cell reveal",
+  riso: "Riso print",
 };
 /** Kinds and mode fields added with kamikami-visual-v6. */
 export const v6Kinds: readonly string[] = [
@@ -144,6 +146,19 @@ export const VisualPassSchema = z.object({
   cellMode: z.enum(["squares", "random", "checker", "dots"]).optional(),
   rippleMode: z.enum(["ripple", "shockwave", "drop"]).optional(),
   lumaOrder: z.enum(["dark", "bright"]).optional(),
+  // Riso print (kamikami-visual-v9): one to three spot inks, each its own
+  // halftone plate, printed out of register onto paper (`color`).
+  risoInks: z
+    .array(z.string().regex(/^#[0-9a-fA-F]{6}$/))
+    .min(1)
+    .max(3)
+    .optional(),
+  /** "clear" prints the inks alone, so text keeps no paper behind it. */
+  risoPaper: z.enum(["paper", "clear"]).optional(),
+  /** How far the plates miss each other, 0–1. */
+  registration: z.number().min(0).max(1).optional(),
+  /** Uneven, starved ink, 0–1. */
+  inkGrain: z.number().min(0).max(1).optional(),
 });
 export type VisualPass = z.infer<typeof VisualPassSchema>;
 export const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
@@ -177,6 +192,7 @@ export function visualFrame(
     time: t * pass.speed,
     tick: Math.floor(t * pass.speed * 12),
     progress: clamp01(t / Math.max(duration, 0.05)),
+    envelope,
   };
 }
 
@@ -222,6 +238,7 @@ export const effectEngines = [
   "kamikami-visual-v6",
   "kamikami-visual-v7",
   "kamikami-visual-v8",
+  "kamikami-visual-v9",
 ] as const;
 export type EffectEngine = (typeof effectEngines)[number];
 export const engineAtLeast = (engine: unknown, minimum: EffectEngine) =>
@@ -286,5 +303,26 @@ export function usesV8Features(value: unknown): boolean {
       text.angle !== undefined ||
       order === "center" ||
       order === "edges")
+  );
+}
+
+/** Kinds that ship without a built-in card: their presets come in effect packs. */
+export const packOnlyPassKinds: readonly string[] = ["riso"];
+/** The riso print pass and the halftone overlay need kamikami-visual-v9. */
+export function usesV9Features(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const effect = value as {
+    passes?: Record<string, unknown>[];
+    overlay?: { kind?: unknown };
+  };
+  return (
+    effect.overlay?.kind === "halftonewash" ||
+    !!effect.passes?.some(
+      (p) =>
+        p.kind === "riso" ||
+        ["risoInks", "risoPaper", "registration", "inkGrain"].some(
+          (key) => p[key] !== undefined,
+        ),
+    )
   );
 }

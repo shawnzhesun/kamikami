@@ -289,3 +289,18 @@ export function repeatRegions(
   }
   return regions;
 }
+
+/**
+ * The whole number of pixels, within `min`–`max`, that holds a whole number
+ * of repeats closest to one every `period` pixels (none when `period` is 0
+ * or longer than the cell).
+ */
+export function wholeCell(period: number, min: number, max: number) {
+  let best = { size: min, count: 0, error: Infinity };
+  for (let size = min; size <= max; size++) {
+    const count = period ? Math.round(size / period) : 0;
+    const error = Math.abs(count / size - (period ? 1 / period : 0));
+    if (error < best.error - 1e-12) best = { size, count, error };
+  }
+  return best;
+}
