@@ -483,17 +483,29 @@ function ShapeArt({
     </AbsoluteFill>
   );
 }
+/** The editor's cached frame, if any; it hides the live layers after it. */
+function CachedFrame({ draw }: { draw: (frame: number) => React.ReactNode }) {
+  return <>{draw(useCurrentFrame())}</>;
+}
 export function Composition({
   project,
   mediaOrigin = "",
   missingSources = [],
+  cachedFrame,
 }: {
   project: Project;
   mediaOrigin?: string;
   missingSources?: string[];
+  /**
+   * Editor only: draws a frame from the preview render cache. The live
+   * layers stay mounted (videos keep playing their sound) but are hidden by
+   * the `.cached-frame ~ *` rule in the editor's styles.
+   */
+  cachedFrame?: (frame: number) => React.ReactNode;
 }) {
   return (
     <AbsoluteFill style={{ background: "#070b12", overflow: "hidden" }}>
+      {cachedFrame && <CachedFrame draw={cachedFrame} />}
       {orderedElements(project)
         .filter((l) => l.visible)
         .map((layer) => (

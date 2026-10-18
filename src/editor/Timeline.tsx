@@ -7,7 +7,10 @@ import {
   GripVertical,
   Plus,
   Settings2,
+  DatabaseZap,
+  Trash2,
 } from "lucide-react";
+import type { PreviewCacheView } from "./preview-cache-client";
 import {
   projectTracks,
   elementTrackId,
@@ -29,6 +32,7 @@ import type { ShapePreset } from "../shapes";
 import { EFFECT_DRAG_TYPE } from "../effect-bundle";
 import { retimeKeyframes, visibleKeyframeTimes } from "../keyframes";
 import { phaseLengths, setPhaseLength, type Phase } from "./envelope";
+import { chunkFrames } from "../preview-cache";
 
 // The sticky layer names and the right margin of every lane, in pixels.
 const LABEL_WIDTH = 145,
@@ -66,6 +70,11 @@ type Props = {
   onAddShape: (preset: ShapePreset, color: string) => void;
   onAddBackdrop: (preset: BackdropPreset) => void;
   onApplyEffect: (effectId: string, layerId: string) => void;
+  /** Cached chunks of the committed project; null while editing or off. */
+  previewCache: PreviewCacheView | null;
+  previewCacheOn: boolean;
+  onPreviewCacheOn: (on: boolean) => void;
+  onClearPreviewCache: () => void;
 };
 export function Timeline({
   project,
@@ -87,6 +96,10 @@ export function Timeline({
   onAddShape,
   onAddBackdrop,
   onApplyEffect,
+  previewCache,
+  previewCacheOn,
+  onPreviewCacheOn,
+  onClearPreviewCache,
 }: Props) {
   const [zoom, setZoom] = useState(1),
     [snapping, setSnapping] = useState(true),
@@ -149,6 +162,29 @@ export function Timeline({
       ),
     [step, project.duration, project.fps],
   );
+  // Runs of cached (and rendering) chunks, as shares of the timeline.
+  const cacheRuns = useMemo(() => {
+    if (!previewCache) return [];
+    const size = chunkFrames(project.fps),
+      total = project.duration * project.fps;
+    const runs: { from: number; to: number; drawing: boolean }[] = [];
+    previewCache.keys.forEach((_, i) => {
+      const drawing = previewCache.drawing[i];
+      if (!previewCache.ready[i] && !drawing) return;
+      const last = runs.at(-1);
+      if (last && last.to === i && last.drawing === drawing) last.to = i + 1;
+      else runs.push({ from: i, to: i + 1, drawing });
+    });
+    return runs.map((r) => ({
+      left: (r.from * size) / total,
+      width: (Math.min(total, r.to * size) - r.from * size) / total,
+      drawing: r.drawing,
+    }));
+  }, [previewCache, project.fps, project.duration]);
+  const cachedShare = previewCache
+    ? previewCache.ready.filter(Boolean).length /
+      Math.max(1, previewCache.ready.length)
+    : 0;
   // When zoomed in, the view pages along with the playhead.
   useEffect(() => {
     const el = scroller.current;
@@ -667,6 +703,33 @@ export function Timeline({
             Split
           </button>
           <button
+            aria-label="Preview render cache"
+            aria-pressed={previewCacheOn}
+            onClick={() => onPreviewCacheOn(!previewCacheOn)}
+            title={
+              (previewCacheOn
+                ? `Render cache: ${Math.round(cachedShare * 100)}% cached (${((previewCache?.bytes ?? 0) / 1024 ** 2).toFixed(0)} MB).`
+                : "Render cache is off.") +
+              " While you're not playing or editing, KamiKami renders the timeline with the export renderer; green ranges play back exactly as exported. The frames are deleted when KamiKami quits." +
+              (previewCache?.error ? ` Last error: ${previewCache.error}` : "")
+            }
+          >
+            <DatabaseZap size={14} />
+            {previewCacheOn && previewCache
+              ? `${Math.round(cachedShare * 100)}%`
+              : null}
+          </button>
+          {previewCacheOn && (
+            <button
+              aria-label="Clear render cache"
+              title="Delete the cached frames and render again"
+              disabled={!previewCache?.bytes}
+              onClick={onClearPreviewCache}
+            >
+              <Trash2 size={13} />
+            </button>
+          )}
+          <button
             aria-label="Timeline snapping"
             title="Snap to clip edges and playhead. Alt bypasses"
             aria-pressed={snapping}
@@ -771,6 +834,16 @@ export function Timeline({
               }}
             >
               {ticks}
+              {cacheRuns.map((r) => (
+                <i
+                  key={r.left}
+                  className={`cache-run ${r.drawing ? "drawing" : ""}`}
+                  style={{
+                    left: `${r.left * 100}%`,
+                    width: `${r.width * 100}%`,
+                  }}
+                />
+              ))}
             </div>
           </div>
           {[...tracks].reverse().map((track) => {

@@ -1,5 +1,5 @@
 const { app, utilityProcess } = require("electron");
-const { createWriteStream, readFileSync } = require("node:fs");
+const { createWriteStream, readFileSync, rmSync } = require("node:fs");
 const { mkdir, rename } = require("node:fs/promises");
 const path = require("node:path");
 const { appRoot, serviceOrigin } = require("./runtime.cjs");
@@ -31,6 +31,9 @@ module.exports = async function startService() {
   await mkdir(logs, { recursive: true });
   await rename(log, path.join(logs, "service.previous.log")).catch(() => {});
   const output = createWriteStream(log);
+  // Preview frames are session data: the service removes its folder when it
+  // exits, and the app removes it again in case the service was killed.
+  const previewCache = path.join(app.getPath("temp"), "kamikami-preview-cache");
   const manifest = JSON.parse(
     readFileSync(path.join(build, "manifest.json"), "utf8"),
   );
@@ -48,6 +51,7 @@ module.exports = async function startService() {
       KAMIKAMI_BROWSER: path.join(build, manifest.browser),
       KAMIKAMI_FFMPEG: path.join(build, manifest.ffmpeg),
       KAMIKAMI_FFPROBE: path.join(build, manifest.ffprobe),
+      KAMIKAMI_PREVIEW_CACHE: previewCache,
       KAMIKAMI_MCP_COMMAND: app.isPackaged
         ? path.join(
             process.resourcesPath,
@@ -60,8 +64,16 @@ module.exports = async function startService() {
   child.stdout?.pipe(output);
   child.stderr?.pipe(output);
   let exited = false;
+  // The pid names the service's cache folder; it's gone once the process exits.
+  let pid = child.pid;
+  child.once("spawn", () => (pid = child.pid));
   child.once("exit", (code) => {
     exited = true;
+    if (pid)
+      rmSync(path.join(previewCache, String(pid)), {
+        recursive: true,
+        force: true,
+      });
     output.end(`\nService exited (${code}).\n`);
   });
   app.once("will-quit", () => child.kill());

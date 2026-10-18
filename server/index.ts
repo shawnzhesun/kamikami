@@ -54,6 +54,7 @@ import { randomUUID } from "node:crypto";
 import { EditorBridge } from "./editor-bridge";
 import { AssistantService } from "./assistant";
 import { runTool, toolError } from "./tool-runner";
+import { PreviewCache } from "./preview-cache";
 
 import {
   renderMedia,
@@ -61,7 +62,7 @@ import {
   selectComposition,
   type ChromiumOptions,
 } from "@remotion/renderer";
-import { availableParallelism } from "node:os";
+import { availableParallelism, tmpdir } from "node:os";
 import {
   validateProject,
   initialProject,
@@ -756,6 +757,61 @@ async function withRenderer<T>(
     return render({ chromiumOptions: {}, concurrency: 2 });
   }
 }
+const previewCache = new PreviewCache({
+  root:
+    process.env.KAMIKAMI_PREVIEW_CACHE ||
+    path.join(tmpdir(), "kamikami-preview-cache"),
+  limitBytes: Number(process.env.KAMIKAMI_PREVIEW_CACHE_BYTES) || 4 * 1024 ** 3,
+  serveUrl: getBundle,
+  browserExecutable,
+  chromiumOptions: { gl: renderGl },
+  // Background work: leave room for the editor's own playback.
+  concurrency: Math.max(1, Math.floor(renderConcurrency / 2)),
+  mediaOrigin: serviceOrigin,
+  busy: () => active,
+});
+previewCache.open();
+// The cache lives only as long as this service. Signals otherwise end the
+// process without running "exit" handlers.
+process.on("exit", () => previewCache.removeSync());
+for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const)
+  process.on(signal, () => process.exit(0));
+app.post("/api/preview-cache/plan", (req, res) => {
+  const project = validateProject(req.body.project);
+  res.json(
+    previewCache.setPlan(
+      project,
+      z.array(z.string()).parse(req.body.missingSources ?? []),
+      z
+        .number()
+        .int()
+        .min(0)
+        .parse(req.body.from ?? 0),
+      req.body.render === true,
+    ),
+  );
+});
+app.post("/api/preview-cache/pause", (_req, res) => {
+  previewCache.pause();
+  res.json(previewCache.status());
+});
+app.get("/api/preview-cache/status", (_req, res) =>
+  res.json(previewCache.status()),
+);
+app.get("/api/preview-cache/frames/:key/:index", (req, res) => {
+  const file =
+    /^[0-9a-f]{28}$/.test(req.params.key) && /^\d+$/.test(req.params.index)
+      ? previewCache.frame(req.params.key, Number(req.params.index))
+      : null;
+  if (!file) return res.sendStatus(404);
+  // Keys name their content, so a cached frame never changes.
+  res.setHeader("Cache-Control", "private, max-age=86400, immutable");
+  res.sendFile(file, { dotfiles: "allow" });
+});
+app.delete("/api/preview-cache", async (_req, res) => {
+  await previewCache.clear();
+  res.json(previewCache.status());
+});
 /**
  * Review a timeline range as rendered output: frames plus the mixed-audio
  * waveform, for the agent's self-check after cuts (one PNG, quarter scale).
@@ -889,6 +945,7 @@ app.post("/api/export", async (req, res) => {
         .status(409)
         .json({ error: "Another export is already running" });
     active = true;
+    previewCache.interrupt();
     const id = randomUUID();
     const job: Job = { id, status: "bundling", progress: 0 };
     jobs.set(id, job);

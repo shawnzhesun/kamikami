@@ -101,6 +101,14 @@ import {
   X,
 } from "lucide-react";
 import { Composition } from "./Composition";
+import { chunkOf, chunkRange } from "./preview-cache";
+import {
+  cachedFrameUrl,
+  FramePreloader,
+  upcomingFrames,
+  usePreviewCache,
+} from "./editor/preview-cache-client";
+import { CachedCanvas } from "./editor/CachedCanvas";
 import {
   blankProject,
   frameUnit,
@@ -230,6 +238,21 @@ export function App() {
       localStorage.setItem("kamikami-library-width", String(libraryWidth));
     } catch {}
   }, [libraryWidth]);
+  const [previewCacheOn, setPreviewCacheOn] = useState(() => {
+    try {
+      return localStorage.getItem("kamikami-preview-cache") !== "off";
+    } catch {
+      return true;
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        "kamikami-preview-cache",
+        previewCacheOn ? "on" : "off",
+      );
+    } catch {}
+  }, [previewCacheOn]);
   useEffect(() => {
     const resize = () => setLibraryWidth((n) => Math.min(n, libraryLimit()));
     window.addEventListener("resize", resize);
@@ -384,12 +407,56 @@ export function App() {
   const missingKey = missingSources.join("\n");
   // App re-renders on every played frame; a new inputProps object each time
   // makes the Player redo its frame work and drop about a third of the frames.
+  const cacheView = usePreviewCache({
+    project,
+    missingSources,
+    frame,
+    idle: !playing && displayProject === project,
+    enabled: previewCacheOn && ready,
+  });
+  // Bumped when the frame under a paused playhead finishes decoding.
+  const [cachedVersion, setCachedVersion] = useState(0);
+  const wantedFrame = useRef("");
+  const [preloader] = useState(
+    () =>
+      new FramePreloader((url) => {
+        if (url === wantedFrame.current) setCachedVersion((v) => v + 1);
+      }),
+  );
+  useEffect(() => {
+    if (!cacheView || displayProject !== project) return preloader.clear();
+    const chunk = chunkOf(project, frame);
+    wantedFrame.current = cacheView.ready[chunk]
+      ? cachedFrameUrl(
+          cacheView.keys[chunk],
+          frame - chunkRange(project, chunk)[0],
+        )
+      : "";
+    // About a second ahead while playing; just the shown frame when paused.
+    preloader.want(upcomingFrames(project, cacheView, frame, playing ? 24 : 1));
+  }, [cacheView, frame, playing, displayProject, project, preloader]);
+  const cachedFrame = useMemo(() => {
+    if (!cacheView || displayProject !== project) return undefined;
+    return (f: number) => {
+      const chunk = chunkOf(project, f);
+      if (!cacheView.ready[chunk]) return null;
+      const bitmap = preloader.get(
+        cachedFrameUrl(
+          cacheView.keys[chunk],
+          f - chunkRange(project, chunk)[0],
+        ),
+      );
+      return bitmap ? <CachedCanvas bitmap={bitmap} /> : null;
+    };
+    // cachedVersion re-reads frames that finished decoding.
+  }, [cacheView, displayProject, project, preloader, cachedVersion]);
   const playerProps = useMemo(
     () => ({
       project: displayProject,
       missingSources: missingKey ? missingKey.split("\n") : [],
+      cachedFrame,
     }),
-    [displayProject, missingKey],
+    [displayProject, missingKey, cachedFrame],
   );
   const inspector = useRef<HTMLDivElement>(null);
   const player = useRef<PlayerRef>(null),
@@ -3181,6 +3248,14 @@ export function App() {
             project={displayProject}
             selected={selectedIds}
             frame={frame}
+            previewCache={displayProject === project ? cacheView : null}
+            previewCacheOn={previewCacheOn}
+            onPreviewCacheOn={setPreviewCacheOn}
+            onClearPreviewCache={() =>
+              void api("/api/preview-cache", "DELETE")
+                .then(() => preloader.clear())
+                .catch((e) => setStatus((e as Error).message))
+            }
             assets={assets}
             onSelect={selectLayers}
             onSeek={(f) => {

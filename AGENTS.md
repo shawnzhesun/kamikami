@@ -66,6 +66,7 @@ How to work on KamiKami's code. This file is for coding agents. To edit a *video
 
 - `dependencies` in `package.json` is what ships in the installed app's `node_modules`; everything bundled (editor libraries, the service's pure-JS packages) is a dev dependency. Add a runtime dependency only if the bundled service must load it from disk, together with its peer dependencies (`@remotion/renderer` needs `react` and `react-dom`).
 - Video clips render through `OffthreadVideo`. A `<Video>` element seeks per frame, and in multi-tab GPU exports it sometimes shows a neighbouring frame, which makes clips stutter.
+- **Preview render cache.** The editor plays cached chunks rendered by the export pipeline (`server/preview-cache.ts`), keyed by `chunkKeys` in `src/preview-cache.ts`. The key covers the visible elements in each chunk, the effects they use, missing media, fonts, the frame setup and the engine version. Anything new that changes how a frame draws must reach that key, or the editor plays stale frames. The frames are session data: the service deletes its folder on exit, and the next start deletes folders left by crashed services.
 - The Electron app and the service cache schemas. After engine or schema changes, the desktop app needs a full restart.
 - MCP clients start `server/mcp.mjs` once; restart the MCP server (or the client) after changing tool definitions. It loads TypeScript through `tsx`, so it must not print to stdout.
 - `project.layers` holds **elements**; timeline rows are `project.tracks`. Tool parameters named `layerId` refer to elements.
