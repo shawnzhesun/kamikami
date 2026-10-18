@@ -10,7 +10,7 @@ import {
   AbsoluteFill,
   Sequence,
   Img,
-  Video,
+  OffthreadVideo,
   Audio,
   continueRender,
   delayRender,
@@ -320,7 +320,11 @@ function VisualLayer({
           />
         )}
         {layer.type === "video" && src && (
-          <Video
+          // In a render, a <video> element seeks per frame and, with several
+          // tabs on the GPU, sometimes shows a neighbouring frame, so exported
+          // clips stutter. OffthreadVideo takes the exact frame from ffmpeg;
+          // in the preview it plays as a <video> element.
+          <OffthreadVideo
             src={src}
             startFrom={Math.round(layer.offset * fps)}
             // Copies are silent: only the element itself plays its sound.

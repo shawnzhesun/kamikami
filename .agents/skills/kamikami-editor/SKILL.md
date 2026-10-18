@@ -22,6 +22,11 @@ The server is the source of truth. Don't rely on numbers or kind lists from memo
 - **Tracks.** `project.tracks` are rows, bottom to top: higher rows draw on top. `project.layers` are the elements on them (`layerId` means element). Elements on one track can't overlap. Create named tracks first and pass `trackId`; an omitted `trackId` makes a new track, and an unknown one is an error.
 - **Ask when it matters.** Destructive tools need the user's go-ahead. `delete_media` and `analyze_assets` return `requiresConfirmation` / `needsConfirmation`: show the user what's affected or the estimate, and retry with the flag only after they agree.
 - **Report honestly.** Claim only what a tool confirmed. Still frames can't prove motion or audio. An export is "started" until `get_export` says done.
+- **Work alongside the user.**
+  - Edits and frame renders are refused while they're in a field, dialog or drag. Wait and retry; don't treat that as a failure.
+  - Don't edit while they're exporting.
+  - The user often edits between your turns. Re-read before each round, and never overwrite their changes.
+  - The project id in `revision` can change when the file is reopened. Check the name and `projectFile` before assuming it's a different project.
 
 ## Workflow
 
@@ -29,6 +34,11 @@ The server is the source of truth. Don't rely on numbers or kind lists from memo
 
 - `get_project`: note the format, duration (a new project is short, so set it to fit the edit), tracks and anything already there.
 - `get_capabilities` once, for limits and schemas. Skim the effect roles in `effectLibrary`.
+- **Explore the effects before you design.** The library is much larger than the few cards you'd guess, and a palette chosen up front keeps the video consistent.
+  1. For each role, run `find_effects` with the `elementType`s you'll use: picture, video, title, shape.
+  2. `describe_effect` the promising cards and their variations.
+  3. Try a handful on a scratch element and `render_frame` them, then `undo` the test edits.
+  4. Note the few cards per role you'll reuse, such as a grade, grain, a beat punch, a text look and a hand-off. Later shots then copy those settings instead of each shot inventing its own.
 
 ### 2. Bring in media
 
@@ -79,12 +89,20 @@ The server is the source of truth. Don't rely on numbers or kind lists from memo
   4. `update_effect_instance` to tune one element. Object sections merge, so `{ text: { tempo: 120 } }` changes only the tempo.
 
   Text recipes fit only titles, and some picture effects only pictures; `apply_effect` refuses a mismatch. Entrances have `<id>-out` exits.
+
 - **Keyframes:** `set_keyframes` animates a property (`scale`, `x`, `opacity`, `volume`…), an effect's strength (`effectId`), or one numeric effect setting (`effectId` plus `parameter`, e.g. `passes.0.size`). Times are clip-local seconds.
+  - **Keyframes snap to whole frames.** Two keys inside one frame collapse, so a "hard cut" written that way plays as a slow fade.
+  - **Hard hits need frame-exact keys.** For punches, flashes and snaps, sample the curve once per frame and write a key wherever the value changes. Put the peak on the hit frame itself.
+  - **An element with no keyframes takes `{}`, not `null`.
 - **Audio:** `fadeIn`/`fadeOut` on any element, and `volume` keyframes for ducking music under speech.
 
 ### 6. Review
 
 - `render_frame` at representative frames: each shot's start, middle and end, title in/hold/out, and the busiest moment. Look for text over busy picture, safe margins in the frame's shape, and effects that don't read at this size.
+- **Render the frames where defects hide:**
+  - **Every boundary:** the last frame of each shot and the first frame of the next. Shots that meet at a fractional time can leave a frame with nothing drawn, and a video's first frame can come out empty. If you find one, start and end the shots on whole frames, or put a matching still under the clip's first frames.
+  - **Every hit:** each frame where a hit should land, plus the frame before it.
+  - **Every hand-off you meant to hide:** for example, a still that hands off to the clip made from it.
 - `view_timeline_range` (up to 30 s at a time) for pacing and audio pops. `set_playback` lets the user watch real motion.
 - Fix, then re-check what you changed.
 
@@ -105,12 +123,33 @@ The server is the source of truth. Don't rely on numbers or kind lists from memo
    - overlays.
 
    Set every beat setting (`text.tempo`, `art.tempo`, `overlay.tempo`) to the song's BPM so everything hits together.
+
 6. Titles and lyric captions: one element per line on a captions track, timed to beats or, if transcribed, to the words. Use a display font from `list_fonts`, sized for the frame.
 7. Finish:
    - a backdrop behind letterboxed shots;
    - a `finish` effect or finish backdrop for one consistent look;
    - a fade-out on the last bar.
 8. Review frames at cuts and drops, view the range around each section change, save, export.
+
+## Motion that lands on the music
+
+**Hitting the beat exactly**
+
+- **The probe's beats are a grid.** Drum hits can sit a few milliseconds off it, and every hit is shown on a whole frame. For hits that must land exactly, check the onsets around them: the beat list in the analysis, or measure the audio file yourself. Then place each hit on the frame of the onset, peaking there.
+- **Talk in the user's timecode.** The timeline shows `minutes:seconds:frames`, so "4:40:19" is frame 19 of second 4:40, not 4:40.19 s. Convert before acting.
+- **The user's ear wins.** When they hear a hit as early or late, move it by one frame and ask. When they hear the bar start somewhere other than your downbeat, ask for the timecode and follow it. A passage can feel one beat off from the grid, and the music changes how people count it.
+- **Map the accents before placing pulses.** Measure which 16ths carry the hits in a passage; the biggest hit isn't always on beat 1. Offer that pattern, but regular pulses are often what the user wants.
+
+**Designing motion**
+
+- **When the user gives reference videos, study where they move.** Measure motion over time and look at the moving shots. In many music videos, motion comes as short inserts of one moving subject with a still camera. Quiet passages hold stills with a slow drift. Beat passages cut one object per beat.
+- **Start motion exactly when the music does.** Punches and flashes go only on real drum hits. A held still gets a slow push, not punches.
+- **Make one moving clip do several jobs.**
+  - **Still comes alive:** hold a still of the clip's first frame, then let the clip run from that frame on a beat, with no visible cut. A still of its last frame can hold the end.
+  - **Several inserts:** cut different seconds of one clip into different shots, or continue it across a cut so the action carries on.
+  - **Reversed copy:** a reversed copy (made outside KamiKami and imported) gives the opposite action, such as lights going off instead of on.
+- **When a clip replaces a still, keep the shot's look.** Copy the still's grade, grain and glow onto the clip, and carry the camera push across cuts within one action.
+- **Keep covering shapes still.** A block that hides something shouldn't drift or jolt, because its edges can come into view. Put the motion in its texture instead, such as a hatch or lines that scroll.
 
 ## Recipe: story, documentary or talking head
 

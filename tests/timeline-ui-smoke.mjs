@@ -740,6 +740,158 @@ try {
   await click('header button[aria-label="Undo"]');
   await save();
   assert.equal(project.layers.filter((e) => e.trackId === track.id).length, 2);
+  // Dragging over empty lane space selects every clip the box touches.
+  const pair = project.layers
+    .filter((e) => e.trackId === track.id)
+    .sort((a, b) => a.start - b.start);
+  // The clips fill their lane, so the box starts in another layer's free space.
+  const box = await page.evaluate((id) => {
+    const target = document.querySelector(
+      `[data-track-id="${id}"] .track-lane`,
+    );
+    target.scrollIntoView({ block: "nearest" });
+    const t = target.getBoundingClientRect();
+    for (const lane of document.querySelectorAll(".track-lane")) {
+      const r = lane.getBoundingClientRect(),
+        y = r.top + 20;
+      if (lane === target || y < 0 || y > innerHeight) continue;
+      for (let x = r.right - 3; x > r.left; x -= 4)
+        if (document.elementFromPoint(x, y) === lane)
+          return { x, y, toX: t.left + 1, toY: t.top + 20 };
+    }
+    throw new Error("No empty lane space");
+  }, track.id);
+  await client.send("Input.dispatchMouseEvent", {
+    type: "mousePressed",
+    x: box.x,
+    y: box.y,
+    button: "left",
+    clickCount: 1,
+  });
+  for (const [x, y] of [
+    [box.x - 20, box.y + 4],
+    [box.toX, box.toY],
+  ])
+    await client.send("Input.dispatchMouseEvent", {
+      type: "mouseMoved",
+      x,
+      y,
+      button: "left",
+      buttons: 1,
+    });
+  await client.send("Input.dispatchMouseEvent", {
+    type: "mouseReleased",
+    x: box.toX,
+    y: box.toY,
+    button: "left",
+    clickCount: 1,
+  });
+  await wait(async () => !(await exists(".timeline-marquee")));
+  const pressed = () =>
+    page.evaluate(() =>
+      [...document.querySelectorAll('[data-element-id][aria-pressed="true"]')]
+        .map((e) => e.dataset.elementId)
+        .sort(),
+    );
+  const boxed = await pressed();
+  assert.ok(pair.every((e) => boxed.includes(e.id)));
+  // A plain click narrows the selection; Shift-drag adds a clip and moves both.
+  await new Promise((resolve) => setTimeout(resolve, 250));
+  const clipPoint = (id) =>
+    page.evaluate((id) => {
+      const r = document
+        .querySelector(`[data-element-id="${id}"]`)
+        .getBoundingClientRect();
+      return {
+        x: r.left + Math.min(30, r.width / 2),
+        y: r.top + 15,
+      };
+    }, id);
+  const press = async (id, modifiers = 0, dx = 0) => {
+    const p = await clipPoint(id);
+    const step = dx;
+    for (const [type, x] of [
+      ["mousePressed", p.x],
+      ["mouseMoved", p.x + step / 2],
+      ["mouseMoved", p.x + step],
+      ["mouseReleased", p.x + step],
+    ])
+      await client.send("Input.dispatchMouseEvent", {
+        type,
+        x,
+        y: p.y,
+        modifiers,
+        button: "left",
+        buttons: type === "mouseReleased" ? 0 : 1,
+        clickCount: 1,
+      });
+  };
+  // Trim a second off the later clip, so the pair has room to move right.
+  await page.evaluate(
+    (id) =>
+      document
+        .querySelector(`[data-element-id="${id}"] .trim-handle.right`)
+        .dispatchEvent(
+          new KeyboardEvent("keydown", {
+            key: "ArrowLeft",
+            shiftKey: true,
+            bubbles: true,
+          }),
+        ),
+    pair[1].id,
+  );
+  await press(pair[0].id);
+  await wait(async () => (await pressed()).length === 1);
+  await new Promise((resolve) => setTimeout(resolve, 250));
+  await press(pair[1].id, 8, 40);
+  await save();
+  const moved = pair.map(
+    (e) => project.layers.find((l) => l.id === e.id).start - e.start,
+  );
+  assert.ok(Math.abs(moved[0]) > 0.01, "Shift-drag moved the clips");
+  assert.ok(Math.abs(moved[0] - moved[1]) < 1e-6, "Both clips moved together");
+  await click('header button[aria-label="Undo"]');
+  await click('header button[aria-label="Undo"]');
+  await save();
+  assert.deepEqual(
+    pair.map((e) => project.layers.find((l) => l.id === e.id)),
+    pair,
+  );
+  // Cmd-scroll zooms the timeline around the pointer, up to frame-level detail.
+  const zoomed = await page.evaluate(async () => {
+    const panel = document.querySelector(".timeline-scroll"),
+      r = panel.getBoundingClientRect(),
+      x = r.left + r.width * 0.6;
+    const width = panel.scrollWidth;
+    panel.dispatchEvent(
+      new WheelEvent("wheel", {
+        deltaY: -200,
+        clientX: x,
+        clientY: r.top + 60,
+        metaKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    return {
+      grew: panel.scrollWidth / width,
+      max: Number(
+        document.querySelector('input[aria-label="Timeline zoom"]').max,
+      ),
+      label: [...document.querySelectorAll(".timeline-tools button")].find(
+        (b) => b.title.startsWith("Fit timeline"),
+      ).textContent,
+    };
+  });
+  assert.ok(zoomed.grew > 2, `Zoom grew the timeline ${zoomed.grew}×`);
+  assert.ok(zoomed.max >= 3);
+  assert.notEqual(zoomed.label, "1×");
+  await page.evaluate(() =>
+    [...document.querySelectorAll(".timeline-tools button")]
+      .find((b) => b.title.startsWith("Fit timeline"))
+      .click(),
+  );
   // Backspace deletes the current multi-selection, keeps layers, and is one Undo step.
   const beforeBackspace = structuredClone(project);
   const selectedElements = project.layers

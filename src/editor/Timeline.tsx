@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import {
   Layers,
   Magnet,
@@ -19,7 +20,7 @@ import { MEDIA_DRAG_TYPE } from "../media";
 import { moveElementsToTrack, reorderTracks } from "./tracks";
 import type { MediaAsset } from "../media";
 import { clamp, moveClips, snapValue, splitClips, trimClip } from "./editing";
-import { startGesture } from "./gesture";
+import { isGestureActive, startGesture } from "./gesture";
 import { Waveform } from "./Waveform";
 import { ShapeMenu } from "./ShapeMenu";
 import { BackdropMenu } from "./BackdropMenu";
@@ -28,6 +29,22 @@ import type { ShapePreset } from "../shapes";
 import { EFFECT_DRAG_TYPE } from "../effect-bundle";
 import { retimeKeyframes, visibleKeyframeTimes } from "../keyframes";
 import { phaseLengths, setPhaseLength, type Phase } from "./envelope";
+
+// The sticky layer names and the right margin of every lane, in pixels.
+const LABEL_WIDTH = 145,
+  LANE_MARGIN = 18;
+/** A ruler step of about 80 pixels: whole frames, then round seconds. */
+function rulerStep(pixelsPerSecond: number, fps: number) {
+  const steps = [1, 2, 4, 6, 12].map((f) => f / fps);
+  steps.push(1, 2, 5, 10, 15, 30, 60, 120, 300);
+  const wanted = 80 / pixelsPerSecond;
+  return steps.find((s) => s >= wanted - 1e-9) ?? steps.at(-1)!;
+}
+function rulerLabel(seconds: number, step: number, fps: number) {
+  const whole = Math.floor(seconds + 1e-6),
+    frames = Math.round((seconds - whole) * fps);
+  return step < 1 && frames ? `${whole}s+${frames}f` : `${whole}s`;
+}
 
 type Props = {
   project: Project;
@@ -81,14 +98,105 @@ export function Timeline({
   const tracks = projectTracks(project);
   const [effectTarget, setEffectTarget] = useState<string | null>(null);
   const cleanup = useRef<(() => void) | null>(null);
-  const scroller = useRef<HTMLDivElement>(null);
+  const scroller = useRef<HTMLDivElement>(null),
+    contentRef = useRef<HTMLDivElement>(null);
   const ignoreClickUntil = useRef(0);
   const [rowDrop, setRowDrop] = useState<{
     id: string;
     edge: "above" | "below";
   } | null>(null);
   const [rowDragging, setRowDragging] = useState<string | null>(null);
+  const [marquee, setMarquee] = useState<{
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+  } | null>(null);
   useEffect(() => () => cleanup.current?.(), []);
+  // Zoom multiplies the visible width; the deepest zoom gives about 24 pixels
+  // per frame, for frame-accurate moves in long projects.
+  const [viewWidth, setViewWidth] = useState(0);
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el) return;
+    const observer = new ResizeObserver(() => setViewWidth(el.clientWidth));
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  const laneWidth = (z: number) =>
+    Math.max(1, z * viewWidth - LABEL_WIDTH - LANE_MARGIN);
+  const maxZoom = viewWidth
+    ? Math.max(
+        8,
+        (project.duration * project.fps * 24 + LABEL_WIDTH + LANE_MARGIN) /
+          viewWidth,
+      )
+    : 8;
+  const step = rulerStep(laneWidth(zoom) / project.duration, project.fps);
+  // The timeline renders on every played frame; a deep zoom has thousands of ticks.
+  const ticks = useMemo(
+    () =>
+      Array.from(
+        { length: Math.floor(project.duration / step + 1e-6) + 1 },
+        (_, i) => (
+          <span
+            key={i}
+            style={{ left: `${((i * step) / project.duration) * 100}%` }}
+          >
+            {rulerLabel(i * step, step, project.fps)}
+          </span>
+        ),
+      ),
+    [step, project.duration, project.fps],
+  );
+  // When zoomed in, the view pages along with the playhead.
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el || zoom === 1 || isGestureActive()) return;
+    const x =
+      LABEL_WIDTH +
+      (frame / project.fps / project.duration) * laneWidth(zoom) -
+      el.scrollLeft;
+    if (x < LABEL_WIDTH || x > el.clientWidth - LANE_MARGIN)
+      el.scrollLeft += x - LABEL_WIDTH - 24;
+  }, [frame]);
+  /** Zooms around a point on screen, or around the playhead when it's visible. */
+  function zoomTo(next: number, clientX?: number) {
+    const el = scroller.current,
+      z = clamp(next, 1, maxZoom);
+    if (!el || z === zoom) return;
+    const r = el.getBoundingClientRect();
+    const playhead =
+      LABEL_WIDTH +
+      (frame / project.fps / project.duration) * laneWidth(zoom) -
+      el.scrollLeft;
+    const x =
+      clientX !== undefined
+        ? clientX - r.left
+        : playhead >= LABEL_WIDTH && playhead <= el.clientWidth
+          ? playhead
+          : (LABEL_WIDTH + el.clientWidth) / 2;
+    const share = (el.scrollLeft + x - LABEL_WIDTH) / laneWidth(zoom);
+    // Render the new width before scrolling, so the point stays in place.
+    flushSync(() => setZoom(z));
+    el.scrollLeft = LABEL_WIDTH + share * laneWidth(z) - x;
+  }
+  const zoomBy = useRef(zoomTo),
+    zoomRef = useRef(zoom);
+  zoomBy.current = zoomTo;
+  zoomRef.current = zoom;
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el) return;
+    // Pinch on a trackpad arrives as a wheel event with ctrlKey set.
+    const wheel = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      zoomBy.current(zoomRef.current * Math.exp(-e.deltaY * 0.01), e.clientX);
+    };
+    el.addEventListener("wheel", wheel, { passive: false });
+    return () => el.removeEventListener("wheel", wheel);
+  }, []);
   function select(id: string, additive: boolean) {
     onSelect(
       additive
@@ -308,15 +416,17 @@ export function Timeline({
     e.currentTarget.focus({ preventScroll: true });
     onPause();
     cleanup.current?.();
-    if (e.shiftKey && !edge) {
-      select(layer.id, true);
-      return;
-    }
+    // Shift or Cmd adds the clip to the selection and drags them together; a
+    // click without a drag removes an already selected clip again.
+    const additive = !edge && (e.shiftKey || e.metaKey),
+      wasSelected = selected.includes(layer.id);
     const ids = edge
       ? [layer.id]
-      : selected.includes(layer.id)
+      : wasSelected
         ? selected
-        : [layer.id];
+        : additive
+          ? [...selected, layer.id]
+          : [layer.id];
     onSelect(ids);
     const base = project,
       origin = e.clientX,
@@ -408,9 +518,88 @@ export function Timeline({
           if (invalid) onStatus(invalid);
           else onCommit(latest, base);
         }
+        if (!cancelled && !moved && !edge && wasSelected)
+          onSelect(
+            additive ? selected.filter((id) => id !== layer.id) : [layer.id],
+          );
         cleanup.current = null;
       },
     );
+  }
+  /**
+   * Drag on empty lane space to select every clip the box touches; Shift or
+   * Cmd adds them to the selection. A click without a drag still seeks.
+   */
+  function beginMarquee(e: React.PointerEvent<HTMLElement>) {
+    if (e.button !== 0 || e.target !== e.currentTarget) return;
+    const panel = scroller.current,
+      content = contentRef.current;
+    if (!panel || !content) return;
+    cleanup.current?.();
+    const at = (event: { clientX: number; clientY: number }) => {
+      const r = content.getBoundingClientRect();
+      return { x: event.clientX - r.left, y: event.clientY - r.top };
+    };
+    const origin = at(e),
+      before = e.shiftKey || e.metaKey ? selected : [];
+    let moved = false,
+      last = { clientX: e.clientX, clientY: e.clientY },
+      ids = before;
+    const update = () => {
+      const point = at(last);
+      if (!moved && Math.hypot(point.x - origin.x, point.y - origin.y) < 4)
+        return;
+      if (!moved) onPause();
+      moved = true;
+      const box = {
+        left: Math.min(origin.x, point.x),
+        top: Math.min(origin.y, point.y),
+        width: Math.abs(point.x - origin.x),
+        height: Math.abs(point.y - origin.y),
+      };
+      setMarquee(box);
+      const r = content.getBoundingClientRect();
+      const hits = [
+        ...content.querySelectorAll<HTMLElement>("[data-element-id]"),
+      ]
+        .filter((clip) => {
+          const c = clip.getBoundingClientRect();
+          return (
+            c.right > r.left + box.left &&
+            c.left < r.left + box.left + box.width &&
+            c.bottom > r.top + box.top &&
+            c.top < r.top + box.top + box.height
+          );
+        })
+        .map((clip) => clip.dataset.elementId!);
+      const next = [...before, ...hits.filter((id) => !before.includes(id))];
+      if (next.join() !== ids.join()) onSelect((ids = next));
+    };
+    // Scrolling under a still pointer grows the box too.
+    panel.addEventListener("scroll", update);
+    const stop = startGesture(
+      e,
+      (event) => {
+        last = event;
+        const r = panel.getBoundingClientRect();
+        if (event.clientX > r.right - 24) panel.scrollLeft += 12;
+        if (event.clientX < r.left + LABEL_WIDTH + 16) panel.scrollLeft -= 12;
+        if (event.clientY > r.bottom - 16) panel.scrollTop += 8;
+        if (event.clientY < r.top + 40) panel.scrollTop -= 8;
+        update();
+      },
+      (cancelled) => {
+        panel.removeEventListener("scroll", update);
+        setMarquee(null);
+        if (cancelled && moved) onSelect(selected);
+        if (moved) ignoreClickUntil.current = Date.now() + 200;
+        cleanup.current = null;
+      },
+    );
+    cleanup.current = () => {
+      panel.removeEventListener("scroll", update);
+      stop();
+    };
   }
   function trimKey(
     e: React.KeyboardEvent,
@@ -490,20 +679,43 @@ export function Timeline({
             <input
               aria-label="Timeline zoom"
               type="range"
-              min="1"
-              max="8"
-              step=".5"
-              value={zoom}
-              onChange={(e) => setZoom(Number(e.target.value))}
+              min="0"
+              max={Math.log2(maxZoom)}
+              step="0.05"
+              value={Math.log2(zoom)}
+              onChange={(e) => zoomTo(2 ** Number(e.target.value))}
             />
           </label>
-          <button onClick={() => setZoom(1)} title="Fit timeline">
-            {zoom}×
+          <button
+            onClick={() => zoomTo(1)}
+            title="Fit timeline. Pinch or Cmd-scroll over the timeline to zoom"
+          >
+            {zoom < 10 ? Number(zoom.toFixed(1)) : Math.round(zoom)}×
           </button>
         </div>
       </div>
       <div className="timeline-scroll" ref={scroller}>
-        <div className="timeline-content" style={{ width: `${zoom * 100}%` }}>
+        <div
+          className="timeline-content"
+          ref={contentRef}
+          style={
+            {
+              width: `${zoom * 100}%`,
+              "--grid": `${(step / project.duration) * 100}%`,
+            } as React.CSSProperties
+          }
+        >
+          {marquee && (
+            <div
+              className="timeline-marquee"
+              style={{
+                left: marquee.left,
+                top: marquee.top,
+                width: marquee.width,
+                height: marquee.height,
+              }}
+            />
+          )}
           <div className="ruler">
             <span className="track-label layers-heading">
               LAYERS{" "}
@@ -558,14 +770,7 @@ export function Timeline({
                   e.currentTarget.releasePointerCapture(e.pointerId);
               }}
             >
-              {Array.from({ length: Math.ceil(zoom * 5) + 1 }, (_, i) => {
-                const n = Math.ceil(zoom * 5);
-                return (
-                  <span key={i} style={{ left: `${(i / n) * 100}%` }}>
-                    {Number(((project.duration * i) / n).toFixed(1))}s
-                  </span>
-                );
-              })}
+              {ticks}
             </div>
           </div>
           {[...tracks].reverse().map((track) => {
@@ -653,6 +858,7 @@ export function Timeline({
                     setMediaTarget(null);
                     onDropMedia(src, track.id, time);
                   }}
+                  onPointerDown={beginMarquee}
                   onClick={(e) => {
                     if (e.target === e.currentTarget) {
                       onSelectTrack(track.id);

@@ -557,13 +557,13 @@ header .status-dot,
   flex: 1;
   margin-right: 18px;
   border-bottom: 1px solid var(--line);
-  background: repeating-linear-gradient(
-    90deg,
-    transparent,
-    transparent calc(20% - 1px),
-    var(--line) calc(20% - 1px),
-    var(--line) 20%
-  );
+  /* One line per ruler step. */
+  background: linear-gradient(
+      90deg,
+      transparent calc(100% - 1px),
+      var(--line) calc(100% - 1px)
+    )
+    0 0 / var(--grid, 20%) 100%;
 }
 .clip {
   position: absolute;
@@ -1135,7 +1135,15 @@ footer > span:first-child {
   accent-color: var(--blue);
 }
 .timeline-content {
+  position: relative;
   min-width: 100%;
+}
+.timeline-marquee {
+  position: absolute;
+  z-index: 4;
+  border: 1px solid var(--blue);
+  background: color-mix(in srgb, var(--blue) 14%, transparent);
+  pointer-events: none;
 }
 .timeline .track-label {
   position: sticky;
