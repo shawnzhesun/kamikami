@@ -12,6 +12,7 @@ The installed app runs everything itself: users install KamiKami, open it, and c
 | Renders | Remotion bundles `src/render.tsx` with webpack on first use | Prebuilt `desktop-build/remotion/` |
 | Headless browser, ffmpeg, ffprobe | Remotion's download cache, `ffmpeg-static`, `ffprobe-static` | Copies for the build platform in `desktop-build/`; ffmpeg and ffprobe are LGPL builds from `scripts/build-ffmpeg.mjs` |
 | MCP server | `node server/mcp.mjs` | `Resources/bin/kamikami-mcp` (`.cmd` on Windows): the app's executable with `ELECTRON_RUN_AS_NODE` running `desktop-build/mcp.mjs` |
+| Editing skill | `.agents/skills/kamikami-editor/` | The same path inside the app, served by the MCP server and installed from Agent apps |
 
 `electron/runtime.cjs` decides the mode: `app.isPackaged`, or `KAMIKAMI_BUNDLED=1` to run a local `npm run build:desktop` with `electron .`. The service reads the packaged paths from environment variables (`packaged` in `server/service-config.ts`).
 

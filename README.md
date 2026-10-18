@@ -104,6 +104,8 @@ codex mcp add kamikami -- /Applications/KamiKami.app/Contents/Resources/bin/kami
 }
 ```
 
+**Give your agent the editing skill.** On the same **Agent apps** page, click **Install skill** for Claude Code or Codex. The skill teaches agents KamiKami's workflow, and they load it on their own when a task involves video. Install it again after updating KamiKami. Any MCP client can also read it as the resource `kamikami://editing-skill` or the prompt `editing-skill` (in Claude Code, `/mcp__kamikami__editing-skill`).
+
 Then just ask:
 
 > Import `~/Movies/trip` and the song `~/Music/summer.mp3`, cut the clips to the beat, and add a bold title at the start.

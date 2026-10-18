@@ -18,7 +18,11 @@ Both see the same tools and run them through the same dispatcher:
 
 Tool inputs use the source enums and schemas (shape and backdrop kinds, roles, keyframe easings), so the tool list never restates values that can change. Counts, limits and the effect library come from the tools themselves: `tools/list`, `get_capabilities` (`limits`, `effectLibrary`, `tools`, `conventions`), `find_effects` and `describe_effect`.
 
-The conventions reach agents three ways: `get_capabilities.conventions`, the MCP server instructions, and the native system prompt. The editing skill, `.agents/skills/kamikami-editor/SKILL.md`, is the MCP resource `kamikami://editing-skill`.
+The conventions reach agents three ways: `get_capabilities.conventions`, the MCP server instructions, and the native system prompt. The editing skill, `.agents/skills/kamikami-editor/SKILL.md`, reaches MCP clients three ways (`server/editor-skill.ts`):
+
+- the resource `kamikami://editing-skill`;
+- the prompt `editing-skill`, which Claude Code lists as `/mcp__kamikami__editing-skill`;
+- **Install skill** in **Agent apps**, which copies it into `~/.claude/skills/kamikami-editor/` (Claude Code) or `~/.agents/skills/kamikami-editor/` (Codex and other Agent Skills apps), so agents load it when a task calls for it. The panel shows whether each copy matches this version.
 
 ## Transport differences
 

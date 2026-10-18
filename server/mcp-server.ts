@@ -1,8 +1,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { spawn } from "node:child_process";
-import { readFile } from "node:fs/promises";
 import { editorTools } from "./editor-tools";
+import { readSkill } from "./editor-skill";
 import { mcpInstructions } from "./agent-conventions";
 import type { ToolOutput } from "./tool-runner";
 import { serviceOrigin } from "./service-config";
@@ -161,16 +161,27 @@ server.registerResource(
   },
   async (uri) => ({
     contents: [
+      { uri: uri.href, mimeType: "text/markdown", text: await readSkill() },
+    ],
+  }),
+);
+// The same workflow as a prompt, which clients such as Claude Code list as a
+// slash command, for clients that don't read resources on their own.
+server.registerPrompt(
+  "editing-skill",
+  {
+    title: "KamiKami editing skill",
+    description:
+      "Load KamiKami's editing workflow before making or editing a video.",
+  },
+  async () => ({
+    messages: [
       {
-        uri: uri.href,
-        mimeType: "text/markdown",
-        text: await readFile(
-          new URL(
-            "../.agents/skills/kamikami-editor/SKILL.md",
-            import.meta.url,
-          ),
-          "utf8",
-        ),
+        role: "user",
+        content: {
+          type: "text",
+          text: `Use this workflow for KamiKami editing in this conversation.\n\n${await readSkill()}`,
+        },
       },
     ],
   }),

@@ -891,7 +891,93 @@ function AgentApps() {
           <CopyField value={json} />
         </Row>
       </section>
+      <EditingSkill />
     </>
+  );
+}
+
+type SkillTarget = {
+  id: string;
+  label: string;
+  path: string;
+  state: "missing" | "current" | "outdated";
+};
+/**
+ * Installs the editing skill into agent apps' personal skill folders, so
+ * agents load KamiKami's workflow on their own when a task calls for it.
+ */
+function EditingSkill() {
+  const [targets, setTargets] = useState<SkillTarget[] | null>(null);
+  const [busy, setBusy] = useState("");
+  const [error, setError] = useState("");
+  useEffect(() => {
+    api("/api/agents/skill")
+      .then(setTargets)
+      .catch((e) => setError((e as Error).message));
+  }, []);
+  async function install(id: string) {
+    setBusy(id);
+    setError("");
+    try {
+      const next: SkillTarget = await api("/api/agents/skill", "POST", {
+        target: id,
+      });
+      setTargets((all) => all?.map((t) => (t.id === id ? next : t)) ?? null);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy("");
+    }
+  }
+  const home = (file: string) => file.replace(/^\/(Users|home)\/[^/]+/, "~");
+  return (
+    <section className="prefs-group" aria-label="Editing skill">
+      <h3>Editing skill</h3>
+      <p className="prefs-hint">
+        The skill teaches agents KamiKami's workflow. Installed, agents load it
+        on their own when a task involves editing video. Install it again after
+        updating KamiKami. MCP clients can also read it as the resource{" "}
+        <code>kamikami://editing-skill</code> or run the prompt{" "}
+        <code>editing-skill</code>.
+      </p>
+      {error && (
+        <p className="prefs-error" role="alert">
+          {error}
+        </p>
+      )}
+      {targets?.map((t) => (
+        <Row
+          key={t.id}
+          label={t.label}
+          hint={
+            t.state === "current"
+              ? `Installed in ${home(t.path)}`
+              : t.state === "outdated"
+                ? `${home(t.path)} holds a different version`
+                : `Installs to ${home(t.path)}`
+          }
+        >
+          <button
+            type="button"
+            className="prefs-secondary"
+            disabled={busy === t.id || t.state === "current"}
+            onClick={() => void install(t.id)}
+          >
+            {t.state === "current" ? (
+              <>
+                <Check size={14} /> Installed
+              </>
+            ) : busy === t.id ? (
+              "Installing…"
+            ) : t.state === "outdated" ? (
+              "Update skill"
+            ) : (
+              "Install skill"
+            )}
+          </button>
+        </Row>
+      ))}
+    </section>
   );
 }
 

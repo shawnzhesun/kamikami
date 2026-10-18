@@ -8,6 +8,7 @@ import {
   TextMotionControls,
   SpatialPassControls,
 } from "./editor/MotionControls";
+import { version } from "../package.json";
 import { NumberField } from "./editor/NumberField";
 import { KeyframeField } from "./editor/KeyframeField";
 import { EffectParameterKeys } from "./editor/EffectParameterKeys";
@@ -2960,7 +2961,7 @@ export function App() {
               height={32}
               draggable={false}
             />
-            KamiKami<span className="version">LOCAL / 0.1</span>
+            KamiKami<span className="version">{version}</span>
           </div>
           <div className="header-file-actions">
             <button

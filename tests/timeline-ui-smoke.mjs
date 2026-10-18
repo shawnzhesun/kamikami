@@ -9,12 +9,27 @@ import { openBrowser } from "@remotion/renderer";
 import { initialProject, validateProject } from "../src/model.ts";
 import { FontLibrary } from "../server/font-library.ts";
 import { EffectLibrary } from "../server/effect-library.ts";
+import { AnalysisSettingsSchema } from "../src/asset-analysis.ts";
 
 const fontData = await mkdtemp(path.join(tmpdir(), "kamikami-font-ui-"));
 const fontLibrary = new FontLibrary(fontData, path.resolve("public"));
 const effectLibrary = new EffectLibrary(fontData);
 
 let project = structuredClone(initialProject);
+const skills = [
+  {
+    id: "claude",
+    label: "Claude Code",
+    path: "/Users/test/.claude/skills/kamikami-editor/SKILL.md",
+    state: "missing",
+  },
+  {
+    id: "agents",
+    label: "Codex and other Agent Skills apps",
+    path: "/Users/test/.agents/skills/kamikami-editor/SKILL.md",
+    state: "outdated",
+  },
+];
 
 const assets = [
   {
@@ -112,6 +127,20 @@ const fixture = {
       else if (req.url === "/api/effects") result = await effectLibrary.list();
       else if (req.url === "/api/editor/poll")
         result = { primary: true, requests: [] };
+      else if (req.url === "/api/analysis/settings")
+        result = AnalysisSettingsSchema.parse({});
+      else if (req.url === "/api/agents")
+        result = {
+          editorConnected: true,
+          clients: [],
+          mcp: { command: "/Applications/KamiKami.app/kamikami-mcp", args: [] },
+        };
+      else if (req.url === "/api/agents/skill" && req.method === "POST") {
+        // Mocked: the real route writes to the home folder.
+        const target = skills.find((t) => t.id === JSON.parse(body).target);
+        target.state = "current";
+        result = target;
+      } else if (req.url === "/api/agents/skill") result = skills;
       else if (req.url === "/api/assistant")
         result = {
           configured: false,
@@ -1583,6 +1612,56 @@ try {
   await wait(() => text().then((t) => t.includes("Removed UI Pack")));
   assert.equal(await exists(".pack-header"), false);
   assert.equal((await effectLibrary.list()).filter((e) => e.pack).length, 0);
+  // Agent apps: install the editing skill for an agent app, on a fresh page.
+  await page.goto({ url: "http://127.0.0.1:5174", timeout: 30000 });
+  await wait(() => exists("[data-element-id]"));
+  await page.evaluate(() =>
+    [...document.querySelectorAll("button")]
+      .find((b) => b.textContent.trim() === "Assistant")
+      .click(),
+  );
+  // Settings open by themselves while no model is set up; don't toggle them shut.
+  await wait(() => exists('button[aria-label="Assistant settings"]'));
+  await page.evaluate(() => {
+    const open = document.querySelector(
+      'button[aria-label="Assistant settings"]',
+    );
+    if (open.getAttribute("aria-expanded") !== "true") open.click();
+  });
+  // The effects library has tabs too; wait for the settings dialog's own.
+  await wait(() =>
+    page.evaluate(() =>
+      [...document.querySelectorAll('[role="tab"]')].some((b) =>
+        b.textContent.includes("Agent apps"),
+      ),
+    ),
+  );
+  await page.evaluate(() =>
+    [...document.querySelectorAll('[role="tab"]')]
+      .find((b) => b.textContent.includes("Agent apps"))
+      .click(),
+  );
+  await wait(() => exists('section[aria-label="Editing skill"]'));
+  const skillButtons = () =>
+    page.evaluate(() =>
+      [
+        ...document.querySelectorAll(
+          'section[aria-label="Editing skill"] button',
+        ),
+      ].map((b) => b.textContent.trim()),
+    );
+  assert.deepEqual(await skillButtons(), ["Install skill", "Update skill"]);
+  assert.ok(
+    (await text()).includes("Installs to ~/.claude/skills/kamikami-editor"),
+  );
+  await click('section[aria-label="Editing skill"] button');
+  await wait(async () => (await skillButtons())[0] === "Installed");
+  await page.evaluate(() =>
+    document
+      .querySelector('section[aria-label="Editing skill"]')
+      .scrollIntoView({ block: "center" }),
+  );
+  await capture("editing-skill.png");
   assert.deepEqual(errors, []);
   console.log(`Browser checks passed. Screenshots: ${output}`);
 } finally {

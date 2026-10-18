@@ -218,6 +218,22 @@ try {
   const tools = new Map(
     (await client.listTools()).tools.map((t) => [t.name, t]),
   );
+  // The editing skill reaches clients as a resource and as a prompt.
+  const skill = await client.readResource({ uri: "kamikami://editing-skill" });
+  assert.match(
+    (skill.contents[0] as { text: string }).text,
+    /^---\nname: kamikami-editor/,
+  );
+  assert.ok(
+    (await client.listPrompts()).prompts.some(
+      (p) => p.name === "editing-skill",
+    ),
+  );
+  const prompt = await client.getPrompt({ name: "editing-skill" });
+  assert.match(
+    (prompt.messages[0].content as { text: string }).text,
+    /Making videos with KamiKami/,
+  );
   const call = async (name: string, args: Record<string, unknown> = {}) => {
     if (
       (tools.get(name)?.inputSchema.properties as Record<string, unknown>)

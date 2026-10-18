@@ -3591,3 +3591,16 @@ button[aria-pressed="true"] {
   resize: vertical;
   font: inherit;
 }
+
+/* A paragraph inside a settings group, drawn as one of its rows. */
+.prefs-hint {
+  margin: 0;
+  padding: 12px 14px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--panel) 55%, var(--cream));
+}
+.prefs-hint code {
+  font-size: 11px;
+}

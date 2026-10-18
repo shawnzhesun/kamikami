@@ -65,7 +65,7 @@ export const agentConventions = [
 /** MCP server instructions: the conventions plus how MCP differs. */
 export const mcpInstructions = [
   "Edit the open KamiKami project. The app must be running.",
-  "MCP has no in-app dialogs: your client asks before destructive tools, and analyze_assets returns needsConfirmation until you retry with confirmed:true after the user approves. The resource kamikami://editing-skill has the workflow.",
+  "MCP has no in-app dialogs: your client asks before destructive tools, and analyze_assets returns needsConfirmation until you retry with confirmed:true after the user approves. Before editing, read the workflow: the resource kamikami://editing-skill, also the prompt editing-skill.",
   "",
   agentConventions,
 ].join("\n");

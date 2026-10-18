@@ -37,6 +37,7 @@ import { providerHost, type ProviderConnection } from "./analysis/provider";
 import { analysisTiers, type AnalysisTier } from "../src/asset-analysis";
 import { writeMetadata } from "./analysis/metadata";
 import { FontLibrary, MAX_FONT_BYTES } from "./font-library";
+import { installSkill, skillStatus } from "./editor-skill";
 import express from "express";
 import multer from "multer";
 import path from "node:path";
@@ -258,6 +259,13 @@ app.get("/api/agents", (_req, res) =>
     node: process.execPath,
     mcp: mcpLaunch,
   }),
+);
+// Installs the editing skill into agent apps' personal skill folders.
+app.get("/api/agents/skill", async (_req, res) =>
+  res.json(await skillStatus()),
+);
+app.post("/api/agents/skill", async (req, res) =>
+  res.json(await installSkill(req.body?.target)),
 );
 app.post("/api/agents/connect", (req, res) =>
   res.json(
