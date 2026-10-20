@@ -272,14 +272,15 @@ function VisualLayer({
       alignItems: "center",
       transform: `translate(${v.x}px,${v.y}px) scale(${v.scale}) rotate(${v.rotation}deg)${tilt} scale(${v.scaleX},${v.scaleY}) skewX(${v.skewX}deg)`,
       opacity: v.opacity,
-      // Finishes blend with every layer below them.
-      ...(layer.backdrop && layer.backdrop.blend !== "normal"
-        ? { mixBlendMode: layer.backdrop.blend }
-        : {}),
       transformOrigin: `${50 + v.originX * 50}% ${50 + v.originY * 50}%`,
       ...(filter ? { filter } : {}),
     };
   };
+  // Blends with every track below: set on the element's outermost box, so the
+  // element's own copies, overlays and passes composite first.
+  const blend = layer.backdrop ? layer.backdrop.blend : layer.blend;
+  const blendStyle: React.CSSProperties =
+    blend && blend !== "normal" ? { mixBlendMode: blend } : {};
   // Stop-motion stutter holds effects and text animation along with the transform.
   const content = (at: number, copy = false) => {
     const tt = elementTime(layer, project.effects, at);
@@ -362,9 +363,13 @@ function VisualLayer({
     );
   };
   if (!framed)
-    return <AbsoluteFill style={style(t)}>{content(t)}</AbsoluteFill>;
+    return (
+      <AbsoluteFill style={{ ...style(t), ...blendStyle }}>
+        {content(t)}
+      </AbsoluteFill>
+    );
   return (
-    <AbsoluteFill>
+    <AbsoluteFill style={blendStyle}>
       <ArtworkStack
         id={`art-${layer.id}`}
         uses={uses}

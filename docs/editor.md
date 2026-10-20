@@ -30,6 +30,7 @@ Split cuts selected clips at the playhead, keeping at least three frames on each
   - Backgrounds (`backgroundKinds`, `src/backdrops.ts`) sit under everything.
   - Finishes (`finishKinds`) sit on top and blend with everything below.
 - **Busy tracks:** if the selected track is busy at the playhead, new text and shapes go on a new track.
+- **Blend:** text, pictures, video and shapes can blend with every track below them, using the modes in `elementBlends` (`src/model.ts`): multiply for ink, screen for light, difference for inverse ink, color for tints. A blend applies after the element's own effects and overlays. Backdrops keep their own `backdrop.blend`. Projects with a blend save as version 4, so older versions refuse them instead of dropping the blend.
 - **Fades:** every element has `fadeIn`/`fadeOut`. Audio edges get automatic 20 ms de-click ramps.
 - **Mute/solo:** works on audio and video tracks.
 

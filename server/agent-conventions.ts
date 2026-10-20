@@ -25,7 +25,7 @@ export const agentConventions = [
   "- The project's frame rate and size (get_project) are fixed when it is created; no tool changes them, and exports use them.",
   "- Element x/y, fontSize and shape sizes are project pixels. Pixel amounts inside effects (channel x/y/blur/letterSpacing, pass sizes) are reference pixels for a 1080-pixel short side and scale with the frame, so one effect looks the same at any size.",
   "- offset and effectOffset keep source and animation continuity; prefer trim_clip, split_clips and move_clips over raw timing edits.",
-  "- Backdrop backgrounds sit under everything; finishes blend on top. Elements may set fadeIn/fadeOut seconds.",
+  "- Backdrop backgrounds sit under everything; finishes blend on top. Elements may set fadeIn/fadeOut seconds, and blend (a mix-blend-mode such as multiply, screen or difference) to mix with every track below; backdrops use backdrop.blend.",
   "",
   "CONFIRMATIONS",
   "- delete_media on used media returns requiresConfirmation; retry with confirmUsed:true only if the user authorized it.",

@@ -226,6 +226,7 @@ const cardRoles: Record<string, RoleInfo> = {
   "memory-flecks": R("overlay", "Energy"),
   "color-grade": R("finish", "Grade"),
   "color-remap": R("finish", "Grade"),
+  "cel-tones": R("finish", "Illustration"),
   "memory-bloom": R("finish", "Light"),
   "memory-vignette": R("finish", "Light"),
   "scene-light": R("finish", "Light"),

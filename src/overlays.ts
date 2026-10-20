@@ -95,6 +95,7 @@ export const overlayKinds = [
   "pin",
   "sticker",
   "ticket",
+  "cautiontape",
   // Ornament
   "quotes",
   "flourish",
@@ -106,6 +107,7 @@ export const overlayKinds = [
   "sprockets",
   "slate",
   "lowerthird",
+  "edgebar",
   // Print
   "registration",
   "colorbars",

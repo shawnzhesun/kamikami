@@ -3,8 +3,11 @@ import {
   drawn,
   ellipse,
   f,
+  frameEdges,
   line,
+  outPow,
   polygon,
+  rect,
   roundRect,
   stage,
   type KindSpec,
@@ -20,6 +23,15 @@ const corners: P[] = [
 ];
 const heart = (s: number) =>
   `M0 ${f(s * 0.75)}C${f(-s * 1.3)} ${f(-s * 0.1)} ${f(-s * 0.6)} ${f(-s * 1.05)} 0 ${f(-s * 0.4)}C${f(s * 0.6)} ${f(-s * 1.05)} ${f(s * 1.3)} ${f(-s * 0.1)} 0 ${f(s * 0.75)}Z`;
+
+/** Hazard dashes along a band edge: slanted blocks from x0 to x1 at y. */
+function hazard(x0: number, x1: number, y: number, e: number) {
+  const d = e * 1.6;
+  let path = "";
+  for (let x = x0; x < x1; x += d * 2)
+    path += `M${f(x)} ${f(y)}H${f(x + d)}L${f(x + d - e)} ${f(y + e)}H${f(x - e)}Z`;
+  return path;
+}
 
 export const paperKinds: Partial<Record<OverlayKind, KindSpec>> = {
   torn: {
@@ -438,6 +450,121 @@ export const paperKinds: Partial<Record<OverlayKind, KindSpec>> = {
           bold: true,
         }),
       );
+      return parts;
+    },
+  },
+  cautiontape: {
+    name: "Caution tape",
+    feel: "Paper",
+    description:
+      "Hazard tape with striped edges and repeating text, slapped on one band after another: crossed over the whole frame, stacked above and below the element, or fanned through it.",
+    defaults: {
+      color: "#f4e34a",
+      secondary: "#1d1d1d",
+      label: "KEEP OUT",
+      count: 4,
+      angle: 14,
+      seconds: 0.9,
+      timing: "in",
+      caps: true,
+    },
+    controls: {
+      ...drawn,
+      color: "Tape",
+      secondary: "Ink",
+      label: "Text",
+      count: "Bands",
+      angle: "Tilt",
+      size: "Width",
+      pad: "Gap",
+      variant: "Layout",
+    },
+    variants: ["Crossed", "Above and below", "Through"],
+    text: true,
+    draw: (c) => {
+      const { o, a, p, cx, cy, H2, P, S, fixed, solid, text } = c;
+      const edges = frameEdges(c);
+      const span = Math.hypot(
+        edges.right - edges.left,
+        edges.bottom - edges.top,
+      );
+      const L = span * 1.3;
+      const bh = S(0.75, 0.12);
+      const e = bh * 0.15;
+      const ts = bh * 0.5;
+      const word =
+        (o.caps ? o.label?.toUpperCase() : o.label)?.trim() || "KEEP OUT";
+      const pitch = ([...word].length * 0.62 + 2.2) * ts;
+      const repeated = Array.from(
+        { length: Math.ceil(L / pitch) + 1 },
+        () => word,
+      ).join("   ");
+      const n = o.variant === 1 ? Math.max(2, o.count) : o.count;
+      const midX = (edges.left + edges.right) / 2,
+        midY = (edges.top + edges.bottom) / 2;
+      const parts: OverlayPart[] = [];
+      for (let i = 0; i < n; i++) {
+        // Each band slaps on after the one before it.
+        const start = n > 1 ? (i / n) * 0.55 : 0;
+        const q = stage(p, start, start + 0.45);
+        if (q <= 0) continue;
+        let x = 0,
+          y = 0,
+          tilt = o.angle;
+        if (o.variant === 0) {
+          const row = (i + 0.5) / n;
+          x = midX + (fixed(i * 3) - 0.5) * (edges.right - edges.left) * 0.2;
+          y = edges.top + (edges.bottom - edges.top) * row;
+          tilt = (i % 2 ? -1 : 1) * o.angle * (0.6 + fixed(i * 3 + 1) * 0.8);
+        } else if (o.variant === 1) {
+          const ring = Math.floor(i / 2);
+          const sign = i % 2 ? 1 : -1;
+          y = sign * (H2 + P + bh / 2 + ring * (bh + P * 0.5));
+          x = midX;
+          tilt = sign * o.angle * 0.15;
+        } else {
+          tilt = n > 1 ? o.angle * (i / (n - 1) - 0.5) * 2 : o.angle;
+          y = (fixed(i * 3 + 2) - 0.5) * H2;
+        }
+        const slap = 1 + 0.22 * (1 - outPow(q, 3));
+        const settle = (1 - outPow(q, 2)) * (fixed(i * 3 + 1) - 0.5) * 8;
+        const transform = `translate(${f(cx + x)} ${f(cy + y)}) rotate(${f(tilt + settle)}) scale(${f(slap)})`;
+        const opacity = a * Math.min(1, q * 3);
+        // Words slide along the tape so overlapping bands don't line up.
+        const shift = -fixed(i * 3 + 2) * pitch;
+        parts.push(
+          solid(
+            rect(-L / 2, -bh / 2, L / 2, bh / 2),
+            { transform, opacity, behind: o.variant === 1 },
+            i * 3,
+          ),
+          solid(
+            hazard(-L / 2, L / 2, -bh / 2 + e * 0.45, e) +
+              hazard(-L / 2, L / 2, bh / 2 - e * 1.45, e),
+            { transform, opacity, fill: o.secondary, behind: o.variant === 1 },
+            i * 3 + 1,
+          ),
+          text(
+            repeated,
+            0,
+            0,
+            ts,
+            {
+              x: shift,
+              y: ts * 0.36,
+              transform,
+              opacity,
+              fill: o.secondary,
+              bold: true,
+              mono: false,
+              font: "sans",
+              spacing: 0.04,
+              behind: o.variant === 1,
+            },
+            i,
+          ),
+        );
+      }
       return parts;
     },
   },

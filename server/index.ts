@@ -200,7 +200,7 @@ app.get("/api/health", (_req, res) =>
     workspace: root,
     node: process.execPath,
     effectEngine: effectEngines.at(-1),
-    projectVersion: 3,
+    projectVersion: 4,
     effectLibraryVersion: 2,
     elementTypes: [
       "scene",

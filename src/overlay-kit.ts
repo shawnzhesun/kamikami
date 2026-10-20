@@ -325,6 +325,22 @@ export function context(
   return c;
 }
 
+/**
+ * The frame's edges relative to the anchored box's center, in units. Without
+ * a stage (gallery previews) it falls back to a margin around the box.
+ */
+export function frameEdges({ target, cx, cy, W2, H2 }: Ctx) {
+  const { room, box } = target;
+  if (!room)
+    return { left: -W2 - 8, right: W2 + 8, top: -H2 - 5, bottom: H2 + 5 };
+  return {
+    left: box.x - box.w / 2 - room.left - cx,
+    right: box.x + box.w / 2 + room.right - cx,
+    top: box.y - box.h / 2 - room.top - cy,
+    bottom: box.y + box.h / 2 + room.bottom - cy,
+  };
+}
+
 /** Control labels shared by drawn marks. */
 export const drawn = {
   timing: "Draw",

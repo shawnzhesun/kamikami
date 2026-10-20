@@ -915,6 +915,30 @@ export const overlayCards: OverlayCard[] = [
       ],
     ],
   ),
+  card(
+    "cautiontape",
+    "Caution tape",
+    "Hazard tape with striped edges and repeating text slaps across the frame one band after another, or stacks above and below the words.",
+    [
+      ["crossed", "Crossed", {}],
+      [
+        "stacked",
+        "Above and below",
+        { variant: 1, count: 2, label: "DO NOT CROSS" },
+      ],
+      ["through", "Through", { variant: 2, count: 3, angle: 18 }],
+      [
+        "police",
+        "Police line",
+        {
+          color: "#f6f2ea",
+          secondary: "#1f3fbf",
+          label: "POLICE LINE",
+          count: 3,
+        },
+      ],
+    ],
+  ),
   // ----------------------------------------------------------- Ornament
   card(
     "quotes",
@@ -1031,6 +1055,21 @@ export const overlayCards: OverlayCard[] = [
         "slide",
         "Slides in",
         { enter: "slide", color: "#2a5bd7", label: "EXCLUSIVE" },
+      ],
+    ],
+  ),
+  card(
+    "edgebar",
+    "Edge bar",
+    "A solid bar behind the words runs off the edge of the frame, so the text rides in on it: to the nearer edge, across the frame, or as a thin rule.",
+    [
+      ["edge", "To the edge", {}],
+      ["across", "Across the frame", { variant: 1, color: SUN }],
+      ["rule", "Rule", { variant: 2, color: CORAL }],
+      [
+        "halftone",
+        "Halftone bar",
+        { fill: "halftone", fillColor: INK, color: SUN, density: 1.4 },
       ],
     ],
   ),

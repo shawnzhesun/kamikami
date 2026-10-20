@@ -1113,6 +1113,17 @@ const spring = (
   seconds,
   ...(align ? { align } : {}),
 });
+/** Gray, then tone bands (posterize size 0 = 2 bands, 0.1 = 3), then two colors. */
+const celPasses = (bands: number, shadow: string, highlight: string) => [
+  pass("duotone", { strength: 1, color: "#ffffff", secondary: "#000000" }),
+  pass("palette", {
+    strength: 1,
+    size: bands,
+    speed: 0,
+    paletteMode: "posterize",
+  }),
+  pass("duotone", { strength: 1, color: highlight, secondary: shadow }),
+];
 type StyleCard = {
   id: string;
   name: string;
@@ -1739,39 +1750,71 @@ const styleCards: StyleCard[] = [
     ],
   },
 ];
-export const styleEffects: Effect[] = styleCards.map((card) =>
-  EffectSchema.parse({
-    id: card.id,
-    name: card.name,
-    description: card.description,
-    channels: [],
-    passes: [],
-    color: "#f2765e",
-    tint: 0,
-    ...card.variations[0][2],
-  }),
+const cardEffects = (cards: StyleCard[]): Effect[] =>
+  cards.map((card) =>
+    EffectSchema.parse({
+      id: card.id,
+      name: card.name,
+      description: card.description,
+      channels: [],
+      passes: [],
+      color: "#f2765e",
+      tint: 0,
+      ...card.variations[0][2],
+    }),
+  );
+export const styleEffects = cardEffects(styleCards);
+const cardFamilies = (cards: StyleCard[], effects: Effect[]): EffectFamily[] =>
+  cards
+    .filter((card) => card.variations.length > 1)
+    .map((card) => ({
+      id: card.id,
+      name: card.name,
+      category: card.category,
+      description: card.description,
+      variations: card.variations.map(([id, name, patch]) => ({
+        id,
+        name,
+        parameters: parameters(
+          EffectSchema.parse({
+            ...effects.find((e) => e.id === card.id)!,
+            channels: [],
+            passes: [],
+            ...patch,
+          }),
+        ),
+      })),
+    }));
+export const styleEffectFamilies = cardFamilies(styleCards, styleEffects);
+
+/** Picture treatments built from existing passes (no new engine). */
+const gradeCards: StyleCard[] = [
+  {
+    id: "cel-tones",
+    name: "Cel tones",
+    category: "Light & color",
+    description:
+      "Flattens a picture or video into two or three flat tones, like cel animation or a screen-printed silhouette. The picture turns gray, steps into tone bands, then takes a shadow and a highlight color. Raise the middle pass's size for more bands.",
+    variations: [
+      [
+        "cel-charcoal",
+        "Charcoal",
+        { passes: celPasses(0.1, "#2f2f2f", "#b9b9b9") },
+      ],
+      [
+        "cel-two-tone",
+        "Two-tone",
+        { passes: celPasses(0, "#353535", "#9a9a9a") },
+      ],
+      ["cel-pop", "Pop", { passes: celPasses(0.1, "#1b2140", "#f4e34a") }],
+    ],
+  },
+];
+export const gradeEffects = cardEffects(gradeCards);
+export const gradeEffectFamilies = cardFamilies(gradeCards, gradeEffects);
+const styleCategories = new Map(
+  [...styleCards, ...gradeCards].map((c) => [c.id, c.category]),
 );
-export const styleEffectFamilies: EffectFamily[] = styleCards
-  .filter((card) => card.variations.length > 1)
-  .map((card) => ({
-    id: card.id,
-    name: card.name,
-    category: card.category,
-    description: card.description,
-    variations: card.variations.map(([id, name, patch]) => ({
-      id,
-      name,
-      parameters: parameters(
-        EffectSchema.parse({
-          ...styleEffects.find((e) => e.id === card.id)!,
-          channels: [],
-          passes: [],
-          ...patch,
-        }),
-      ),
-    })),
-  }));
-const styleCategories = new Map(styleCards.map((c) => [c.id, c.category]));
 
 /** Title-pack text animations (kamikami-visual-v7): kinetic, minimal and graphic titles. */
 const title = (patch: Record<string, unknown>) => ({
@@ -4294,6 +4337,7 @@ const primaryEffects: Effect[] = [
   ...remotionSceneEffects,
   ...motionEffects,
   ...styleEffects,
+  ...gradeEffects,
   ...titleEffects,
   ...packEffects,
   ...kineticEffects,
@@ -4343,6 +4387,7 @@ export function getEffectFamily(id: string) {
       ...effectFamilies,
       ...motionEffectFamilies,
       ...styleEffectFamilies,
+      ...gradeEffectFamilies,
       ...titleEffectFamilies,
       ...packEffectFamilies,
       ...kineticEffectFamilies,

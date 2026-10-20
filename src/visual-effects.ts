@@ -239,6 +239,7 @@ export const effectEngines = [
   "kamikami-visual-v7",
   "kamikami-visual-v8",
   "kamikami-visual-v9",
+  "kamikami-visual-v10",
 ] as const;
 export type EffectEngine = (typeof effectEngines)[number];
 export const engineAtLeast = (engine: unknown, minimum: EffectEngine) =>
@@ -325,4 +326,12 @@ export function usesV9Features(value: unknown): boolean {
         ),
     )
   );
+}
+/** Overlay kinds added with kamikami-visual-v10. */
+export const v10OverlayKinds: readonly string[] = ["edgebar", "cautiontape"];
+/** The edge bar and caution tape overlays need kamikami-visual-v10. */
+export function usesV10Features(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const kind = (value as { overlay?: { kind?: unknown } }).overlay?.kind;
+  return v10OverlayKinds.includes(String(kind));
 }

@@ -140,7 +140,7 @@ export const editorTools: ToolDefinition[] = [
   tool(
     "update_layer",
     "edit",
-    "Patch one element's fields (name, timing, transform, opacity, volume, fadeIn/fadeOut, text and font fields, shape, backdrop, color, trackId). The element schema is in get_capabilities. Use the timing tools for trims and moves, and update_effect_instance for applied effects.",
+    "Patch one element's fields (name, timing, transform, opacity, blend, volume, fadeIn/fadeOut, text and font fields, shape, backdrop, color, trackId). The element schema is in get_capabilities. Use the timing tools for trims and moves, and update_effect_instance for applied effects.",
     { layerId: z.string(), patch: z.record(z.string(), z.unknown()), ...rev },
   ),
   tool(

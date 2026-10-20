@@ -16,6 +16,7 @@ Requires `kamikami-visual-v8`. An effect with an `overlay` recipe draws vector m
 - `placement: auto` puts labels, arrows, callouts and badges on the side with the most free space in the frame.
 - Units are 1 em on text and 2.5% of the frame's shorter side on pictures. Sizes take the larger of a title-sized minimum and a fraction of the box, so a mark reads on a title and scales with a full-frame picture.
 - Parts sit behind the element or in front of it as the kind designs. `layer` overrides that, and `offsetX`/`offsetY` (units), `rotate` and `mirror` move the whole mark. Mirrored labels stay readable.
+- **Frame-wide marks** (the v10 **Edge bar** and **Caution tape**) reach past the element to the frame edges. The renderer passes the free space around the element as `target.room`, and `frameEdges` (`src/overlay-kit.ts`) turns it into edge positions. The edge bar runs to the nearer edge unless `placement` picks one.
 - **Thread link** joins the element to the nearest other element on screen; `count` picks the second-nearest and so on. The renderer passes the centers of the other visible elements as `target.peers`.
 
 ## Timing and motion

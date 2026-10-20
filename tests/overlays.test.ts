@@ -32,6 +32,7 @@ import {
   overlaySpecs,
   type Overlay,
 } from "../src/overlays";
+import { v10OverlayKinds } from "../src/visual-effects";
 
 const target = {
   box: { x: 0, y: 0, w: 4, h: 2 },
@@ -73,9 +74,9 @@ const words = {
 const finite = (parts: unknown, label: string) =>
   assert.doesNotMatch(JSON.stringify(parts), /NaN|null|Infinity/, label);
 
-test("overlay cards cover every kind as v8 effects with finite previews", () => {
-  assert.equal(overlayKinds.length, 76);
-  assert.equal(overlayEffects.length, 76);
+test("overlay cards cover every kind as v8 (or v10) effects with finite previews", () => {
+  assert.equal(overlayKinds.length, 78);
+  assert.equal(overlayEffects.length, 78);
   // Pack-only kinds have no card; their presets come in effect packs.
   assert.deepEqual(
     [...new Set(overlayEffects.map((e) => e.overlay!.kind))].sort(),
@@ -84,7 +85,13 @@ test("overlay cards cover every kind as v8 effects with finite previews", () => 
   assert.ok(variants.length >= 280, `${variants.length} variations`);
   for (const effect of variants) {
     assert.equal(builtinEffectCategory(effect.id), "Overlay");
-    assert.equal(effectEngine(effect), "kamikami-visual-v8", effect.id);
+    assert.equal(
+      effectEngine(effect),
+      v10OverlayKinds.includes(effect.overlay!.kind)
+        ? "kamikami-visual-v10"
+        : "kamikami-visual-v8",
+      effect.id,
+    );
     const markup = renderToStaticMarkup(
       React.createElement(EffectSample, {
         effect,
@@ -501,4 +508,63 @@ test("saved framing decorations migrate to overlays in projects and bundles", ()
     effect: legacyArt,
   });
   assert.equal(bundle.effect.overlay!.kind, "print");
+});
+
+/** Every x coordinate in the parts' paths and transforms. */
+const xs = (parts: { d?: string }[]) =>
+  parts.flatMap((p) =>
+    [...(p.d ?? "").matchAll(/[MLH](-?[\d.]+)/g)].map((m) => +m[1]),
+  );
+test("the edge bar runs from the words off the nearer frame edge", () => {
+  // The element sits right of center: 8 units free on the left, 2 on the right.
+  const stage = { ...target, room: { left: 8, right: 2, top: 3, bottom: 3 } };
+  const bar = (patch: Partial<Overlay>) =>
+    overlayParts(makeOverlay("edgebar", patch), 1, 3, 6, stage);
+  const right = xs(bar({}));
+  assert.ok(Math.max(...right) >= 2 + 2, "reaches the right edge");
+  assert.ok(
+    Math.min(...right) < -2 && Math.min(...right) > -3,
+    "starts at the words",
+  );
+  const left = xs(bar({ placement: "left" }));
+  assert.ok(Math.min(...left) <= -2 - 8, "reaches the left edge");
+  const across = xs(bar({ variant: 1 }));
+  assert.ok(Math.min(...across) <= -10 && Math.max(...across) >= 4);
+  // Mid-entrance, it is still sliding out from the edge.
+  const sliding = xs(
+    overlayParts(makeOverlay("edgebar", {}), 1, 0.1, 6, stage),
+  );
+  assert.ok(Math.min(...sliding) > Math.min(...right));
+  // ...but already visible: it grows from the frame edge (x = 4), not beyond it.
+  assert.ok(Math.min(...sliding) < 4);
+  assert.equal(
+    effectEngine({
+      ...EffectSchema.parse({ id: "e", name: "E" }),
+      overlay: makeOverlay("edgebar"),
+    }),
+    "kamikami-visual-v10",
+  );
+});
+test("caution tape slaps its bands on one after another across the frame", () => {
+  const stage = { ...target, room: { left: 9, right: 9, top: 5, bottom: 5 } };
+  const tape = (time: number, patch: Partial<Overlay> = {}) =>
+    overlayParts(makeOverlay("cautiontape", patch), 1, time, 6, stage);
+  const bands = (parts: { text?: string }[]) =>
+    parts.filter((p) => p.text !== undefined).length;
+  assert.equal(bands(tape(3)), 4);
+  assert.ok(bands(tape(0.25)) < 4, "later bands haven't landed yet");
+  const words = tape(3).find((p) => p.text !== undefined)!;
+  assert.match(words.text!, /^KEEP OUT {3}KEEP OUT/);
+  assert.equal(
+    tape(3, { label: "danger" })
+      .find((p) => p.text)!
+      .text!.slice(0, 6),
+    "DANGER",
+  );
+  // Bands are longer than the frame's diagonal, so they always cross it.
+  const span = Math.max(...xs(tape(3))) - Math.min(...xs(tape(3)));
+  assert.ok(span > Math.hypot(22, 12), `${span}`);
+  // Above and below go behind the words.
+  assert.ok(tape(3, { variant: 1 }).every((p) => p.behind));
+  assert.ok(tape(3).every((p) => !p.behind));
 });

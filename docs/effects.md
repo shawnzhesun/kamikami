@@ -71,6 +71,7 @@ A bundle or recipe declares the lowest engine it needs. `effectEngine()` in `src
 | `kamikami-visual-v7` | Title text kinds, `text.direction`/`variant`, `origin`; shape, doors, clock, feather, lumawipe, reflection, tiltshift, oldfilm, ripple and cells passes |
 | `kamikami-visual-v8` | `art`, `overlay`, kinetic/look/layout text kinds, `text.tempo`/`angle`, stagger order center/edges |
 | `kamikami-visual-v9` | The riso print pass (`riso`, `risoInks`, `risoPaper`, `registration`, `inkGrain`) and the halftone wash overlay (`halftonewash`) |
+| `kamikami-visual-v10` | The edge bar and caution tape overlays (`v10OverlayKinds`) |
 
 The ladder is `effectEngines` in `src/visual-effects.ts`; a new engine is appended there and gated in `effectEngine`.
 

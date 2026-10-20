@@ -5,8 +5,10 @@ import {
   validateProject,
   channelValue,
   layerAtTime,
+  makeBackdrop,
   type Channel,
 } from "../src/model";
+import { makeBackdropSettings } from "../src/backdrops";
 import { builtinEffects } from "../src/builtin-effects";
 import { applyEffectToLayers } from "../src/effect-bundle";
 test("starter project is valid", () => {
@@ -108,4 +110,31 @@ test("an element holds up to 16 effects and says so plainly when full", () => {
         `“${title.name}”: An element can hold up to 16 effects. Remove one first.` &&
       !e.message.includes("{"),
   );
+});
+test("a blending element makes a version 4 project; normal blend is dropped", () => {
+  const p = structuredClone(initialProject);
+  assert.equal(validateProject(p).version, 2);
+  p.layers[1].blend = "normal";
+  const normal = validateProject(p);
+  assert.equal(normal.version, 2);
+  assert.equal("blend" in normal.layers[1], false);
+  p.layers[1].blend = "difference";
+  const blended = validateProject(p);
+  assert.equal(blended.version, 4);
+  assert.equal(blended.layers[1].blend, "difference");
+  assert.equal(validateProject(blended).version, 4);
+  p.layers[1].blend = "plus" as never;
+  assert.throws(() => validateProject(p));
+});
+test("audio and backdrops can't set an element blend", () => {
+  const audio = structuredClone(initialProject);
+  Object.assign(audio.layers[0], { type: "audio", blend: "multiply" });
+  assert.throws(() => validateProject(audio), /can't blend/);
+  const backdrop = structuredClone(initialProject);
+  backdrop.layers.push({
+    ...makeBackdrop(makeBackdropSettings("grain"), "Grain"),
+    duration: 15,
+    blend: "screen",
+  });
+  assert.throws(() => validateProject(backdrop), /backdrop\.blend/);
 });

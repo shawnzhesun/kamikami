@@ -6,6 +6,7 @@ import {
   usesV7Features,
   usesV8Features,
   usesV9Features,
+  usesV10Features,
 } from "./visual-effects";
 import { z } from "zod";
 
@@ -61,8 +62,9 @@ export async function api(url: string, method = "GET", body?: unknown) {
       }
     | undefined;
   const project = payload?.project ?? payload;
-  const needsInstanceSupport = project?.version === 2 || project?.version === 3;
-  const needsKeyframes = project?.version === 3;
+  const needsInstanceSupport = (project?.version ?? 0) >= 2;
+  const needsKeyframes = (project?.version ?? 0) >= 3;
+  const needsBlends = project?.version === 4;
   const needsShapes = !!project?.layers?.some(
     (layer) => (layer as { type?: string }).type === "shape",
   );
@@ -90,6 +92,9 @@ export async function api(url: string, method = "GET", body?: unknown) {
   const needsV9Engine = [...definitions, ...instanceSettings].some(
     usesV9Features,
   );
+  const needsV10Engine = [...definitions, ...instanceSettings].some(
+    usesV10Features,
+  );
   const needsV6Engine = [...definitions, ...instanceSettings].some(
     usesV6Features,
   );
@@ -110,12 +115,14 @@ export async function api(url: string, method = "GET", body?: unknown) {
       (needsTextEngine ||
         needsInstanceSupport ||
         needsKeyframes ||
+        needsBlends ||
         needsShapes ||
         needsBackdrops ||
         needsV6Engine ||
         needsV7Engine ||
         needsV8Engine ||
         needsV9Engine ||
+        needsV10Engine ||
         needsMotionEngine))
   ) {
     const health = await api("/api/health");
@@ -124,6 +131,13 @@ export async function api(url: string, method = "GET", body?: unknown) {
     if (needsInstanceSupport && !(health.projectVersion >= 2))
       throw new Error(
         "The local service is outdated. Restart KamiKami's development process before saving independent effect settings.",
+      );
+    if (
+      needsV10Engine &&
+      !engineAtLeast(health.effectEngine, "kamikami-visual-v10")
+    )
+      throw new Error(
+        "The local service is outdated. Restart KamiKami with npm run desktop before saving or rendering edge bar and caution tape overlays.",
       );
     if (
       needsV9Engine &&
@@ -160,6 +174,10 @@ export async function api(url: string, method = "GET", body?: unknown) {
     if (needsShapes && !health.elementTypes?.includes("shape"))
       throw new Error(
         "The local service is outdated. Restart KamiKami with npm run desktop before saving or rendering shapes.",
+      );
+    if (needsBlends && !(health.projectVersion >= 4))
+      throw new Error(
+        "The local service is outdated. Restart KamiKami with npm run desktop before saving or rendering blend modes.",
       );
     if (needsKeyframes && !(health.projectVersion >= 3))
       throw new Error(

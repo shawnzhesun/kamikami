@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import {
   builtinEffects,
   styleEffects,
+  gradeEffects,
   titleEffects,
   packEffects,
   kineticEffects,
@@ -75,6 +76,7 @@ test("video adds four distinct operations and extends existing cards without dup
       remotionSceneEffects.length +
       motionEffects.length +
       styleEffects.length +
+      gradeEffects.length +
       titleEffects.length +
       packEffects.length +
       kineticEffects.length +
@@ -88,9 +90,12 @@ test("video adds four distinct operations and extends existing cards without dup
     new Set(builtinEffects.map((e) => e.id)).size,
     builtinEffects.length,
   );
+  // Later composite cards (gradeEffects) reuse these passes on purpose.
   const oldKinds = new Set(
     builtinEffects
-      .filter((e) => !videoPlaybackEffects.includes(e))
+      .filter(
+        (e) => !videoPlaybackEffects.includes(e) && !gradeEffects.includes(e),
+      )
       .flatMap((e) => e.passes?.map((p) => p.kind) ?? []),
   );
   for (const e of videoPlaybackEffects)

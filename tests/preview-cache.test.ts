@@ -80,6 +80,11 @@ test("an edit invalidates only the chunks the element draws in", () => {
     changed(keys, chunkKeys(edit("full", { opacity: 0.5 }))),
     [0, 1, 2, 3, 4],
   );
+  // A blend changes how the element mixes with everything under it.
+  assert.deepEqual(
+    changed(keys, chunkKeys(edit("late", { blend: "multiply" }))),
+    [3, 4],
+  );
   // Hiding an element changes what draws.
   assert.deepEqual(
     changed(keys, chunkKeys(edit("late", { visible: false }))),

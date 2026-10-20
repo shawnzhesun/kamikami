@@ -10,6 +10,7 @@ import {
   motionEffects,
   builtinEffects,
   styleEffects,
+  gradeEffects,
   titleEffects,
   packEffects,
   kineticEffects,
@@ -49,6 +50,7 @@ test("gallery retains the consolidation and appends only the new video operation
       remotionSceneEffects.length +
       motionEffects.length +
       styleEffects.length +
+      gradeEffects.length +
       titleEffects.length +
       packEffects.length +
       kineticEffects.length +

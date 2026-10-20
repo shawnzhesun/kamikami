@@ -17,8 +17,10 @@ import {
   usesV7Features,
   usesV8Features,
   usesV9Features,
+  usesV10Features,
 } from "./visual-effects";
 export function effectEngine(effect: Effect) {
+  if (usesV10Features(effect)) return "kamikami-visual-v10" as const;
   if (usesV9Features(effect)) return "kamikami-visual-v9" as const;
   if (usesV8Features(effect)) return "kamikami-visual-v8" as const;
   if (usesV7Features(effect)) return "kamikami-visual-v7" as const;
@@ -94,7 +96,7 @@ const BundleObject = z
       effectEngines.indexOf(effectEngine(bundle.effect)),
     {
       message:
-        "Effect parameters require a newer engine: visual passes use kamikami-visual-v2; remap, repetition, smear and pattern modes use kamikami-visual-v3; text animation and blinds require kamikami-visual-v4; spatial motion and text glitches require kamikami-visual-v5; spring curves, stretch/skew/tilt channels and the illustration, 3D-look and organic passes require kamikami-visual-v6; title-pack text kinds require kamikami-visual-v7; kinetic type, text treatments, kinetic layouts, artwork treatments and overlays require kamikami-visual-v8; the riso print pass and the halftone overlay require kamikami-visual-v9.",
+        "Effect parameters require a newer engine: visual passes use kamikami-visual-v2; remap, repetition, smear and pattern modes use kamikami-visual-v3; text animation and blinds require kamikami-visual-v4; spatial motion and text glitches require kamikami-visual-v5; spring curves, stretch/skew/tilt channels and the illustration, 3D-look and organic passes require kamikami-visual-v6; title-pack text kinds require kamikami-visual-v7; kinetic type, text treatments, kinetic layouts, artwork treatments and overlays require kamikami-visual-v8; the riso print pass and the halftone overlay require kamikami-visual-v9; the edge bar and caution tape overlays require kamikami-visual-v10.",
       path: ["engine"],
     },
   );

@@ -2,10 +2,12 @@ import {
   drawn,
   ellipse,
   f,
+  frameEdges,
   line,
   pad2,
   rect,
   roundRect,
+  outPow,
   smooth,
   stage,
   timecode,
@@ -494,6 +496,66 @@ export const broadcastKinds: Partial<Record<OverlayKind, KindSpec>> = {
         ),
       );
       return parts;
+    },
+  },
+  edgebar: {
+    name: "Edge bar",
+    feel: "Broadcast",
+    description:
+      "A solid bar behind the element that runs off the edge of the frame, so the words ride on it. It slides out from the edge: to one side, across the whole frame, or as a thin rule.",
+    defaults: {
+      color: "#2b2b2b",
+      seconds: 0.45,
+      timing: "in",
+      pad: 0.6,
+    },
+    controls: {
+      ...drawn,
+      color: "Bar",
+      pad: "Margin",
+      size: "Height",
+      placement: "Edge",
+      variant: "Reach",
+    },
+    variants: ["To the edge", "Across the frame", "Rule"],
+    fills: true,
+    text: true,
+    draw: (c) => {
+      const { o, p, W2, H2, P, S, solid, lw } = c;
+      const edges = frameEdges(c);
+      // Past the edge, so element scale and rotation never leave a gap.
+      const over = Math.max(2, (edges.right - edges.left) * 0.25);
+      const left = edges.left - over,
+        right = edges.right + over;
+      // Auto runs to the nearer edge, where the words already sit.
+      const toRight =
+        o.placement === "right" ||
+        (o.placement !== "left" && -edges.left > edges.right);
+      // The bar grows from the visible edge; the overshoot stays put.
+      const grow = outPow(p, 3);
+      const reach = (edge: number, to: number) => edge + (to - edge) * grow;
+      let x0: number, x1: number;
+      if (o.variant === 1) {
+        x0 = toRight ? reach(edges.right, left) : left;
+        x1 = toRight ? right : reach(edges.left, right);
+      } else if (toRight) {
+        x0 = reach(edges.right, -W2 - P);
+        x1 = right;
+      } else {
+        x0 = left;
+        x1 = reach(edges.left, W2 + P);
+      }
+      const [y0, y1] =
+        o.variant === 2
+          ? [H2 + P * 0.35, H2 + P * 0.35 + Math.max(lw * 2, S(0.1, 0.025))]
+          : [-(H2 + P * 0.4) * o.size, (H2 + P * 0.4) * o.size];
+      if (x1 - x0 <= 0) return [];
+      return [
+        solid(rect(x0, y0, x1, y1), {
+          behind: true,
+          encloses: o.variant !== 2,
+        }),
+      ];
     },
   },
   lowerthird: {

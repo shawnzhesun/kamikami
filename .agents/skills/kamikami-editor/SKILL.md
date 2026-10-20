@@ -95,6 +95,7 @@ The server is the source of truth. Don't rely on numbers or kind lists from memo
   - **Hard hits need frame-exact keys.** For punches, flashes and snaps, sample the curve once per frame and write a key wherever the value changes. Put the peak on the hit frame itself.
   - **An element with no keyframes takes `{}`, not `null`.
   - **Keyframe times are animation time:** clip-local time plus the element's `effectOffset`. Trimming an element's head sets `effectOffset`, so the animation stays where it was. When you write keyframes for absolute frames, subtract `effectOffset`, or reset it to 0 first. Re-read the element before you re-time it, because the user may have trimmed it since your last edit.
+- **Blend:** `update_layer` with `blend` mixes an element with every track below it. `multiply` prints dark ink onto paper or footage; `screen` drops in fire, light leaks and anything shot on black; `difference` gives inverse ink that flips color over light and dark areas; `color` tints the picture below. For two-tone inverse ink (yellow over dark, gray over yellow), stack a `difference` copy of the text in the ink color under a `lighten` copy in the gray. Backdrops use `backdrop.blend`.
 - **Audio:** `fadeIn`/`fadeOut` on any element, and `volume` keyframes for ducking music under speech.
 
 ### 6. Review

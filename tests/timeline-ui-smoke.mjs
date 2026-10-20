@@ -85,7 +85,7 @@ const fixture = {
         result = {
           ok: true,
           effectEngine: "kamikami-visual-v8",
-          projectVersion: 3,
+          projectVersion: 4,
           effectLibraryVersion: 2,
           elementTypes: [
             "scene",
@@ -402,6 +402,27 @@ try {
   );
   await save();
   assert.equal(project.layers.find((e) => e.id === "title").fontWeight, 300);
+  // Blend mixes the element with the tracks below; normal clears the field.
+  await click('[role="combobox"][aria-label="Blend"]');
+  await page.evaluate(() =>
+    [...document.querySelectorAll('[role="option"]')]
+      .find((e) => e.textContent.trim().startsWith("Difference"))
+      .click(),
+  );
+  await save();
+  assert.equal(
+    project.layers.find((e) => e.id === "title").blend,
+    "difference",
+  );
+  assert.equal(project.version, 4);
+  await click('[role="combobox"][aria-label="Blend"]');
+  await page.evaluate(() =>
+    [...document.querySelectorAll('[role="option"]')]
+      .find((e) => e.textContent.trim() === "Normal")
+      .click(),
+  );
+  await save();
+  assert.equal("blend" in project.layers.find((e) => e.id === "title"), false);
   await click('button[aria-label="Font family"]');
   await click('[role="combobox"][aria-label="Font category"]');
   await page.evaluate(() =>

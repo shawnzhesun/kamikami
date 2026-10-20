@@ -35,6 +35,26 @@ import { instanceAmountAt, resolveEffectInstanceAt } from "./effect-instance";
 
 /** Supported project frame rates (NTSC rates as their usual decimal values). */
 export const frameRates = [23.976, 24, 25, 29.97, 30, 50, 59.94, 60] as const;
+/** How an element mixes with the tracks below it (CSS mix-blend-mode). */
+export const elementBlends = [
+  "normal",
+  "multiply",
+  "screen",
+  "overlay",
+  "soft-light",
+  "hard-light",
+  "darken",
+  "lighten",
+  "color-dodge",
+  "color-burn",
+  "difference",
+  "exclusion",
+  "hue",
+  "saturation",
+  "color",
+  "luminosity",
+] as const;
+export type ElementBlend = (typeof elementBlends)[number];
 export type FrameRate = (typeof frameRates)[number];
 /** Common output shapes; any even size from 256 to 4096 px is accepted. */
 export const resolutionPresets = [
@@ -172,6 +192,8 @@ export const LayerSchema = z.object({
   scale: z.number().min(0.05).max(5),
   rotation: z.number().min(-360).max(360),
   opacity: z.number().min(0).max(1),
+  /** Blend with the tracks below; backdrops use `backdrop.blend` instead. */
+  blend: z.enum(elementBlends).optional(),
   volume: z.number().min(0).max(1),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
   // Project pixels: big enough for a full-height title at 4K.
@@ -204,9 +226,10 @@ export type TimelineLayer = z.infer<typeof TimelineLayerSchema>;
 export const ProjectSchema = z.object({
   fonts: z.array(FontAssetSchema).max(100).optional(),
   tracks: z.array(TimelineLayerSchema).max(LIMITS.tracks).optional(),
-  // Version 3 is written only when keyframes, shapes or backdrops exist, so
-  // older readers reject those projects instead of silently dropping data.
-  version: z.union([z.literal(2), z.literal(3)]),
+  // Version 3 is written only when keyframes, shapes or backdrops exist, and
+  // version 4 only when an element blends, so older readers reject those
+  // projects instead of silently dropping data.
+  version: z.union([z.literal(2), z.literal(3), z.literal(4)]),
   name: z.string().min(1).max(100),
   width: z.number().int().min(256).max(4096).multipleOf(2),
   height: z.number().int().min(256).max(4096).multipleOf(2),
@@ -350,6 +373,13 @@ export function validateProject(input: unknown): Project {
       );
     if (l.type === "backdrop" && l.src)
       throw new Error(`Backdrop element “${l.name}” cannot reference media`);
+    if (l.blend === "normal") delete l.blend;
+    if (l.blend && (l.type === "audio" || l.type === "backdrop"))
+      throw new Error(
+        l.type === "audio"
+          ? `Audio element “${l.name}” can't blend`
+          : `Backdrop “${l.name}” blends with backdrop.blend`,
+      );
     if (new Set(l.effects.map((e) => e.effectId)).size !== l.effects.length)
       throw new Error("An effect preset can only be applied once per element");
     if (l.start + l.duration > p.duration + 0.001)
@@ -374,11 +404,14 @@ export function validateProject(input: unknown): Project {
   }
   for (const l of p.layers) validateKeyframes(l);
   // Shapes also need version 3, so older readers reject them instead of failing oddly.
-  p.version = p.layers.some(
-    (l) => allTracks(l).length || l.type === "shape" || l.type === "backdrop",
-  )
-    ? 3
-    : 2;
+  p.version = p.layers.some((l) => l.blend)
+    ? 4
+    : p.layers.some(
+          (l) =>
+            allTracks(l).length || l.type === "shape" || l.type === "backdrop",
+        )
+      ? 3
+      : 2;
   const tracks = p.tracks ? [...p.tracks] : [];
   if (new Set(tracks.map((t) => t.id)).size !== tracks.length)
     throw new Error("Track IDs must be unique");

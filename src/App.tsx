@@ -113,6 +113,7 @@ import {
   usePreviewCache,
 } from "./editor/preview-cache-client";
 import { CachedCanvas } from "./editor/CachedCanvas";
+import { BlendField } from "./editor/BlendField";
 import {
   blankProject,
   frameUnit,
@@ -3771,6 +3772,12 @@ export function App() {
                       {animatedField("scale", 0.05)}
                       {animatedField("rotation")}
                       {animatedField("opacity", 0.05)}
+                      {selected.type !== "backdrop" && (
+                        <BlendField
+                          value={selected.blend}
+                          onChange={(blend) => updateLayer({ blend })}
+                        />
+                      )}
                       <p className="muted keyframe-hint">
                         The stopwatch animates a property. Canvas and field
                         edits at the playhead then add keyframes.
